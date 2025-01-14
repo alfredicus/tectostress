@@ -1,0 +1,41 @@
+{
+    "name": "tectostress",
+    "version": "1.0.0",
+    "description": "Stress analysis application",
+    "main": "index.js",
+    "scripts": {
+        "start": "webpack serve --mode development",
+        "build": "webpack --mode production",
+        "test": "jest"
+    },
+    "dependencies": {
+        "@types/three": "^0.172.0",
+        "lucide-react": "^0.263.1",
+        "marked": "^15.0.6",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-markdown": "^9.0.3",
+        "remark-gfm": "^4.0.0",
+        "tailwind": "^4.0.0",
+        "three": "^0.172.0"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.23.0",
+        "@babel/preset-env": "^7.23.0",
+        "@babel/preset-react": "^7.23.0",
+        "@babel/preset-typescript": "^7.23.0",
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "autoprefixer": "^10.4.0",
+        "babel-loader": "^9.1.0",
+        "css-loader": "^6.8.0",
+        "postcss": "^8.4.0",
+        "postcss-loader": "^7.3.0",
+        "style-loader": "^3.3.0",
+        "tailwindcss": "^3.3.0",
+        "typescript": "^5.0.0",
+        "webpack": "^5.88.0",
+        "webpack-cli": "^5.1.0",
+        "webpack-dev-server": "^4.15.0"
+    }
+}
