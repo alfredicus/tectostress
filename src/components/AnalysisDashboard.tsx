@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { PlusCircle, X, BarChart, LineChart, PieChart, Table, GripHorizontal } from 'lucide-react';
+import { PlusCircle, X, Dribbble, BarChart, LineChart, PieChart, Table, GripHorizontal } from 'lucide-react';
+
+
+
 import { VisualizationComponent } from './VisualizationComponents';
 import { Visualization, SharedData } from './types';
 import GridLayout, { Layout } from 'react-grid-layout';
@@ -9,15 +12,15 @@ import 'react-resizable/css/styles.css';
 const visualizationTypes = [
     { id: 'table', title: 'Tableau', icon: Table },
     { id: 'rose', title: 'Rose diagram', icon: PieChart },
+    { id: 'sphere', title: 'Sphere', icon: Dribbble },
     { id: 'line', title: 'Graphique en ligne', icon: LineChart },
-    { id: 'pie', title: 'Graphique circulaire', icon: PieChart },
 ];
 
 const defaultLayout = {
     table: { w: 4, h: 2 },
     rose: { w: 2, h: 2 },
     line: { w: 2, h: 1 },
-    pie: { w: 2, h: 2 },
+    sphere: { w: 2, h: 2 },
 };
 
 const AnalysisDashboard: React.FC = () => {
@@ -48,6 +51,7 @@ const AnalysisDashboard: React.FC = () => {
     };
 
     const addVisualization = (type: string, title: string) => {
+        console.log(`Adding new visu of type ${type} with title ${title}`)
         const layout = defaultLayout[type as keyof typeof defaultLayout] || { w: 2, h: 1 };
         const position = findAvailablePosition(layout.w, layout.h);
         

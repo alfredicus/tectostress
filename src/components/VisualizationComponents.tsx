@@ -1,6 +1,7 @@
 import React from 'react';
 import RoseDiagramComponent from './RoseDiagramComponent';
 import { SharedData } from './types';
+import StressSphereViewer from './StressSphereViewer';
 
 interface VisualizationProps {
     type: string;
@@ -60,8 +61,8 @@ export const VisualizationComponent: React.FC<VisualizationProps> = (props) => {
         case 'table':
             return <TableComponent {...props} />;
         case 'line':
-        case 'pie':
-            return <PlaceholderComponent type={type} />;
+        case 'sphere':
+            return <StressSphereViewer />;
         default:
             return <div>Unknown visualization type</div>;
     }
