@@ -14,6 +14,8 @@ const visualizationTypes = [
     { id: 'rose', title: 'Rose diagram', icon: PieChart },
     { id: 'sphere', title: 'Sphere', icon: Dribbble },
     { id: 'line', title: 'Graphique en ligne', icon: LineChart },
+    { id: 'three', title: 'Test 3D', icon: PieChart },
+    { id: 'two', title: 'Test 2D', icon: PieChart },
 ];
 
 const defaultLayout = {
@@ -96,7 +98,7 @@ const AnalysisDashboard: React.FC = () => {
         <div className="bg-white rounded-lg shadow-lg p-6 max-w-6xl mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-6 border-b pb-4">
-                <h1 className="text-2xl font-bold">Analyse</h1>
+                <h1 className="text-2xl">Analyse</h1>
                 <button
                     onClick={() => setIsDialogOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"

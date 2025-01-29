@@ -5,10 +5,11 @@ interface RunProps {
     selectedData: string[];
 }
 
-const Run = ({ selectedData }: RunProps) => {
+const RunComponent = ({ selectedData }: RunProps) => {
     return (
-        <div className="p-4">
-            <h2 className="text-xl font-semibold mb-4">Exécution</h2>
+        // <div className="p-4">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-6xl mx-auto">
+            <h2 className="text-2xl">Run</h2>
             <div className="w-full overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead>
@@ -39,4 +40,4 @@ const Run = ({ selectedData }: RunProps) => {
     );
 };
 
-export default Run;
+export default RunComponent;

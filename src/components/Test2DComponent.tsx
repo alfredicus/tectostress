@@ -6,7 +6,7 @@ interface CanvasProps {
   className?: string;
 }
 
-const Test2D: React.FC<CanvasProps> = ({
+const Test2DComponent: React.FC<CanvasProps> = ({
   width = 800,
   height = 256,
   className = '',
@@ -95,4 +95,4 @@ const Test2D: React.FC<CanvasProps> = ({
   );
 };
 
-export default Test2D;
+export default Test2DComponent;

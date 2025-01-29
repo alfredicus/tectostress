@@ -1,46 +1,60 @@
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
-module.exports = {
-    entry: './src/index.tsx',
-    output: {
-        path: path.resolve(__dirname, 'dist'),
-        filename: 'bundle.js',
-        publicPath: '/',
-    },
-    resolve: {
-        extensions: ['.tsx', '.ts', '.js', '.jsx'],
-        alias: {
-            '@': path.resolve(__dirname, 'src'),
+module.exports = (env, argv) => {
+    const isProduction = argv.mode === 'production';
+    const publicPath = isProduction ? '/tectostress/' : '/';
+
+    return {
+        entry: './src/index.tsx',
+        output: {
+            path: path.resolve(__dirname, 'dist'),
+            filename: 'bundle.js',
+            publicPath,
+            clean: true, // Nettoie le dossier dist avant chaque build
         },
-    },
-    module: {
-        rules: [
-            {
-                test: /\.(ts|tsx|js|jsx)$/,
-                exclude: /node_modules/,
-                use: {
-                    loader: 'babel-loader',
-                    options: {
-                        presets: [
-                            '@babel/preset-env',
-                            ['@babel/preset-react', { runtime: 'automatic' }],
-                            '@babel/preset-typescript'
-                        ]
+        resolve: {
+            extensions: ['.tsx', '.ts', '.js', '.jsx'],
+            alias: {
+                '@': path.resolve(__dirname, 'src'),
+            },
+        },
+        module: {
+            rules: [
+                {
+                    test: /\.(ts|tsx|js|jsx)$/,
+                    exclude: /node_modules/,
+                    use: {
+                        loader: 'babel-loader',
+                        options: {
+                            presets: [
+                                '@babel/preset-env',
+                                ['@babel/preset-react', { runtime: 'automatic' }],
+                                '@babel/preset-typescript'
+                            ]
+                        }
                     }
-                }
-            },
-            {
-                test: /\.css$/,
-                use: ['style-loader', 'css-loader', 'postcss-loader'],
-            },
-        ],
-    },
-    devServer: {
-        static: {
-            directory: path.join(__dirname, 'public'),
+                },
+                {
+                    test: /\.css$/,
+                    use: ['style-loader', 'css-loader', 'postcss-loader'],
+                },
+            ],
         },
-        port: 3000,
-        hot: true,
-        historyApiFallback: true,
-    },
+        plugins: [
+            new HtmlWebpackPlugin({
+                template: 'public/index.html',
+                filename: 'index.html',
+                inject: true // On ne veut pas que le plugin injecte le script car on l'a déjà fait manuellement
+            })
+        ],
+        devServer: {
+            static: {
+                directory: path.join(__dirname, 'public'),
+            },
+            port: 3000,
+            hot: true,
+            historyApiFallback: true,
+        },
+    };
 };

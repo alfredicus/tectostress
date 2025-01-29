@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { StressSphere } from './views/Sphere';
 
-const StressSphereViewer = () => {
+const StressSphereComponent = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [stressSphere, setStressSphere] = useState<StressSphere | null>(null);
     const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
@@ -24,7 +24,7 @@ const StressSphereViewer = () => {
         const newScene = new THREE.Scene();
         newScene.background = new THREE.Color(0xf0f0f0);
 
-        const newCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        const newCamera = new THREE.PerspectiveCamera(75, width / height, 0.001, 1000);
         newCamera.position.z = 5;
 
         const ambientLight = new THREE.AmbientLight(0xffffff);
@@ -50,6 +50,7 @@ const StressSphereViewer = () => {
             positions: normals.map(n => {
                 return {normal: new THREE.Vector3(n[0], n[1], n[2])}
             }),
+            offset: 0.1,
             color: 0xffffff,
             lineWidth: 0.01
         })
@@ -122,4 +123,4 @@ const StressSphereViewer = () => {
     );
 };
 
-export default StressSphereViewer;
+export default StressSphereComponent;

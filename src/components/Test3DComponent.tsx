@@ -7,7 +7,7 @@ interface ThreeSceneProps {
     height?: number;
 }
 
-const ThreeScene: React.FC<ThreeSceneProps> = ({
+const Test3DComponent: React.FC<ThreeSceneProps> = ({
     width = 800,
     height = 600
 }) => {
@@ -132,4 +132,4 @@ const ThreeScene: React.FC<ThreeSceneProps> = ({
     );
 };
 
-export default ThreeScene;
+export default Test3DComponent;
