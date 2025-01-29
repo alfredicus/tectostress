@@ -21,7 +21,7 @@ const RunComponent = ({ selectedData }: RunProps) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {selectedData.map((item, index) => (
+                        {selectedData?.map((item, index) => (
                             <tr key={index} className="border-b">
                                 <td className="px-4 py-2">{item}</td>
                                 <td className="px-4 py-2">En attente</td>

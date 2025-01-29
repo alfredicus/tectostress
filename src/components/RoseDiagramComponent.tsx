@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RoseDiagram } from './views/RoseDiagram'
 import { SharedData } from './types';
+import { DataFiles } from './DataFile';
 
-interface RoseDiagramProps {
-    width?: number;
-    height?: number;
-    className?: string;
-    sharedData?: SharedData;
-    onDataUpdate?: (data: any) => void;
+// interface RoseDiagramProps {
+//     width?: number;
+//     height?: number;
+//     className?: string;
+//     sharedData?: SharedData;
+//     onDataUpdate?: (data: any) => void;
 
-}
+// }
 
 interface DataInfo {
     filename: string;
@@ -18,11 +19,7 @@ interface DataInfo {
     max: number;
 }
 
-const RoseDiagramComponent: React.FC<RoseDiagramProps> = ({
-    width = 400,
-    height = 2000,
-    className = '',
-}) => {
+const RoseDiagramComponent: React.FC<DataFiles> = ({ }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [rose, setRose] = useState<any>(null); // Replace 'any' with your RoseDiagram type
     const [dataInfo, setDataInfo] = useState<DataInfo>({
@@ -165,7 +162,7 @@ const RoseDiagramComponent: React.FC<RoseDiagramProps> = ({
                 <div
                     id="rose-container"
                     ref={containerRef}
-                    className={`w-[400px] h-[400px] ${className}`}
+                    className={`w-[400px] h-[400px]`}
                 />
                 {/* Data Info Panel */}
                 <div className="mt-4 p-4 border rounded bg-white">

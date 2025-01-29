@@ -1,26 +1,35 @@
 import React, { useState } from 'react';
 import { Play, HelpCircle } from 'lucide-react';
-import HelpComponent from './HelpComponent'
+import HelpComponent from './HelpComponent';
 import AnalysisDashboard from './AnalysisDashboard';
 import RunComponent from './RunComponent';
 import DataComponent from './DataComponent';
+import DataFile from './DataFile';
 
 const MainInterface = () => {
-    const [dataItems, setDataItems] = useState<string[]>(['d1', 'd2']);
-    const [selectedData, setSelectedData] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState('data'); 
-
-    const handleAddData = () => {
-        const newItem = `d${dataItems.length + 1}`;
-        setDataItems([...dataItems, newItem]);
+    const [activeTab, setActiveTab] = useState('data');
+    // Store loaded files in state at the top level
+    const [loadedFiles, setLoadedFiles] = useState<DataFile[]>([]);
+    
+    // Callback to handle new files being loaded
+    const handleFileLoaded = (file: DataFile) => {
+        setLoadedFiles(prevFiles => {
+            // Check if file with same name exists
+            const existingFileIndex = prevFiles.findIndex(f => f.name === file.name);
+            if (existingFileIndex >= 0) {
+                // Update existing file
+                const newFiles = [...prevFiles];
+                newFiles[existingFileIndex] = file;
+                return newFiles;
+            }
+            // Add new file
+            return [...prevFiles, file];
+        });
     };
 
-    const handleDataSelection = (item: string) => {
-        if (selectedData.includes(item)) {
-            setSelectedData(selectedData.filter(i => i !== item));
-        } else {
-            setSelectedData([...selectedData, item]);
-        }
+    // Callback to handle file removal
+    const handleFileRemoved = (fileId: string) => {
+        setLoadedFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
     };
 
     return (
@@ -35,8 +44,8 @@ const MainInterface = () => {
                                 onClick={() => setActiveTab(tab)}
                                 className={`py-2 px-4 font-medium ${
                                     activeTab === tab
-                                    ? 'border-b-2 border-blue-500 text-blue-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                        ? 'border-b-2 border-blue-500 text-blue-600'
+                                        : 'text-gray-500 hover:text-gray-700'
                                 }`}
                             >
                                 <div className="flex items-center gap-2">
@@ -52,15 +61,23 @@ const MainInterface = () => {
                 {/* Content */}
                 <div className="bg-white rounded-lg shadow mt-4 w-full">
                     {activeTab === 'data' && (
-                        <DataComponent />
+                        <DataComponent 
+                            files={loadedFiles}
+                            onFileLoaded={handleFileLoaded}
+                            onFileRemoved={handleFileRemoved}
+                        />
                     )}
 
                     {activeTab === 'run' && (
-                        <RunComponent selectedData={selectedData} />
+                        <RunComponent 
+                            files={loadedFiles}
+                        />
                     )}
 
                     {activeTab === 'analyze' && (
-                        <AnalysisDashboard />
+                        <AnalysisDashboard 
+                            files={loadedFiles}
+                        />
                     )}
 
                     {activeTab === 'help' && (

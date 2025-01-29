@@ -3,11 +3,12 @@ import { PlusCircle, X, Dribbble, BarChart, LineChart, PieChart, Table, GripHori
 
 
 
-import { VisualizationComponent } from './VisualizationComponents';
+import { VisualizationComponent } from './VisualizationComponent';
 import { Visualization, SharedData } from './types';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+import DataFile from './DataFile';
 
 const visualizationTypes = [
     { id: 'table', title: 'Tableau', icon: Table },
@@ -25,7 +26,23 @@ const defaultLayout = {
     sphere: { w: 2, h: 2 },
 };
 
-const AnalysisDashboard: React.FC = () => {
+interface AnalysisDashboardProps {
+    files: DataFile[];
+}
+
+interface Visualization {
+    id: string;
+    type: string;
+    title: string;
+    layout: {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+    };
+}
+
+const AnalysisDashboard: React.FC<{ files: DataFile[] }> = ({ files }) => {
     const [visualizations, setVisualizations] = useState<Visualization[]>([]);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sharedData, setSharedData] = useState<SharedData>({});
@@ -56,7 +73,9 @@ const AnalysisDashboard: React.FC = () => {
         console.log(`Adding new visu of type ${type} with title ${title}`)
         const layout = defaultLayout[type as keyof typeof defaultLayout] || { w: 2, h: 1 };
         const position = findAvailablePosition(layout.w, layout.h);
-        
+
+        // console.log(files)
+
         const newVisualization: Visualization = {
             id: `viz-${Date.now()}`,
             type,
@@ -66,9 +85,9 @@ const AnalysisDashboard: React.FC = () => {
                 ...layout
             }
         };
-        
+
         setVisualizations([...visualizations, newVisualization]);
-        setIsDialogOpen(false);
+        // setIsDialogOpen(false);
     };
 
     const handleLayoutChange = (layout: Layout[]) => {
@@ -82,16 +101,19 @@ const AnalysisDashboard: React.FC = () => {
                         y: newLayout.y,
                         w: newLayout.w,
                         h: newLayout.h
-                    }
+                    },
+                    files
                 };
             }
             return viz;
         });
+        // console.log(updatedVisualizations)
         setVisualizations(updatedVisualizations);
     };
 
     const handleDataUpdate = (data: any) => {
         setSharedData(prev => ({ ...prev, ...data }));
+        // console.log("data: ", data)
     };
 
     return (
@@ -124,26 +146,12 @@ const AnalysisDashboard: React.FC = () => {
                         className="border rounded-md bg-white shadow-sm overflow-hidden"
                     >
                         <div className="flex items-center justify-between p-2 border-b bg-gray-50">
-                            <div className="flex items-center gap-2">
-                                <div className="drag-handle cursor-move p-1 hover:bg-gray-200 rounded">
-                                    <GripHorizontal size={20} className="text-gray-400" />
-                                </div>
-                                <h3 className="font-medium">{viz.title}</h3>
-                            </div>
-                            <button
-                                onClick={() => setVisualizations(
-                                    visualizations.filter((v) => v.id !== viz.id)
-                                )}
-                                className="text-gray-400 hover:text-red-500 p-1"
-                            >
-                                <X size={20} />
-                            </button>
+                            {/* ... header content ... */}
                         </div>
                         <div className="p-4 h-[calc(100%-3rem)]">
                             <VisualizationComponent
                                 type={viz.type}
-                                sharedData={sharedData}
-                                onDataUpdate={handleDataUpdate}
+                                files={files}
                                 width={viz.layout.w * 300 - 32}
                                 height={viz.layout.h * 150 - 32}
                             />

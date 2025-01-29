@@ -1,29 +1,27 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import {
-    Table, TableBody, TableCell, TableContainer, TableHead,
-    TableRow, Paper, Button, Typography
+    TableContainer, Table, TableHead, TableBody,
+    TableRow, TableCell, Button, Typography
 } from '@mui/material';
 import { Plus, X, GripHorizontal } from 'lucide-react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+import { DataFile } from './DataFile';
 
-interface DataFile {
-    id: string;
-    name: string;
-    headers: string[];
-    content: string[][];
-    layout: {
-        x: number;
-        y: number;
-        w: number;
-        h: number;
-    };
+
+interface DataComponentProps {
+    files: DataFile[];
+    onFileLoaded: (file: DataFile) => void;
+    onFileRemoved: (fileId: string) => void;
 }
 
-const DataTab = () => {
-    const [files, setFiles] = useState<DataFile[]>([]);
+const DataComponent: React.FC<DataComponentProps> = ({
+    files,
+    onFileLoaded,
+    onFileRemoved
+}) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,7 +43,7 @@ const DataTab = () => {
                             content: contentWithoutHeader,
                             layout: { ...position, w: 4, h: 2 }
                         };
-                        setFiles([...files, newFile]);
+                        onFileLoaded(newFile);
                     },
                     skipEmptyLines: true,
                     delimiter: ';'
@@ -56,10 +54,10 @@ const DataTab = () => {
     };
 
     const handleLayoutChange = (layout: Layout[]) => {
-        const updatedFiles = files.map(file => {
-            const newLayout = layout.find(l => l.i === file.id);
-            if (newLayout) {
-                return {
+        layout.forEach(newLayout => {
+            const file = files.find(f => f.id === newLayout.i);
+            if (file) {
+                const updatedFile = {
                     ...file,
                     layout: {
                         x: newLayout.x,
@@ -68,10 +66,9 @@ const DataTab = () => {
                         h: newLayout.h
                     }
                 };
+                onFileLoaded(updatedFile);
             }
-            return file;
         });
-        setFiles(updatedFiles);
     };
 
     return (
@@ -83,7 +80,7 @@ const DataTab = () => {
                     ref={fileInputRef}
                     onChange={handleFileUpload}
                     className="hidden"
-                    accept=".csv"
+                    accept=".csv;*.col"
                 />
                 <Button
                     variant="contained"
@@ -123,7 +120,7 @@ const DataTab = () => {
                                 <Typography variant="subtitle1">{file.name}</Typography>
                             </div>
                             <Button
-                                onClick={() => setFiles(files.filter(f => f.id !== file.id))}
+                                onClick={() => onFileRemoved(file.id)}
                                 className="text-gray-400 hover:text-red-500 p-1"
                                 style={{ minWidth: 'auto', padding: '6px' }}
                             >
@@ -169,4 +166,4 @@ const DataTab = () => {
     );
 };
 
-export default DataTab;
+export default DataComponent;
