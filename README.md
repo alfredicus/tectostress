@@ -1,4 +1,4 @@
-# Tectstress application
+# Tectostress application
 Stress inversion webapp
 
 <p align="center">
