@@ -2,15 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { RoseDiagram } from './views/RoseDiagram'
 import { SharedData } from './types';
 import { DataFiles } from './DataFile';
+import { BaseVisualizationState } from './VisualizationState';
 
-// interface RoseDiagramProps {
-//     width?: number;
-//     height?: number;
-//     className?: string;
-//     sharedData?: SharedData;
-//     onDataUpdate?: (data: any) => void;
-
-// }
+export interface RoseDiagramState extends BaseVisualizationState {
+    type: 'rose';
+    // Add rose-specific state here
+    scale?: number;
+    rotation?: number;
+}
 
 interface DataInfo {
     filename: string;

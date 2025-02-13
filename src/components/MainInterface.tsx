@@ -4,32 +4,48 @@ import HelpComponent from './HelpComponent';
 import AnalysisDashboard from './AnalysisDashboard';
 import RunComponent from './RunComponent';
 import DataComponent from './DataComponent';
-import DataFile from './DataFile';
+import {DataFile} from './DataFile';
+import { Visualization, VisualizationState } from './types';
 
 const MainInterface = () => {
     const [activeTab, setActiveTab] = useState('data');
-    // Store loaded files in state at the top level
     const [loadedFiles, setLoadedFiles] = useState<DataFile[]>([]);
+    // Add state for visualizations
+    const [visualizations, setVisualizations] = useState<Visualization[]>([]);
     
-    // Callback to handle new files being loaded
     const handleFileLoaded = (file: DataFile) => {
         setLoadedFiles(prevFiles => {
-            // Check if file with same name exists
             const existingFileIndex = prevFiles.findIndex(f => f.name === file.name);
             if (existingFileIndex >= 0) {
-                // Update existing file
                 const newFiles = [...prevFiles];
                 newFiles[existingFileIndex] = file;
                 return newFiles;
             }
-            // Add new file
             return [...prevFiles, file];
         });
     };
 
-    // Callback to handle file removal
     const handleFileRemoved = (fileId: string) => {
         setLoadedFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
+    };
+
+    // Add handlers for visualizations
+    const handleVisualizationAdded = (visualization: Visualization) => {
+        setVisualizations(prev => [...prev, visualization]);
+    };
+
+    const handleVisualizationRemoved = (id: string) => {
+        setVisualizations(prev => prev.filter(v => v.id !== id));
+    };
+
+    const handleVisualizationsLayoutChanged = (updatedVisualizations: Visualization[]) => {
+        setVisualizations(updatedVisualizations);
+    };
+
+    const handleVisualizationStateChanged = (id: string, newState: VisualizationState) => {
+        setVisualizations(prev => prev.map(viz => 
+            viz.id === id ? { ...viz, state: newState } : viz
+        ));
     };
 
     return (
@@ -77,6 +93,11 @@ const MainInterface = () => {
                     {activeTab === 'analyze' && (
                         <AnalysisDashboard 
                             files={loadedFiles}
+                            visualizations={visualizations}
+                            onVisualizationAdded={handleVisualizationAdded}
+                            onVisualizationRemoved={handleVisualizationRemoved}
+                            onLayoutChanged={handleVisualizationsLayoutChanged}
+                            onVisualizationStateChanged={handleVisualizationStateChanged}
                         />
                     )}
 
