@@ -1,0 +1,71 @@
+{
+    "search": {
+        "display": "Search method",
+        "type": "combobox",
+        "list": [
+            {
+                "name": "Monte Carlo",
+                "params": [
+                    {
+                        "name": "rotAngleHalfInterval",
+                        "display": "Rotation angle interval",
+                        "value": 60,
+                        "min": 0,
+                        "max": 90
+                    },
+                    {
+                        "name": "nbRandomTrials",
+                        "display": "Nb simulations",
+                        "value": 20000,
+                        "min": 10,
+                        "max": 1e6
+                    },
+                    {
+                        "name": "stressRatio",
+                        "display": "Stress ratio",
+                        "value": 0.5,
+                        "min": 0,
+                        "max": 1
+                    },
+                    {
+                        "name": "stressRatioHalfInterval",
+                        "display": "Stress ratio interval",
+                        "value": 0.5,
+                        "min": 0,
+                        "max": 1
+                    }
+                ]
+            },
+            {
+                "name": "Grid Search",
+                "params": [
+                    {
+                        "name": "deltaGridAngle",
+                        "display": "Grid angle delta",
+                        "value": 2,
+                        "min": 0.01,
+                        "max": 90
+                    },
+                    {
+                        "name": "stressRatio",
+                        "display": "Stress ratio",
+                        "value": 0.5,
+                        "min": 0,
+                        "max": 1
+                    },
+                    {
+                        "name": "stressRatioHalfInterval",
+                        "display": "Stress ratio interval",
+                        "value": 0.5,
+                        "min": 0,
+                        "max": 1
+                    }
+                ]
+            },
+            {
+                "name": "Debug Search",
+                "params": []
+            }
+        ]
+    }
+}
