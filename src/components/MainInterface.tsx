@@ -4,15 +4,36 @@ import HelpComponent from './HelpComponent';
 import AnalysisDashboard from './AnalysisDashboard';
 import RunComponent from './RunComponent';
 import DataComponent from './DataComponent';
-import {DataFile} from './DataFile';
+import { DataFile } from './DataFile';
 import { Visualization, VisualizationState } from './types';
+
+// Define types for run state persistence
+interface SearchMethodParams {
+    [methodName: string]: {
+        [paramName: string]: number;
+    };
+}
+
+interface RunPersistentState {
+    selectedMethod: string;
+    allParams: SearchMethodParams;
+    selectedFiles: string[];
+    showSettings?: boolean; // Added for parameters panel persistence
+}
 
 const MainInterface = () => {
     const [activeTab, setActiveTab] = useState('data');
     const [loadedFiles, setLoadedFiles] = useState<DataFile[]>([]);
-    // Add state for visualizations
     const [visualizations, setVisualizations] = useState<Visualization[]>([]);
-    
+
+    // Add state for persisting run component state with showSettings property
+    const [runState, setRunState] = useState<RunPersistentState>({
+        selectedMethod: '',
+        allParams: {},
+        selectedFiles: [],
+        showSettings: true // Default to showing settings panel
+    });
+
     const handleFileLoaded = (file: DataFile) => {
         setLoadedFiles(prevFiles => {
             const existingFileIndex = prevFiles.findIndex(f => f.name === file.name);
@@ -43,9 +64,14 @@ const MainInterface = () => {
     };
 
     const handleVisualizationStateChanged = (id: string, newState: VisualizationState) => {
-        setVisualizations(prev => prev.map(viz => 
+        setVisualizations(prev => prev.map(viz =>
             viz.id === id ? { ...viz, state: newState } : viz
         ));
+    };
+
+    // Handle Run component state persistence
+    const handleRunStateChange = (newState: RunPersistentState) => {
+        setRunState(newState);
     };
 
     return (
@@ -58,11 +84,10 @@ const MainInterface = () => {
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`py-2 px-4 font-medium ${
-                                    activeTab === tab
+                                className={`py-2 px-4 font-medium ${activeTab === tab
                                         ? 'border-b-2 border-blue-500 text-blue-600'
                                         : 'text-gray-500 hover:text-gray-700'
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-center gap-2">
                                     {tab === 'run' && <Play className="w-4 h-4" />}
@@ -77,7 +102,7 @@ const MainInterface = () => {
                 {/* Content */}
                 <div className="bg-white rounded-lg shadow mt-4 w-full">
                     {activeTab === 'data' && (
-                        <DataComponent 
+                        <DataComponent
                             files={loadedFiles}
                             onFileLoaded={handleFileLoaded}
                             onFileRemoved={handleFileRemoved}
@@ -85,13 +110,15 @@ const MainInterface = () => {
                     )}
 
                     {activeTab === 'run' && (
-                        <RunComponent 
+                        <RunComponent
                             files={loadedFiles}
+                            persistentState={runState}
+                            onStateChange={handleRunStateChange}
                         />
                     )}
 
                     {activeTab === 'analyze' && (
-                        <AnalysisDashboard 
+                        <AnalysisDashboard
                             files={loadedFiles}
                             visualizations={visualizations}
                             onVisualizationAdded={handleVisualizationAdded}

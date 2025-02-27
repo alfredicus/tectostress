@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     TableContainer, Table, TableHead, TableBody,
     TableRow, TableCell, Button, Typography
 } from '@mui/material';
-import { Plus, X, GripHorizontal } from 'lucide-react';
+import { Plus, X, GripHorizontal, CheckSquare, Square, Upload } from 'lucide-react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
@@ -23,10 +23,17 @@ const DataComponent: React.FC<DataComponentProps> = ({
     onFileRemoved
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    const [selectAll, setSelectAll] = useState(false);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
+        const fileList = event.target.files;
+        if (!fileList || fileList.length === 0) return;
+
+        // Convert FileList to array to process multiple files
+        const filesArray = Array.from(fileList);
+
+        filesArray.forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 Papa.parse(e.target?.result as string, {
@@ -35,9 +42,14 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         const headers = data[0];
                         const contentWithoutHeader = data.slice(1);
 
-                        const position = { x: 0, y: files.length * 2 };
+                        // Position files in a grid-like layout
+                        const filesCount = files.length;
+                        const row = Math.floor((filesCount + index) / 2);
+                        const col = (filesCount + index) % 2;
+
+                        const position = { x: col * 2, y: row * 2 };
                         const newFile: DataFile = {
-                            id: `file-${Date.now()}`,
+                            id: `file-${Date.now()}-${index}`,
                             name: file.name,
                             headers,
                             content: contentWithoutHeader,
@@ -50,6 +62,11 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 });
             };
             reader.readAsText(file);
+        });
+
+        // Clear the input so the same files can be selected again if needed
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
 
@@ -71,25 +88,87 @@ const DataComponent: React.FC<DataComponentProps> = ({
         });
     };
 
+    const toggleSelectFile = (fileId: string) => {
+        setSelectedFiles(prev => {
+            if (prev.includes(fileId)) {
+                return prev.filter(id => id !== fileId);
+            } else {
+                return [...prev, fileId];
+            }
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectAll || selectedFiles.length === files.length) {
+            // If all are selected or selectAll is true, deselect all
+            setSelectedFiles([]);
+            setSelectAll(false);
+        } else {
+            // Select all files
+            setSelectedFiles(files.map(file => file.id));
+            setSelectAll(true);
+        }
+    };
+
+    const deleteSelectedFiles = () => {
+        selectedFiles.forEach(fileId => onFileRemoved(fileId));
+        setSelectedFiles([]);
+        setSelectAll(false);
+    };
+
     return (
         <div className="p-6 max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-6">
                 <Typography variant="h5">Data</Typography>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    accept=".csv;*.col"
-                />
-                <Button
-                    variant="contained"
-                    startIcon={<Plus size={20} />}
-                    onClick={() => fileInputRef.current?.click()}
-                >
-                    Add
-                </Button>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        accept=".csv;*.col"
+                        multiple // Enable multiple file selection
+                    />
+                    <Button
+                        variant="contained"
+                        startIcon={<Upload size={20} />}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        Upload Files
+                    </Button>
+                    {selectedFiles.length > 0 && (
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            onClick={deleteSelectedFiles}
+                        >
+                            Delete Selected ({selectedFiles.length})
+                        </Button>
+                    )}
+                </div>
             </div>
+
+            {/* Selection header */}
+            {files.length > 0 && (
+                <div className="flex items-center mb-4 gap-4">
+                    <button
+                        onClick={toggleSelectAll}
+                        className="flex items-center gap-2 text-gray-700 hover:text-blue-600"
+                    >
+                        {selectAll || selectedFiles.length === files.length ? (
+                            <CheckSquare className="w-5 h-5 text-blue-500" />
+                        ) : (
+                            <Square className="w-5 h-5" />
+                        )}
+                        <span>{selectAll ? "Deselect All" : "Select All"}</span>
+                    </button>
+                    <div className="text-sm text-gray-500">
+                        {selectedFiles.length > 0
+                            ? `${selectedFiles.length} of ${files.length} selected`
+                            : `${files.length} files total`}
+                    </div>
+                </div>
+            )}
 
             <GridLayout
                 className="layout"
@@ -110,10 +189,21 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 {files.map((file) => (
                     <div
                         key={file.id}
-                        className="border rounded-md bg-white shadow-sm overflow-hidden"
+                        className={`border rounded-md shadow-sm overflow-hidden ${selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
+                            }`}
                     >
                         <div className="flex items-center justify-between p-2 border-b bg-gray-50">
                             <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => toggleSelectFile(file.id)}
+                                    className="flex items-center justify-center w-5 h-5"
+                                >
+                                    {selectedFiles.includes(file.id) ? (
+                                        <CheckSquare className="w-5 h-5 text-blue-500" />
+                                    ) : (
+                                        <Square className="w-5 h-5 text-gray-400" />
+                                    )}
+                                </button>
                                 <div className="drag-handle cursor-move p-1 hover:bg-gray-200 rounded">
                                     <GripHorizontal size={20} className="text-gray-400" />
                                 </div>

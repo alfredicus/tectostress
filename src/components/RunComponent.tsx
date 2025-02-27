@@ -1,6 +1,89 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Settings } from 'lucide-react';
 import { DataFile } from './DataFile';
+
+// ------------------------------------------
+// Use hardcoded config based on the correct structure
+const configData: ConfigData = {
+    search: {
+        display: "Search method",
+        type: "combobox",
+        list: [
+            {
+                name: "Monte Carlo",
+                params: [
+                    {
+                        name: "rotAngleHalfInterval",
+                        display: "Rotation angle interval",
+                        value: 60,
+                        min: 0,
+                        max: 90
+                    },
+                    {
+                        name: "nbRandomTrials",
+                        display: "Nb simulations",
+                        value: 20000,
+                        min: 10,
+                        max: 1e6
+                    },
+                    {
+                        name: "stressRatio",
+                        display: "Stress ratio",
+                        value: 0.5,
+                        min: 0,
+                        max: 1
+                    },
+                    {
+                        name: "stressRatioHalfInterval",
+                        display: "Stress ratio interval",
+                        value: 0.5,
+                        min: 0,
+                        max: 1
+                    }
+                ]
+            },
+            {
+                name: "Grid Search",
+                params: [
+                    {
+                        name: "deltaGridAngle",
+                        display: "Grid angle delta",
+                        value: 2,
+                        min: 0.01,
+                        max: 90
+                    },
+                    {
+                        name: "stressRatio",
+                        display: "Stress ratio",
+                        value: 0.5,
+                        min: 0,
+                        max: 1
+                    },
+                    {
+                        name: "stressRatioHalfInterval",
+                        display: "Stress ratio interval",
+                        value: 0.5,
+                        min: 0,
+                        max: 1
+                    }
+                ]
+            },
+            {
+                name: "Debug Search",
+                params: [
+                    {
+                        name: "stressRatio",
+                        display: "Stress ratio",
+                        value: 0.25,
+                        min: 0,
+                        max: 1
+                    }
+                ]
+            }
+        ]
+    }
+};
+// ------------------------------------------
 
 // Define types for our configuration
 interface ParamConfig {
@@ -33,123 +116,78 @@ interface RunState {
 
 interface RunProps {
     files: DataFile[];
+    persistentState?: {
+        selectedMethod: string;
+        allParams: Record<string, Record<string, number>>;
+        selectedFiles: string[];
+        showSettings?: boolean; // Add showSettings to persistentState
+    };
+    onStateChange?: (state: {
+        selectedMethod: string;
+        allParams: Record<string, Record<string, number>>;
+        selectedFiles: string[];
+        showSettings?: boolean; // Include showSettings in state updates
+    }) => void;
 }
 
-const RunComponent: React.FC<RunProps> = ({ files }) => {
+const RunComponent: React.FC<RunProps> = ({ files, persistentState, onStateChange }) => {
     const [config, setConfig] = useState<ConfigData | null>(null);
     const [runState, setRunState] = useState<RunState>({
-        selectedMethod: '',
+        selectedMethod: persistentState?.selectedMethod || '',
         params: {},
-        selectedFiles: [],
+        selectedFiles: persistentState?.selectedFiles || [],
         simulationStatus: { status: 'En attente', progress: 0 }
     });
     const [loading, setLoading] = useState(true);
-    const [showSettings, setShowSettings] = useState(false);
+    // Initialize showSettings from persistentState or default to true
+    const [showSettings, setShowSettings] = useState(persistentState?.showSettings !== undefined ? persistentState.showSettings : true);
 
     // Store all parameter values in a single object to maintain them between method changes
-    const [allParams, setAllParams] = useState<Record<string, Record<string, number>>>({});
+    const [allParams, setAllParams] = useState<Record<string, Record<string, number>>>(
+        persistentState?.allParams || {}
+    );
+
+    // Use a ref to debounce state updates to parent
+    const stateUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const isUpdatingParamsRef = useRef(false);
 
     // Initialize configuration and parameters
     useEffect(() => {
         const loadConfig = async () => {
             try {
                 setLoading(true);
-                // Use hardcoded config based on the correct structure
-                const configData: ConfigData = {
-                    search: {
-                        display: "Search method",
-                        type: "combobox",
-                        list: [
-                            {
-                                name: "Monte Carlo",
-                                params: [
-                                    {
-                                        name: "rotAngleHalfInterval",
-                                        display: "Rotation angle interval",
-                                        value: 60,
-                                        min: 0,
-                                        max: 90
-                                    },
-                                    {
-                                        name: "nbRandomTrials",
-                                        display: "Nb simulations",
-                                        value: 20000,
-                                        min: 10,
-                                        max: 1e6
-                                    },
-                                    {
-                                        name: "stressRatio",
-                                        display: "Stress ratio",
-                                        value: 0.5,
-                                        min: 0,
-                                        max: 1
-                                    },
-                                    {
-                                        name: "stressRatioHalfInterval",
-                                        display: "Stress ratio interval",
-                                        value: 0.5,
-                                        min: 0,
-                                        max: 1
-                                    }
-                                ]
-                            },
-                            {
-                                name: "Grid Search",
-                                params: [
-                                    {
-                                        name: "deltaGridAngle",
-                                        display: "Grid angle delta",
-                                        value: 2,
-                                        min: 0.01,
-                                        max: 90
-                                    },
-                                    {
-                                        name: "stressRatio",
-                                        display: "Stress ratio",
-                                        value: 0.5,
-                                        min: 0,
-                                        max: 1
-                                    },
-                                    {
-                                        name: "stressRatioHalfInterval",
-                                        display: "Stress ratio interval",
-                                        value: 0.5,
-                                        min: 0,
-                                        max: 1
-                                    }
-                                ]
-                            },
-                            {
-                                name: "Debug Search",
-                                params: []
-                            }
-                        ]
-                    }
-                };
-
                 setConfig(configData);
 
                 // Initialize parameter state for all methods
-                const initialAllParams: Record<string, Record<string, number>> = {};
+                let initialAllParams: Record<string, Record<string, number>> = {};
 
-                configData.search.list.forEach(method => {
-                    initialAllParams[method.name] = {};
-                    method.params.forEach(param => {
-                        initialAllParams[method.name][param.name] = param.value;
+                // If we have persisted parameters, use them
+                if (persistentState?.allParams && Object.keys(persistentState.allParams).length > 0) {
+                    initialAllParams = persistentState.allParams;
+                } else {
+                    // Otherwise initialize with defaults
+                    configData.search.list.forEach(method => {
+                        initialAllParams[method.name] = {};
+                        method.params.forEach(param => {
+                            initialAllParams[method.name][param.name] = param.value;
+                        });
                     });
-                });
+                }
 
                 setAllParams(initialAllParams);
 
-                // Initialize with first method if available
-                if (configData.search.list.length > 0) {
-                    const firstMethod = configData.search.list[0];
-                    const firstMethodParams = initialAllParams[firstMethod.name] || {};
+                // Initialize with first method or persisted method
+                const initialMethod = persistentState?.selectedMethod || configData.search.list[0].name;
+                const methodConfig = configData.search.list.find(m => m.name === initialMethod);
+
+                if (methodConfig) {
+                    const methodParams = initialAllParams[initialMethod] || {};
 
                     setRunState(prevState => ({
                         ...prevState,
-                        selectedMethod: firstMethod.name,
-                        params: firstMethodParams
+                        selectedMethod: initialMethod,
+                        params: methodParams,
+                        selectedFiles: persistentState?.selectedFiles || []
                     }));
                 }
 
@@ -161,6 +199,50 @@ const RunComponent: React.FC<RunProps> = ({ files }) => {
         };
 
         loadConfig();
+    }, []);
+
+    // Update parent component state when our state changes - with debounce
+    useEffect(() => {
+        if (onStateChange && runState.selectedMethod && !isUpdatingParamsRef.current) {
+            // Clear any existing timeout
+            if (stateUpdateTimeoutRef.current) {
+                clearTimeout(stateUpdateTimeoutRef.current);
+            }
+
+            // Set a new timeout to update parent state after a delay
+            stateUpdateTimeoutRef.current = setTimeout(() => {
+                onStateChange({
+                    selectedMethod: runState.selectedMethod,
+                    allParams,
+                    selectedFiles: runState.selectedFiles,
+                    showSettings // Include showSettings in state updates
+                });
+                stateUpdateTimeoutRef.current = null;
+            }, 500); // 500ms debounce
+        }
+    }, [runState.selectedMethod, allParams, runState.selectedFiles, showSettings, onStateChange]);
+
+    // Handler for toggling showSettings with persistence
+    const handleToggleSettings = useCallback(() => {
+        setShowSettings(prev => !prev);
+        // Update the parent state directly for this change to ensure immediate persistence
+        if (onStateChange) {
+            onStateChange({
+                selectedMethod: runState.selectedMethod,
+                allParams,
+                selectedFiles: runState.selectedFiles,
+                showSettings: !showSettings
+            });
+        }
+    }, [showSettings, runState.selectedMethod, allParams, runState.selectedFiles, onStateChange]);
+
+    // Clean up timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (stateUpdateTimeoutRef.current) {
+                clearTimeout(stateUpdateTimeoutRef.current);
+            }
+        };
     }, []);
 
     // Update parameters when method changes, preserving parameter values
@@ -179,7 +261,10 @@ const RunComponent: React.FC<RunProps> = ({ files }) => {
 
     // Handle parameter changes
     const handleParamChange = useCallback((paramName: string, value: number) => {
-        // Update the current params in runState
+        // Set flag to indicate we're updating params
+        isUpdatingParamsRef.current = true;
+
+        // First update local state for immediate feedback
         setRunState(prevState => ({
             ...prevState,
             params: {
@@ -188,14 +273,23 @@ const RunComponent: React.FC<RunProps> = ({ files }) => {
             }
         }));
 
-        // Also update the saved params for this method
-        setAllParams(prevAllParams => ({
-            ...prevAllParams,
-            [runState.selectedMethod]: {
-                ...prevAllParams[runState.selectedMethod],
-                [paramName]: value
-            }
-        }));
+        // Then update the allParams store for persistence
+        setAllParams(prevAllParams => {
+            const updatedParams = {
+                ...prevAllParams,
+                [runState.selectedMethod]: {
+                    ...prevAllParams[runState.selectedMethod],
+                    [paramName]: value
+                }
+            };
+
+            // Reset the flag after a brief timeout to avoid immediate state updates
+            setTimeout(() => {
+                isUpdatingParamsRef.current = false;
+            }, 50);
+
+            return updatedParams;
+        });
     }, [runState.selectedMethod]);
 
     // Toggle file selection
@@ -290,61 +384,62 @@ const RunComponent: React.FC<RunProps> = ({ files }) => {
                         </select>
                     </div>
                     <button
-                        onClick={() => setShowSettings(!showSettings)}
-                        className="p-2 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                        title="Paramètres"
+                        onClick={handleToggleSettings}
+                        className={`p-2 rounded-md transition-colors ${showSettings ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-gray-100 hover:bg-gray-200'}`}
+                        title={showSettings ? "Hide parameters" : "Show parameters"}
                     >
                         <Settings className="w-5 h-5" />
                     </button>
                 </div>
             </div>
 
-            {/* Parameter settings panel */}
-            {showSettings && (
-                <div className="mb-6 p-4 border rounded-md bg-gray-50">
-                    <h3 className="text-lg font-medium mb-3">Paramètres de {runState.selectedMethod}</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        {config?.search.list
-                            .find(method => method.name === runState.selectedMethod)?.params
-                            .map(param => (
-                                <div key={param.name}>
-                                    <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
-                                        {param.display}
-                                    </label>
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex items-center">
-                                            <input
-                                                type="range"
-                                                id={`slider-${param.name}`}
-                                                min={param.min}
-                                                max={param.max}
-                                                step={param.name.includes('RandomTrials') ? 100 : param.max < 10 ? 0.01 : 1}
-                                                value={runState.params[param.name] ?? param.value}
-                                                onChange={(e) => handleParamChange(param.name, parseFloat(e.target.value))}
-                                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                                            />
-                                        </div>
-                                        <div className="flex items-center">
-                                            <input
-                                                type="number"
-                                                id={param.name}
-                                                min={param.min}
-                                                max={param.max}
-                                                step={param.name.includes('RandomTrials') ? 100 : param.max < 10 ? 0.01 : 1}
-                                                value={runState.params[param.name] ?? param.value}
-                                                onChange={(e) => {
-                                                    const value = e.target.value === '' ? param.value : parseFloat(e.target.value);
-                                                    handleParamChange(param.name, Math.min(Math.max(value, param.min), param.max));
-                                                }}
-                                                className="px-2 py-1 w-24 text-right border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                            />
-                                        </div>
+            {/* Parameter settings panel - always rendered but conditionally visible for smooth transitions */}
+            <div
+                className={`mb-6 p-4 border rounded-md bg-gray-50 transition-all duration-300 ease-in-out ${showSettings ? 'opacity-100 max-h-[1000px]' : 'opacity-0 max-h-0 overflow-hidden p-0 m-0 border-0'
+                    }`}
+            >
+                <h3 className="text-lg font-medium mb-3">Paramètres de {runState.selectedMethod}</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    {config?.search.list
+                        .find(method => method.name === runState.selectedMethod)?.params
+                        .map(param => (
+                            <div key={param.name}>
+                                <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
+                                    {param.display}
+                                </label>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex items-center">
+                                        <input
+                                            type="range"
+                                            id={`slider-${param.name}`}
+                                            min={param.min}
+                                            max={param.max}
+                                            step={param.name.includes('RandomTrials') ? 100 : param.max < 10 ? 0.01 : 1}
+                                            value={runState.params[param.name] ?? param.value}
+                                            onChange={(e) => handleParamChange(param.name, parseFloat(e.target.value))}
+                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                        />
+                                    </div>
+                                    <div className="flex items-center">
+                                        <input
+                                            type="number"
+                                            id={param.name}
+                                            min={param.min}
+                                            max={param.max}
+                                            step={param.name.includes('RandomTrials') ? 100 : param.max < 10 ? 0.01 : 1}
+                                            value={runState.params[param.name] ?? param.value}
+                                            onChange={(e) => {
+                                                const value = e.target.value === '' ? param.value : parseFloat(e.target.value);
+                                                handleParamChange(param.name, Math.min(Math.max(value, param.min), param.max));
+                                            }}
+                                            className="px-2 py-1 w-24 text-right border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                        />
                                     </div>
                                 </div>
-                            ))}
-                    </div>
+                            </div>
+                        ))}
                 </div>
-            )}
+            </div>
 
             {/* File selection and run section */}
             <div className="mb-4">
