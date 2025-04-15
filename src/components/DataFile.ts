@@ -2,7 +2,7 @@ export interface DataFile {
     id: string;
     name: string;
     headers: string[];
-    content: string[][];
+    content: Record<string, any>;//string[][];
     layout: {
         x: number;
         y: number;

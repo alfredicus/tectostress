@@ -1,7 +1,9 @@
 import React from 'react';
 import { Play, Settings } from 'lucide-react';
 import { DataFile } from './DataFile';
-import { SearchMethodFactory, SearchMethod, InverseMethod } from '@alfredo-taboada/stress';
+import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory, getTypeOfMovementFromString, mvts } from '@alfredo-taboada/stress';
+import { Message } from '@mui/icons-material';
+import ErrorModal from './ErrorModal';
 
 // Hardcoded config based on the correct structure
 const configData: ConfigData = {
@@ -116,6 +118,7 @@ interface RunState {
     loading: boolean;
     showSettings: boolean;
     allParams: Record<string, Record<string, number>>;
+    errorMessage: string | null;
 }
 
 interface RunProps {
@@ -138,6 +141,11 @@ class RunComponent extends React.Component<RunProps, RunState> {
     private stateUpdateTimeoutId: NodeJS.Timeout | null = null;
     private isUpdatingParams: boolean = false;
 
+
+    private setErrorMessage = (message: string | null) => {
+        this.setState({ errorMessage: message });
+    };
+
     constructor(props: RunProps) {
         super(props);
 
@@ -152,7 +160,8 @@ class RunComponent extends React.Component<RunProps, RunState> {
             showSettings: props.persistentState?.showSettings !== undefined
                 ? props.persistentState.showSettings
                 : true,
-            allParams: props.persistentState?.allParams || {}
+            allParams: props.persistentState?.allParams || {},
+            errorMessage: null
         };
     }
 
@@ -332,7 +341,7 @@ class RunComponent extends React.Component<RunProps, RunState> {
             return;
         }
 
-        console.log(this.getSelectedFilesData())
+        const selectedFiles = this.getSelectedFilesData()
 
         this.setState({
             simulationStatus: { status: 'Running...', progress: 0 }
@@ -343,12 +352,54 @@ class RunComponent extends React.Component<RunProps, RunState> {
 
         const inv = new InverseMethod();
 
-        const parameters = {};
-        const searchMethod: SearchMethod = SearchMethodFactory.create('Monte Carlo', parameters);
+        const searchMethod: SearchMethod = SearchMethodFactory.create('Monte Carlo', {});
         searchMethod.addObserver(this)
         inv.setSearchMethod(searchMethod)
 
+        // Add the data
+        selectedFiles.forEach( file => {
+            console.log(file)
+            
+            /*
+            Need to transform this into json for Data.initilize(params)
+                ['Id', ' type', ' strike', ' dip', '           Dip       DiRecTioN      ', ' Rake ', ' Strike direction', ' Type of movement']
+                ['0', ' Striated Plane', ' 115', ' 90', ' N', ' 0', ' E', ' Right Lateral']
+                {
+                    type: headers.indexOf('type')
+                }
+            */
+
+            // Create the json data according to the headers
+            file.content.forEach((dataParams: any) => {
+                const data = DataFactory.create(dataParams['type'])                
+                data.initialize(dataParams)
+                inv.addData(data)
+            })
+        })
+
         // STRESS COMPUTE here <-------------------------------
+        try {
+            const sol = inv.run()
+
+            const m = sol.stressTensorSolution
+            // const { values, vectors } = math.eigen([m[0][0], m[0][1], m[0][2], m[1][1], m[1][2], m[2][2]])
+            // console.log('Eigen values', values)
+            // console.log('Eigen vectors', vectors)
+            console.log('Stress ratio', sol.stressRatio)
+            console.log('Fit', Math.round((1 - sol.misfit) * 100) + '%')
+            console.log('Misfit', Math.trunc(sol.misfit * 100) / 100 * 180 / Math.PI, '°')
+        }
+        catch (e: unknown) {
+            let message = "An unknown error occurred";
+
+            if (e instanceof Error) {
+                message = e.message;
+            } else if (typeof e === 'string') {
+                message = e;
+            }
+
+            this.setErrorMessage(message);
+        }
 
         // Set to complete
         this.setState({
@@ -357,18 +408,19 @@ class RunComponent extends React.Component<RunProps, RunState> {
     };
 
     getSelectedFilesData = () => {
-        const result: Record<string, any[]> = {};
-        
-        this.state.selectedFiles.forEach(fileId => {
-            const content = this.props.files[0].content
-            console.log(content)
+        const result: DataFile[] = []
+
+        this.state.selectedFiles.forEach((_, index) => {
+            result.push(this.props.files[index])
         });
-        
+
         return result;
     };
 
     render() {
         const { loading, config, showSettings } = this.state;
+        const { errorMessage } = this.state;
+
 
         if (loading) {
             return (
@@ -558,6 +610,12 @@ class RunComponent extends React.Component<RunProps, RunState> {
                         </tbody>
                     </table>
                 </div>
+
+                <ErrorModal
+                    message={errorMessage || ''}
+                    isOpen={errorMessage !== null}
+                    onClose={() => this.setErrorMessage(null)}
+                />
             </div>
         );
     }

@@ -9,6 +9,7 @@ import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DataFile } from './DataFile';
+import { processCSV, ProcessCSVReturnType } from './data-processor';
 
 
 interface DataComponentProps {
@@ -36,30 +37,25 @@ const DataComponent: React.FC<DataComponentProps> = ({
         filesArray.forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = (e) => {
-                Papa.parse(e.target?.result as string, {
-                    complete: (results) => {
-                        const data = results.data as string[][];
-                        const headers = data[0];
-                        const contentWithoutHeader = data.slice(1);
+                const retType: ProcessCSVReturnType = processCSV(e.target?.result as string)
+                console.log(retType)
+                {
+                    const filesCount = files.length;
+                    const row = Math.floor((filesCount + index) / 2);
+                    const col = (filesCount + index) % 2;
 
-                        // Position files in a grid-like layout
-                        const filesCount = files.length;
-                        const row = Math.floor((filesCount + index) / 2);
-                        const col = (filesCount + index) % 2;
+                    const position = { x: col * 2, y: row * 2 };
 
-                        const position = { x: col * 2, y: row * 2 };
-                        const newFile: DataFile = {
-                            id: `file-${Date.now()}-${index}`,
-                            name: file.name,
-                            headers,
-                            content: contentWithoutHeader,
-                            layout: { ...position, w: 4, h: 2 }
-                        };
-                        onFileLoaded(newFile);
-                    },
-                    skipEmptyLines: true,
-                    delimiter: ';'
-                });
+                    const newFile: DataFile = {
+                        id: `file-${Date.now()}-${index}`,
+                        name: file.name,
+                        headers: retType.headers,
+                        content: retType.data,
+                        layout: { ...position, w: 4, h: 2 }
+                    };
+
+                    onFileLoaded(newFile);
+                }
             };
             reader.readAsText(file);
         });
@@ -233,16 +229,18 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {file.content.map((row, rowIndex) => (
-                                            <TableRow key={rowIndex} hover>
-                                                {row.map((cell, cellIndex) => (
-                                                    <TableCell
-                                                        key={cellIndex}
-                                                        style={{ whiteSpace: 'nowrap' }}
-                                                    >
-                                                        {cell}
-                                                    </TableCell>
-                                                ))}
+                                        {file.content.map((row: any, rowIndex: number) => (
+                                            <TableRow hover>
+                                                {
+                                                    Object.entries(row).map(([name, value]) => (
+                                                        <TableCell
+                                                            key={name}
+                                                            style={{ whiteSpace: 'nowrap' }}
+                                                        >
+                                                            {value}
+                                                        </TableCell>
+                                                    ))
+                                                }
                                             </TableRow>
                                         ))}
                                     </TableBody>

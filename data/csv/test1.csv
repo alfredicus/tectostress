@@ -1,54 +1,6 @@
-Id; type; strike; dip; Dip direction; Rake ; Strike direction; Type of movement
+Id;type;strike;dip;Dip direction;Rake ;Strike direction;Type of movement
 
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
-1; Striated Plane; 125; 90; N; 0; E; Left Lateral
-2; Striated Plane; 30; 5; E; 90; N; Inverse
-3; Striated Plane; 210; 5; W; 90; S; Inverse
-0; Striated Plane; 115; 90; N; 0; E; Right Lateral
+0; Striated Plane; 115; 85; N; 10; E; Right Lateral
 1; Striated Plane; 125; 90; N; 0; E; Left Lateral
 2; Striated Plane; 30; 5; E; 90; N; Inverse
 3; Striated Plane; 210; 5; W; 90; S; Inverse

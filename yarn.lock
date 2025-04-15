@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"@alfredo-taboada/stress@^1.2.0":
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/@alfredo-taboada/stress/-/stress-1.2.0.tgz#bd1a0e7adb7a6d15dc71dab81699c6acc9a57dd7"
-  integrity sha512-w59bR6Z7WRGALPH6ouMROd3Dt2lsUMGQg8Qu00LoY2CGSG92cbchLsejKkWzva0mv+CHDv9K6YfOnmM9I1uA6Q==
+"@alfredo-taboada/stress@^1.2.1":
+  version "1.2.1"
+  resolved "https://registry.yarnpkg.com/@alfredo-taboada/stress/-/stress-1.2.1.tgz#f9774d4b25b40c1afcb3a28400224c41862b50e0"
+  integrity sha512-vaKBHUdtDlviXdFH2OpowUyAW3CYY6Kl88crb/C8eOe55rfO/re7rHSQyQzJGel0TQY3YhKyLIC9zI1Atq4EQA==
   dependencies:
     "@youwol/geometry" "^0.0.22"
     "@youwol/io" "^0.0.25-wip"

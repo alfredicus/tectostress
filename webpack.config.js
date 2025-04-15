@@ -17,6 +17,7 @@ module.exports = (env, argv) => {
             extensions: ['.tsx', '.ts', '.js', '.jsx'],
             alias: {
                 '@': path.resolve(__dirname, 'src'),
+                '@alfredo-taboada/stress': path.resolve(__dirname, 'node_modules/@alfredo-taboada/stress'),
             },
         },
         module: {
