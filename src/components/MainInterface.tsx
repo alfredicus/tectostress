@@ -74,6 +74,8 @@ const MainInterface = () => {
         setRunState(newState);
     };
 
+    const doc_name = "documentation"
+
     return (
         <div className="container mx-auto px-4 min-h-screen">
             <div className="max-w-[98%] w-full mx-auto">
@@ -122,7 +124,7 @@ const MainInterface = () => {
                 {/* Tabs */}
                 <div className="border-b border-gray-200">
                     <nav className="flex -mb-px">
-                        {['data', 'run', 'analyze', 'help'].map((tab) => (
+                        {['data', 'run', 'analyze', doc_name].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -133,7 +135,7 @@ const MainInterface = () => {
                             >
                                 <div className="flex items-center gap-2">
                                     {tab === 'run' && <Play className="w-4 h-4" />}
-                                    {tab === 'help' && <HelpCircle className="w-4 h-4" />}
+                                    {tab === doc_name && <HelpCircle className="w-4 h-4" />}
                                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
                                 </div>
                             </button>
@@ -170,7 +172,7 @@ const MainInterface = () => {
                         />
                     )}
 
-                    {activeTab === 'help' && (
+                    {activeTab === doc_name && (
                         <HelpComponent />
                     )}
                 </div>

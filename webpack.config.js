@@ -40,6 +40,22 @@ module.exports = (env, argv) => {
                     test: /\.css$/,
                     use: ['style-loader', 'css-loader', 'postcss-loader'],
                 },
+                // ADD THIS RULE FOR MARKDOWN FILES
+                {
+                    test: /\.md$/,
+                    type: 'asset/source'
+                },
+                {
+                    test: /\.json$/,
+                    type: 'json'
+                },
+                {
+                    test: /\.(png|jpe?g|gif|svg)$/i,
+                    type: 'asset/resource',
+                    generator: {
+                        filename: 'images/[name][ext]'
+                    }
+                },
             ],
         },
         plugins: [
