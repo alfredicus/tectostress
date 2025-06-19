@@ -20,6 +20,14 @@ interface DocsConfig {
     defaultDocument: string;
 }
 
+// Helper function to get the base path for assets
+const getBasePath = () => {
+    // In production (GitHub Pages), assets are served from /tectostress/
+    // In development, they're served from the root
+    const isProduction = process.env.NODE_ENV === 'production';
+    return isProduction ? '/tectostress' : '';
+};
+
 const HelpComponent = () => {
     const [currentDoc, setCurrentDoc] = useState('');
     const [markdownContent, setMarkdownContent] = useState('');
@@ -33,7 +41,8 @@ const HelpComponent = () => {
     useEffect(() => {
         const loadConfiguration = async () => {
             try {
-                const response = await fetch('/help2/docsStructure.json');
+                const basePath = getBasePath();
+                const response = await fetch(`${basePath}/help/docsStructure.json`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -76,7 +85,8 @@ const HelpComponent = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`/help/${filePath}`);
+            const basePath = getBasePath();
+            const response = await fetch(`${basePath}/help2/${filePath}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -278,12 +288,13 @@ const HelpComponent = () => {
                                 img: ({ node, src, alt, ...props }) => {
                                     // Handle relative image paths
                                     let imageSrc = src;
+                                    const basePath = getBasePath();
                                     if (src?.startsWith('./images/')) {
-                                        imageSrc = src.replace('./images/', '/help/images/');
+                                        imageSrc = src.replace('./images/', `${basePath}/help2/images/`);
                                     } else if (src?.startsWith('images/')) {
-                                        imageSrc = `/help/images/${src.replace('images/', '')}`;
+                                        imageSrc = `${basePath}/help2/images/${src.replace('images/', '')}`;
                                     } else if (src?.startsWith('../images/')) {
-                                        imageSrc = src.replace('../images/', '/help/images/');
+                                        imageSrc = src.replace('../images/', `${basePath}/help2/images/`);
                                     }
 
                                     // Parse size from alt text using different formats

@@ -11,7 +11,7 @@ module.exports = (env, argv) => {
             path: path.resolve(__dirname, 'dist'),
             filename: 'bundle.js',
             publicPath,
-            clean: true, // Nettoie le dossier dist avant chaque build
+            clean: true,
         },
         resolve: {
             extensions: ['.tsx', '.ts', '.js', '.jsx'],
@@ -40,7 +40,6 @@ module.exports = (env, argv) => {
                     test: /\.css$/,
                     use: ['style-loader', 'css-loader', 'postcss-loader'],
                 },
-                // ADD THIS RULE FOR MARKDOWN FILES
                 {
                     test: /\.md$/,
                     type: 'asset/source'
@@ -62,13 +61,16 @@ module.exports = (env, argv) => {
             new HtmlWebpackPlugin({
                 template: 'public/index.html',
                 filename: 'index.html',
-                inject: true // On ne veut pas que le plugin injecte le script car on l'a déjà fait manuellement
+                inject: true
             })
         ],
         devServer: {
-            static: {
-                directory: path.join(__dirname, 'public'),
-            },
+            static: [
+                {
+                    directory: path.join(__dirname, 'public'),
+                    publicPath: '/',
+                }
+            ],
             port: 3000,
             hot: true,
             historyApiFallback: true,
