@@ -20,6 +20,8 @@ interface DocsConfig {
     defaultDocument: string;
 }
 
+const HELP_DIR = 'help'
+
 // Helper function to get the base path for assets
 const getBasePath = () => {
     // In production (GitHub Pages), assets are served from /tectostress/
@@ -42,7 +44,7 @@ const HelpComponent = () => {
         const loadConfiguration = async () => {
             try {
                 const basePath = getBasePath();
-                const response = await fetch(`${basePath}/help/docsStructure.json`);
+                const response = await fetch(`${basePath}/${HELP_DIR}/docsStructure.json`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -86,7 +88,7 @@ const HelpComponent = () => {
         setLoading(true);
         try {
             const basePath = getBasePath();
-            const response = await fetch(`${basePath}/help2/${filePath}`);
+            const response = await fetch(`${basePath}/${HELP_DIR}/${filePath}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -290,11 +292,11 @@ const HelpComponent = () => {
                                     let imageSrc = src;
                                     const basePath = getBasePath();
                                     if (src?.startsWith('./images/')) {
-                                        imageSrc = src.replace('./images/', `${basePath}/help2/images/`);
+                                        imageSrc = src.replace('./images/', `${basePath}/${HELP_DIR}/images/`);
                                     } else if (src?.startsWith('images/')) {
-                                        imageSrc = `${basePath}/help2/images/${src.replace('images/', '')}`;
+                                        imageSrc = `${basePath}/${HELP_DIR}/images/${src.replace('images/', '')}`;
                                     } else if (src?.startsWith('../images/')) {
-                                        imageSrc = src.replace('../images/', `${basePath}/help2/images/`);
+                                        imageSrc = src.replace('../images/', `${basePath}/${HELP_DIR}/images/`);
                                     }
 
                                     // Parse size from alt text using different formats
