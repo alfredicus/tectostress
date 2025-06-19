@@ -291,13 +291,8 @@ const HelpComponent = () => {
                                     // Handle relative image paths
                                     let imageSrc = src;
                                     const basePath = getBasePath();
-                                    if (src?.startsWith('./images/')) {
-                                        imageSrc = src.replace('./images/', `${basePath}/${HELP_DIR}/images/`);
-                                    } else if (src?.startsWith('images/')) {
-                                        imageSrc = `${basePath}/${HELP_DIR}/images/${src.replace('images/', '')}`;
-                                    } else if (src?.startsWith('../images/')) {
-                                        imageSrc = src.replace('../images/', `${basePath}/${HELP_DIR}/images/`);
-                                    }
+
+                                    imageSrc = src?.replace('/help', `${basePath}/${HELP_DIR}`)
 
                                     // Parse size from alt text using different formats
                                     let imageAlt = alt;
