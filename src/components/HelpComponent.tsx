@@ -33,7 +33,7 @@ const HelpComponent = () => {
     useEffect(() => {
         const loadConfiguration = async () => {
             try {
-                const response = await fetch('/help/docsStructure.json');
+                const response = await fetch('/help2/docsStructure.json');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
