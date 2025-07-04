@@ -31,36 +31,47 @@ const DataComponent: React.FC<DataComponentProps> = ({
         const fileList = event.target.files;
         if (!fileList || fileList.length === 0) return;
 
-        // Convert FileList to array to process multiple files
         const filesArray = Array.from(fileList);
 
         filesArray.forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = (e) => {
-                const retType: ProcessCSVReturnType = processCSV(e.target?.result as string)
-                console.log(retType)
-                {
+                try {
+                    const retType: ProcessCSVReturnType = processCSV(e.target?.result as string);
+
+                    // Add validation
+                    if (!retType || !retType.data || !Array.isArray(retType.data)) {
+                        console.error(`Invalid data structure from file: ${file.name}`);
+                        return;
+                    }
+
                     const filesCount = files.length;
                     const row = Math.floor((filesCount + index) / 2);
                     const col = (filesCount + index) % 2;
-
                     const position = { x: col * 2, y: row * 2 };
 
                     const newFile: DataFile = {
                         id: `file-${Date.now()}-${index}`,
                         name: file.name,
-                        headers: retType.headers,
-                        content: retType.data,
+                        headers: retType.headers || [],
+                        content: retType.data || [],
                         layout: { ...position, w: 4, h: 2 }
                     };
 
                     onFileLoaded(newFile);
+                } catch (error) {
+                    console.error(`Error processing file ${file.name}:`, error);
                 }
             };
+
+            reader.onerror = (error) => {
+                console.error(`Error reading file ${file.name}:`, error);
+            };
+
             reader.readAsText(file);
         });
 
-        // Clear the input so the same files can be selected again if needed
+        // Clear the input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }

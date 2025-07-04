@@ -1,4 +1,6 @@
-// types.ts
+
+export type Vector3 = [number, number, number];
+
 export interface BaseVisualizationState {
     type: string;
 }
