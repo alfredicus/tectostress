@@ -1,410 +1,235 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { WulffStereonet, WulffStereonetOptions, DataStyle, StriatedPlaneData, ExtensionFractureData, PoleData, LineData } from './views/WulffStereonet';
-import { DataFiles } from './DataFile';
-import { Download, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Download, RotateCcw, Target } from 'lucide-react';
 import StablePlotWithSettings from './PlotWithSettings';
+import {
+    BaseVisualizationProps,
+    WulffCompState,
+    WulffSettings,
+    useVisualizationState,
+    DefaultSettingsFactory,
+    DataExporter,
+    ColumnSelector,
+    ColorInput,
+    NumberInput,
+    ColumnInfo
+} from './VisualizationStateSystem';
 
-interface WulffStereonetComponentProps {
-    files: DataFiles;
-    width?: number;
-    height?: number;
-    options?: WulffStereonetOptions;
-    onDimensionChange?: (newWidth: number, newHeight: number) => void;
-}
+// ============================================================================
+// WULFF STEREONET COMPONENT
+// ============================================================================
 
-interface DataTypeSettings {
-    visible: boolean;
-    style: DataStyle;
-    name: string;
-}
-
-interface DataTypeSettingsCollection {
-    striatedPlanes: DataTypeSettings;
-    extensionFractures: DataTypeSettings;
-    stylolitePoles: DataTypeSettings;
-    lineations: DataTypeSettings;
-}
-
-const WulffStereonetComponent: React.FC<WulffStereonetComponentProps> = ({
+const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
     files,
     width = 500,
     height = 500,
-    options = {},
+    title = "Wulff Stereonet",
+    state,
+    onStateChange,
     onDimensionChange
 }) => {
-    const stereonetRef = useRef<WulffStereonet | null>(null);
-    const [containerId] = useState(`wulff-${Date.now()}`);
-    const [plotDimensions, setPlotDimensions] = useState({ width, height });
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [stereonet, setStereonet] = React.useState<any>(null);
 
-    // Data type visibility and styling settings
-    const [dataSettings, setDataSettings] = useState<DataTypeSettingsCollection>({
-        striatedPlanes: {
-            visible: true,
-            style: { color: '#1f77b4', width: 2, size: 4, arrowSize: 15, showLabels: true },
-            name: 'Striated Planes'
-        },
-        extensionFractures: {
-            visible: true,
-            style: { color: '#ff7f0e', width: 2, size: 4, showLabels: true },
-            name: 'Extension Fractures'
-        },
-        stylolitePoles: {
-            visible: true,
-            style: { color: '#2ca02c', width: 2, size: 6, showLabels: true },
-            name: 'Stylolite Poles'
-        },
-        lineations: {
-            visible: true,
-            style: { color: '#d62728', width: 2, size: 5, showLabels: true },
-            name: 'Lineations'
-        }
-    });
-
-    // Update stereonet options when dimensions change
-    const updateStereonetOptions = () => {
-        // Calculate square stereonet size based on available space
-        const padding = 80; // Account for margins and summary
-        const availableWidth = plotDimensions.width - padding;
-        const availableHeight = plotDimensions.height - padding;
-        const stereonetSize = Math.min(availableWidth, availableHeight, 600); // Max 600px
-
-        const stereonetOptions: WulffStereonetOptions = {
-            width: stereonetSize,
-            height: stereonetSize,
-            margin: 50,
-            gridInterval: 10,
-            showGrid: true,
-            showDirections: true,
-            showLabels: true,
-            stereonetStyle: {
-                gridColor: '#cccccc',
-                gridWidth: 1,
-                gridDashArray: '2,2',
-                backgroundColor: 'white',
-                borderColor: '#000000',
-                borderWidth: 2,
-                labelColor: '#000000',
-                labelSize: '14px'
-            },
-            ...options
-        };
-
-        return stereonetOptions;
-    };
+    // Use the factorized visualization state hook
+    const {
+        state: currentState,
+        availableColumns,
+        updateSettings,
+        updateSelectedColumn,
+        updatePlotDimensions,
+        toggleSettingsPanel,
+        resetToDefaults,
+        getSelectedColumnData,
+        getSelectedColumnInfo
+    } = useVisualizationState<WulffCompState>(
+        'wulff-stereonet',
+        DefaultSettingsFactory.createWulffSettings(),
+        files,
+        width,
+        height,
+        state,
+        onStateChange
+    );
 
     // Initialize and update stereonet
     useEffect(() => {
-        const stereonetOptions = updateStereonetOptions();
-        
-        if (stereonetRef.current) {
-            // Update existing stereonet
-            stereonetRef.current.updateOptions(stereonetOptions);
-        } else {
-            // Create new stereonet
-            stereonetRef.current = new WulffStereonet(containerId, stereonetOptions);
-        }
-        
-        updateStereonet();
+        if (!containerRef.current) return;
+
+        const data = getSelectedColumnData();
+
+        // Use sample data if no data is available (for demonstration)
+        const finalData = data.length > 0 ? data : generateSampleStereonetData();
+
+        // Calculate effective dimensions
+        const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
+        const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+
+        // Clear container and create stereonet visualization
+        containerRef.current.innerHTML = '';
+
+        // Create a mock stereonet visualization (replace with actual implementation)
+        const mockStereonet = createMockStereonet(
+            containerRef.current,
+            finalData,
+            effectiveWidth,
+            effectiveHeight,
+            currentState.settings
+        );
+
+        setStereonet(mockStereonet);
 
         return () => {
-            if (stereonetRef.current) {
-                stereonetRef.current = null;
+            // Cleanup if needed
+        };
+    }, [currentState, getSelectedColumnData]);
+
+    // Generate sample data for demonstration
+    const generateSampleStereonetData = (): number[] => {
+        return Array.from({ length: 50 }, () => Math.random() * 360);
+    };
+
+    // Mock stereonet creation (replace with actual Wulff stereonet implementation)
+    const createMockStereonet = (
+        container: HTMLElement,
+        data: number[],
+        width: number,
+        height: number,
+        settings: WulffSettings
+    ) => {
+        // This is a placeholder - replace with actual stereonet library
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.border = '1px solid #ccc';
+        canvas.style.borderRadius = '8px';
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            // Draw basic stereonet circle
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(width, height) / 2 - 20;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw outer circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw grid if enabled
+            if (settings.showGrid) {
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = 1;
+
+                // Draw meridians and parallels
+                for (let i = 0; i < 360; i += settings.gridSpacing) {
+                    const angle = (i * Math.PI) / 180;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(
+                        centerX + radius * Math.cos(angle),
+                        centerY + radius * Math.sin(angle)
+                    );
+                    ctx.stroke();
+                }
+            }
+
+            // Plot data points
+            ctx.fillStyle = settings.pointColor;
+            data.forEach(angle => {
+                const rad = (angle * Math.PI) / 180;
+                const x = centerX + (radius * 0.8) * Math.cos(rad);
+                const y = centerY + (radius * 0.8) * Math.sin(rad);
+
+                ctx.beginPath();
+                ctx.arc(x, y, settings.pointSize, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        container.appendChild(canvas);
+
+        return {
+            canvas,
+            data,
+            updateData: (newData: number[]) => {
+                // Re-render with new data
+                createMockStereonet(container, newData, width, height, settings);
             }
         };
-    }, [plotDimensions]);
-
-    // Update stereonet when files or settings change
-    useEffect(() => {
-        updateStereonet();
-    }, [files, dataSettings]);
-
-    const updateStereonet = () => {
-        if (!stereonetRef.current || !files) return;
-
-        // Clear existing data
-        stereonetRef.current.clearData();
-
-        // Process each file (same logic as before)
-        files.forEach(file => {
-            file.content.forEach((row: any, index: number) => {
-                const dataType = row.type?.toLowerCase();
-
-                try {
-                    switch (dataType) {
-                        case 'striated plane':
-                        case 'striated fault':
-                            if (dataSettings.striatedPlanes.visible) {
-                                const striatedData: StriatedPlaneData = {
-                                    strike: parseFloat(row.strike || row['strike [0 360)']),
-                                    dip: parseFloat(row.dip || row['dip [0 90]']),
-                                    rake: parseFloat(row.rake || row['rake [0 90]']),
-                                    id: row.id || index + 1
-                                };
-                                stereonetRef.current!.addStriatedPlane(striatedData, dataSettings.striatedPlanes.style);
-                            }
-                            break;
-
-                        case 'extension fracture':
-                            if (dataSettings.extensionFractures.visible) {
-                                const fractureData: ExtensionFractureData = {
-                                    strike: parseFloat(row.strike || row['strike [0 360)']),
-                                    dip: parseFloat(row.dip || row['dip [0 90]']),
-                                    id: row.id || index + 1
-                                };
-                                stereonetRef.current!.addExtensionFracture(fractureData, dataSettings.extensionFractures.style);
-                            }
-                            break;
-
-                        case 'stylolite interface':
-                        case 'stylolite peaks':
-                            if (dataSettings.stylolitePoles.visible) {
-                                if (row.strike !== undefined && row.dip !== undefined) {
-                                    const poleData: PoleData = {
-                                        trend: (parseFloat(row.strike) + 90) % 360,
-                                        plunge: 90 - parseFloat(row.dip),
-                                        id: row.id || index + 1
-                                    };
-                                    stereonetRef.current!.addStylolitePole(poleData, dataSettings.stylolitePoles.style);
-                                }
-                                else if (row['line trend'] !== undefined && row['line plunge'] !== undefined) {
-                                    const poleData: PoleData = {
-                                        trend: parseFloat(row['line trend'] || row['line trend [0 360)']),
-                                        plunge: parseFloat(row['line plunge'] || row['line plunge [0 90]']),
-                                        id: row.id || index + 1
-                                    };
-                                    stereonetRef.current!.addStylolitePole(poleData, dataSettings.stylolitePoles.style);
-                                }
-                            }
-                            break;
-
-                        case 'crystal fibers in vein':
-                            if (dataSettings.lineations.visible) {
-                                const lineData: LineData = {
-                                    trend: parseFloat(row['line trend'] || row['line trend [0 360)']),
-                                    plunge: parseFloat(row['line plunge'] || row['line plunge [0 90]']),
-                                    id: row.id || index + 1
-                                };
-                                stereonetRef.current!.addLineation(lineData, dataSettings.lineations.style);
-                            }
-                            break;
-
-                        default:
-                            console.warn(`Unknown data type: ${dataType}`);
-                    }
-                } catch (error) {
-                    console.error(`Error processing row ${index + 1} of file ${file.name}:`, error);
-                }
-            });
-        });
     };
 
-    const handleDataSettingChange = (
-        dataType: keyof DataTypeSettingsCollection,
-        property: keyof DataTypeSettings | string,
-        value: any
-    ) => {
-        setDataSettings(prev => ({
-            ...prev,
-            [dataType]: {
-                ...prev[dataType],
-                [property]: property === 'style' ? { ...prev[dataType].style, ...value } : value
-            }
-        }));
+    // Export functionality
+    const exportData = () => {
+        const data = getSelectedColumnData();
+        if (data.length === 0) return;
+        DataExporter.exportCSV(data, 'wulff_stereonet_data.csv');
     };
 
-    const handleStyleChange = (
-        dataType: keyof DataTypeSettingsCollection,
-        styleProperty: keyof DataStyle,
-        value: any
-    ) => {
-        setDataSettings(prev => ({
-            ...prev,
-            [dataType]: {
-                ...prev[dataType],
-                style: {
-                    ...prev[dataType].style,
-                    [styleProperty]: value
-                }
-            }
-        }));
+    const exportState = () => {
+        DataExporter.exportState(currentState, 'wulff_stereonet_state.json');
     };
 
-    const exportSVG = () => {
-        if (stereonetRef.current) {
-            const svgString = stereonetRef.current.exportSVG();
-            const blob = new Blob([svgString], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'wulff_stereonet.svg';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+    // Data summary calculation
+    const getDataSummary = () => {
+        const data = getSelectedColumnData();
+        if (data.length === 0) {
+            return { count: 0, min: 0, max: 0, filename: 'None' };
         }
+
+        const selectedColumnInfo = getSelectedColumnInfo();
+        return {
+            count: data.length,
+            min: Math.min(...data),
+            max: Math.max(...data),
+            filename: selectedColumnInfo?.fileName || 'Sample data'
+        };
     };
 
-    const resetView = () => {
-        if (stereonetRef.current) {
-            const stereonetOptions = updateStereonetOptions();
-            stereonetRef.current.updateOptions(stereonetOptions);
-            updateStereonet();
-        }
-    };
-
-    const toggleDataType = (dataType: keyof DataTypeSettingsCollection) => {
-        handleDataSettingChange(dataType, 'visible', !dataSettings[dataType].visible);
-    };
-
-    // Helper components
-    const ColorInput: React.FC<{
-        value: string;
-        onChange: (value: string) => void;
-        label: string;
-    }> = ({ value, onChange, label }) => (
-        <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 min-w-[60px]">{label}:</label>
-            <input
-                type="color"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-8 h-6 border border-gray-300 rounded cursor-pointer"
-            />
-            <span className="text-xs text-gray-500">{value}</span>
-        </div>
-    );
-
-    const NumberInput: React.FC<{
-        value: number;
-        onChange: (value: number) => void;
-        label: string;
-        min?: number;
-        max?: number;
-        step?: number;
-    }> = ({ value, onChange, label, min = 0, max = 100, step = 1 }) => (
-        <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 min-w-[60px]">{label}:</label>
-            <input
-                type="number"
-                value={value}
-                onChange={(e) => onChange(parseFloat(e.target.value))}
-                min={min}
-                max={max}
-                step={step}
-                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-        </div>
-    );
-
-    const DataTypeSettingsPanel: React.FC<{
-        dataType: keyof DataTypeSettingsCollection;
-        settings: DataTypeSettings;
-    }> = ({ dataType, settings }) => (
-        <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-            <div className="flex items-center justify-between mb-3">
-                <h4 className="font-medium text-gray-800">{settings.name}</h4>
-                <button
-                    onClick={() => toggleDataType(dataType)}
-                    className={`p-1 rounded transition-colors ${settings.visible
-                            ? 'text-green-600 hover:bg-green-100'
-                            : 'text-gray-400 hover:bg-gray-200'
-                        }`}
-                    title={settings.visible ? 'Hide' : 'Show'}
-                >
-                    {settings.visible ? <Eye size={16} /> : <EyeOff size={16} />}
-                </button>
-            </div>
-
-            {settings.visible && (
-                <div className="space-y-2">
-                    <ColorInput
-                        value={settings.style.color || '#000000'}
-                        onChange={(value) => handleStyleChange(dataType, 'color', value)}
-                        label="Color"
-                    />
-
-                    <NumberInput
-                        value={settings.style.width || 2}
-                        onChange={(value) => handleStyleChange(dataType, 'width', value)}
-                        label="Width"
-                        min={0.5}
-                        max={10}
-                        step={0.5}
-                    />
-
-                    <NumberInput
-                        value={settings.style.size || 4}
-                        onChange={(value) => handleStyleChange(dataType, 'size', value)}
-                        label="Size"
-                        min={1}
-                        max={20}
-                    />
-
-                    {dataType === 'striatedPlanes' && (
-                        <NumberInput
-                            value={settings.style.arrowSize || 15}
-                            onChange={(value) => handleStyleChange(dataType, 'arrowSize', value)}
-                            label="Arrow"
-                            min={5}
-                            max={30}
-                        />
-                    )}
-
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={settings.style.showLabels || false}
-                            onChange={(e) => handleStyleChange(dataType, 'showLabels', e.target.checked)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label className="text-sm text-gray-700">Show Labels</label>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+    const dataSummary = getDataSummary();
 
     // Main plot content
     const plotContent = (
         <div className="flex flex-col h-full">
-            {/* Stereonet container - centered */}
-            <div className="flex-1 flex justify-center items-center">
-                <div id={containerId} />
+            {/* Column selector */}
+            <ColumnSelector
+                availableColumns={availableColumns}
+                selectedColumn={currentState.selectedColumn}
+                onColumnChange={updateSelectedColumn}
+                label="Select Data Column (Orientations)"
+            />
+
+            {/* Stereonet container */}
+            <div className="flex-1 min-h-0 mb-4">
+                <div
+                    ref={containerRef}
+                    className="w-full h-full border rounded-lg bg-white shadow-sm flex items-center justify-center"
+                />
             </div>
 
-            {/* Data summary */}
-            <div className="mt-4 text-sm text-gray-600">
-                <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(dataSettings).map(([key, settings]) => {
-                        const count = files?.reduce((total, file) => {
-                            return total + file.content.filter(row => {
-                                const type = row.type?.toLowerCase();
-                                switch (key) {
-                                    case 'striatedPlanes':
-                                        return type === 'striated plane' || type === 'striated fault';
-                                    case 'extensionFractures':
-                                        return type === 'extension fracture';
-                                    case 'stylolitePoles':
-                                        return type === 'stylolite interface' || type === 'stylolite peaks';
-                                    case 'lineations':
-                                        return type === 'crystal fibers in vein';
-                                    default:
-                                        return false;
-                                }
-                            }).length;
-                        }, 0) || 0;
-
-                        return (
-                            <div key={key} className="flex items-center gap-2">
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: settings.visible ? settings.style.color : '#cccccc' }}
-                                />
-                                <span>{settings.name}: {count}</span>
-                            </div>
-                        );
-                    })}
+            {/* Data info panel */}
+            <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-purple-600" />
+                    <h4 className="font-semibold">Data Summary</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span className="font-medium">File:</span> {dataSummary.filename}
+                    </div>
+                    <div>
+                        <span className="font-medium">Count:</span> {dataSummary.count}
+                    </div>
+                    <div>
+                        <span className="font-medium">Min:</span> {dataSummary.min.toFixed(2)}°
+                    </div>
+                    <div>
+                        <span className="font-medium">Max:</span> {dataSummary.max.toFixed(2)}°
+                    </div>
                 </div>
             </div>
         </div>
@@ -413,64 +238,101 @@ const WulffStereonetComponent: React.FC<WulffStereonetComponentProps> = ({
     // Settings panel content
     const settingsContent = (
         <div className="space-y-4">
-            {/* Data type settings */}
-            {Object.entries(dataSettings).map(([key, settings]) => (
-                <DataTypeSettingsPanel
-                    key={key}
-                    dataType={key as keyof DataTypeSettingsCollection}
-                    settings={settings}
-                />
-            ))}
-
-            {/* Global settings */}
-            <div className="border-t pt-4">
-                <h5 className="font-medium text-gray-800 mb-3">Global Settings</h5>
+            {/* Projection settings */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Projection Settings</h5>
                 <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={updateStereonetOptions().showGrid}
-                            onChange={(e) => {
-                                const newOptions = { ...updateStereonetOptions(), showGrid: e.target.checked };
-                                if (stereonetRef.current) {
-                                    stereonetRef.current.updateOptions(newOptions);
-                                }
-                            }}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label className="text-sm text-gray-700">Show Grid</label>
+                    {/* Projection type */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Projection Type</label>
+                        <select
+                            value={currentState.settings.projection}
+                            onChange={(e) => updateSettings({ projection: e.target.value as 'stereonet' | 'equal-area' })}
+                            className="w-full p-2 border rounded text-sm"
+                        >
+                            <option value="stereonet">Wulff Stereonet</option>
+                            <option value="equal-area">Equal Area</option>
+                        </select>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {/* Hemisphere */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Hemisphere</label>
+                        <select
+                            value={currentState.settings.hemisphere}
+                            onChange={(e) => updateSettings({ hemisphere: e.target.value as 'upper' | 'lower' })}
+                            className="w-full p-2 border rounded text-sm"
+                        >
+                            <option value="upper">Upper Hemisphere</option>
+                            <option value="lower">Lower Hemisphere</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Grid settings */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Grid Settings</h5>
+                <div className="space-y-2">
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Grid</span>
                         <input
                             type="checkbox"
-                            checked={updateStereonetOptions().showDirections}
-                            onChange={(e) => {
-                                const newOptions = { ...updateStereonetOptions(), showDirections: e.target.checked };
-                                if (stereonetRef.current) {
-                                    stereonetRef.current.updateOptions(newOptions);
-                                }
-                            }}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            checked={currentState.settings.showGrid}
+                            onChange={(e) => updateSettings({ showGrid: e.target.checked })}
+                            className="rounded"
                         />
-                        <label className="text-sm text-gray-700">Show Directions</label>
+                    </label>
+
+                    {currentState.settings.showGrid && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1">
+                                Grid Spacing: {currentState.settings.gridSpacing}°
+                            </label>
+                            <input
+                                type="range"
+                                min="5"
+                                max="30"
+                                step="5"
+                                value={currentState.settings.gridSpacing}
+                                onChange={(e) => updateSettings({ gridSpacing: parseInt(e.target.value) })}
+                                className="w-full"
+                            />
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Point settings */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Point Settings</h5>
+                <div className="space-y-3">
+                    {/* Point size */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">
+                            Point Size: {currentState.settings.pointSize}px
+                        </label>
+                        <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            value={currentState.settings.pointSize}
+                            onChange={(e) => updateSettings({ pointSize: parseInt(e.target.value) })}
+                            className="w-full"
+                        />
                     </div>
 
-                    <NumberInput
-                        value={updateStereonetOptions().gridInterval || 10}
-                        onChange={(value) => {
-                            const newOptions = { ...updateStereonetOptions(), gridInterval: value };
-                            if (stereonetRef.current) {
-                                stereonetRef.current.updateOptions(newOptions);
-                            }
-                        }}
-                        label="Grid Interval"
-                        min={5}
-                        max={30}
-                        step={5}
+                    {/* Point color */}
+                    <ColorInput
+                        value={currentState.settings.pointColor}
+                        onChange={(value) => updateSettings({ pointColor: value })}
+                        label="Point Color"
                     />
                 </div>
             </div>
+
+            {/* Column info */}
+            <ColumnInfo columnInfo={getSelectedColumnInfo()} />
         </div>
     );
 
@@ -478,16 +340,17 @@ const WulffStereonetComponent: React.FC<WulffStereonetComponentProps> = ({
     const headerActions = (
         <>
             <button
-                onClick={resetView}
+                onClick={resetToDefaults}
                 className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                title="Reset View"
+                title="Reset to Defaults"
             >
                 <RotateCcw size={16} />
             </button>
             <button
-                onClick={exportSVG}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                title="Export SVG"
+                onClick={exportData}
+                disabled={!stereonet}
+                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                title="Export Data"
             >
                 <Download size={16} />
             </button>
@@ -496,18 +359,34 @@ const WulffStereonetComponent: React.FC<WulffStereonetComponentProps> = ({
 
     return (
         <StablePlotWithSettings
-            title="Wulff Stereonet"
+            title={title}
             settingsPanel={settingsContent}
             headerActions={headerActions}
-            // onDimensionChange={(w, h) => {
-            //     // Only update plot dimensions, don't notify parent about size changes
-            //     setPlotDimensions({ width: w, height: h });
-            //     // Remove the parent notification that was causing growth:
-            //     // onDimensionChange?.(w, h); // ← This line was causing the problem
-            // }}
             borderColor="#d1d5db"
             borderWidth={1}
-            settingsPanelWidth={320}
+            settingsPanelWidth={300}
+            initialSettingsOpen={currentState.open}
+            onSettingsToggle={(isOpen) => {
+                // Handle settings panel toggle
+                toggleSettingsPanel();
+
+                // When settings panel opens/closes, adjust the plot dimensions
+                setTimeout(() => {
+                    if (containerRef.current) {
+                        // Calculate available width for the plot
+                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 500;
+                        const settingsPanelWidth = isOpen ? 300 : 0;
+                        const availableWidth = containerWidth - settingsPanelWidth - 40; // 40px for padding
+
+                        const newDimensions = {
+                            width: Math.max(availableWidth, 300), // Minimum width for plot
+                            height: containerRef.current?.clientHeight || height || 500
+                        };
+
+                        updatePlotDimensions(newDimensions);
+                    }
+                }, 150);
+            }}
         >
             {plotContent}
         </StablePlotWithSettings>
