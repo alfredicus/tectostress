@@ -69,7 +69,17 @@ export class Histogram {
     constructor(element: HTMLElement, data: number[], params: HistogramParameters = DefaultHistogramParameters) {
         this.element_ = element
         this.data_ = data.filter(d => !isNaN(d) && isFinite(d)) // Filter out invalid values
-        Object.assign(this.params, params)
+        this.params = { ...DefaultHistogramParameters, ...params }
+        
+        // Merge margin objects properly
+        if (params.margin) {
+            this.params.margin = { ...DefaultHistogramParameters.margin, ...params.margin }
+        }
+        
+        // Merge draw objects properly
+        if (params.draw) {
+            this.params.draw = { ...DefaultHistogramParameters.draw, ...params.draw }
+        }
         
         this.initializeSVG()
         if (this.data_ && this.data_.length > 0) {
@@ -87,7 +97,7 @@ export class Histogram {
             .attr('height', this.params.height)
 
         this.chartGroup_ = this.svg_.append('g')
-            .attr('transform', `translate(${this.params.margin.left}, ${this.params.margin.top})`)
+            .attr('transform', `translate(${this.params.margin!.left}, ${this.params.margin!.top})`)
     }
 
     // Getters and setters for dynamic updates
@@ -143,26 +153,38 @@ export class Histogram {
     }
 
     set showGrid(show: boolean) {
-        this.params.draw.grid = show
+        this.params.draw!.grid = show
         this.update()
     }
 
     set showDensity(show: boolean) {
-        this.params.draw.density = show
+        this.params.draw!.density = show
         this.update()
     }
 
     update(): void {
         if (!this.data_ || this.data_.length === 0) {
             this.chartGroup_.selectAll("*").remove()
+            // Show "No data" message
+            this.chartGroup_.append('text')
+                .attr('x', (this.params.width! - this.params.margin!.left! - this.params.margin!.right!) / 2)
+                .attr('y', (this.params.height! - this.params.margin!.top! - this.params.margin!.bottom!) / 2)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .style('font-size', '16px')
+                .style('fill', '#999')
+                .text('No data available')
             return
         }
 
         // Clear previous chart content
         this.chartGroup_.selectAll("*").remove()
 
-        const chartWidth = this.params.width - this.params.margin.left - this.params.margin.right
-        const chartHeight = this.params.height - this.params.margin.top - this.params.margin.bottom
+        const chartWidth = this.params.width! - this.params.margin!.left! - this.params.margin!.right!
+        const chartHeight = this.params.height! - this.params.margin!.top! - this.params.margin!.bottom!
+
+        // Ensure minimum dimensions
+        if (chartWidth <= 0 || chartHeight <= 0) return
 
         // Calculate data statistics
         const extent = d3.extent(this.data_) as [number, number]
@@ -178,16 +200,16 @@ export class Histogram {
         const histogram = d3.histogram<number, number>()
             .value(d => d)
             .domain(xScale.domain() as [number, number])
-            .thresholds(this.params.bins)
+            .thresholds(this.params.bins!)
 
         const bins = histogram(this.data_)
 
         const yScale = d3.scaleLinear()
-            .domain([0, d3.max(bins, d => d.length)])
+            .domain([0, d3.max(bins, d => d.length) || 1])
             .range([chartHeight, 0])
 
         // Draw grid if enabled
-        if (this.params.draw.grid) {
+        if (this.params.draw!.grid) {
             // Vertical grid lines
             this.chartGroup_.selectAll('.grid-line-x')
                 .data(xScale.ticks())
@@ -221,16 +243,16 @@ export class Histogram {
             .enter()
             .append('rect')
             .attr('class', 'bar')
-            .attr('x', d => xScale(d.x0))
+            .attr('x', d => xScale(d.x0!))
             .attr('y', d => yScale(d.length))
-            .attr('width', d => Math.max(0, xScale(d.x1) - xScale(d.x0) - 1))
+            .attr('width', d => Math.max(0, xScale(d.x1!) - xScale(d.x0!) - 1))
             .attr('height', d => chartHeight - yScale(d.length))
             .attr('fill', this.params.fillColor)
             .attr('stroke', this.params.strokeColor)
             .attr('stroke-width', this.params.strokeWidth)
-            .on('mouseover', function(event, d) {
+            .on('mouseover', (event, d) => {
                 // Highlight bar on hover
-                d3.select(this).attr('opacity', 0.8)
+                d3.select(event.currentTarget).attr('opacity', 0.8)
                 
                 // Show tooltip
                 const tooltip = d3.select('body').append('div')
@@ -245,20 +267,20 @@ export class Histogram {
                     .style('z-index', '1000')
                 
                 tooltip.html(`
-                    <div>Range: ${d.x0.toFixed(2)} - ${d.x1.toFixed(2)}</div>
+                    <div>Range: ${d.x0!.toFixed(2)} - ${d.x1!.toFixed(2)}</div>
                     <div>Count: ${d.length}</div>
-                    <div>Percentage: ${(d.length / bins.length * 100).toFixed(1)}%</div>
+                    <div>Percentage: ${(d.length / this.data_.length * 100).toFixed(1)}%</div>
                 `)
                 .style('left', (event.pageX + 10) + 'px')
                 .style('top', (event.pageY - 10) + 'px')
             })
-            .on('mouseout', function() {
-                d3.select(this).attr('opacity', 1)
+            .on('mouseout', (event) => {
+                d3.select(event.currentTarget).attr('opacity', 1)
                 d3.selectAll('.histogram-tooltip').remove()
             })
 
         // Draw density curve if enabled
-        if (this.params.draw.density && mean !== undefined && stdDev !== undefined && stdDev > 0) {
+        if (this.params.draw!.density && mean !== undefined && stdDev !== undefined && stdDev > 0) {
             const densityData = d3.range(extent[0], extent[1], (extent[1] - extent[0]) / 100)
                 .map(x => {
                     const density = (1 / (stdDev * Math.sqrt(2 * Math.PI))) * 
@@ -266,13 +288,15 @@ export class Histogram {
                     return { x, density }
                 })
 
-            const densityScale = d3.scaleLinear()
-                .domain([0, d3.max(densityData, d => d.density)])
-                .range([chartHeight, 0])
+            const maxDensity = d3.max(densityData, d => d.density) || 1
+            const maxCount = d3.max(bins, d => d.length) || 1
+            
+            // Scale density to match histogram scale
+            const densityScale = maxCount / maxDensity
 
             const line = d3.line<{x: number, density: number}>()
                 .x(d => xScale(d.x))
-                .y(d => densityScale(d.density))
+                .y(d => yScale(d.density * densityScale))
                 .curve(d3.curveCardinal)
 
             this.chartGroup_.append('path')
@@ -285,7 +309,7 @@ export class Histogram {
         }
 
         // Draw axes if enabled
-        if (this.params.draw.axes) {
+        if (this.params.draw!.axes) {
             // X-axis
             const xAxis = d3.axisBottom(xScale)
                 .tickFormat(d3.format('.2f'))
@@ -303,7 +327,7 @@ export class Histogram {
                 .call(yAxis)
 
             // Axis labels if enabled
-            if (this.params.draw.labels) {
+            if (this.params.draw!.labels) {
                 // X-axis label
                 this.chartGroup_.append('text')
                     .attr('class', 'x-axis-label')
@@ -312,7 +336,7 @@ export class Histogram {
                     .attr('text-anchor', 'middle')
                     .style('font-size', '14px')
                     .style('font-weight', '500')
-                    .text(this.params.xAxisLabel)
+                    .text(this.params.xAxisLabel || 'Value')
 
                 // Y-axis label
                 this.chartGroup_.append('text')
@@ -323,7 +347,7 @@ export class Histogram {
                     .attr('text-anchor', 'middle')
                     .style('font-size', '14px')
                     .style('font-weight', '500')
-                    .text(this.params.yAxisLabel)
+                    .text(this.params.yAxisLabel || 'Frequency')
             }
         }
 
@@ -331,7 +355,7 @@ export class Histogram {
         if (this.params.title && this.params.title.length > 0) {
             this.svg_.append('text')
                 .attr('class', 'chart-title')
-                .attr('x', this.params.width / 2)
+                .attr('x', this.params.width! / 2)
                 .attr('y', 25)
                 .attr('text-anchor', 'middle')
                 .style('font-size', '16px')
@@ -339,11 +363,11 @@ export class Histogram {
                 .text(this.params.title)
         }
 
-        // Add statistics text
-        if (mean !== undefined && stdDev !== undefined) {
+        // Add statistics text if there's space
+        if (mean !== undefined && stdDev !== undefined && chartWidth > 300) {
             const statsGroup = this.chartGroup_.append('g')
                 .attr('class', 'statistics')
-                .attr('transform', `translate(${chartWidth - 150}, 20)`)
+                .attr('transform', `translate(${Math.max(chartWidth - 150, 10)}, 20)`)
 
             const statsData = [
                 `N: ${this.data_.length}`,
@@ -368,10 +392,14 @@ export class Histogram {
 
     // Method to export data as CSV
     exportData(): string {
+        if (!this.data_ || this.data_.length === 0) {
+            return 'Bin_Start,Bin_End,Count,Percentage\n'
+        }
+
         const histogram = d3.histogram<number, number>()
             .value(d => d)
             .domain(d3.extent(this.data_) as [number, number])
-            .thresholds(this.params.bins)
+            .thresholds(this.params.bins!)
 
         const bins = histogram(this.data_)
         
@@ -404,5 +432,28 @@ export class Histogram {
             q1: d3.quantile(sorted, 0.25),
             q3: d3.quantile(sorted, 0.75)
         }
+    }
+
+    // Method to update dimensions
+    updateDimensions(width: number, height: number): void {
+        this.params.width = width
+        this.params.height = height
+        this.svg_.attr('width', width).attr('height', height)
+        this.update()
+    }
+
+    // Method to update all parameters at once
+    updateParameters(newParams: Partial<HistogramParameters>): void {
+        this.params = { ...this.params, ...newParams }
+        
+        // Merge nested objects properly
+        if (newParams.margin) {
+            this.params.margin = { ...this.params.margin, ...newParams.margin }
+        }
+        if (newParams.draw) {
+            this.params.draw = { ...this.params.draw, ...newParams.draw }
+        }
+        
+        this.update()
     }
 }

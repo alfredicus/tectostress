@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Histogram, HistogramParameters } from './views/Histogram';
 import { DataFiles } from './DataFile';
-import { Download, Settings, BarChart3, TrendingUp } from 'lucide-react';
+import { Download, RotateCcw, BarChart3, TrendingUp } from 'lucide-react';
+import StablePlotWithSettings from './PlotWithSettings';
 
 interface HistogramComponentProps {
     files: DataFiles;
     width?: number;
     height?: number;
     title?: string;
+    onDimensionChange?: (newWidth: number, newHeight: number) => void;
 }
 
 interface DataColumnInfo {
@@ -34,12 +36,13 @@ const HistogramComponent: React.FC<HistogramComponentProps> = ({
     files,
     width = 600,
     height = 400,
-    title = "Data Histogram"
+    title = "Data Histogram",
+    onDimensionChange
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [histogram, setHistogram] = useState<Histogram | null>(null);
-    const [showSettings, setShowSettings] = useState(true);
     const [statistics, setStatistics] = useState<StatisticalSummary | null>(null);
+    const [plotDimensions, setPlotDimensions] = useState({ width, height });
 
     // Available columns from files
     const [availableColumns, setAvailableColumns] = useState<DataColumnInfo[]>([]);
@@ -144,9 +147,13 @@ const HistogramComponent: React.FC<HistogramComponentProps> = ({
             `${col.fileId}::${col.columnIndex}` === selectedColumn
         );
 
+        // Calculate effective dimensions - leave space for margins and statistics
+        const effectiveWidth = Math.max(plotDimensions.width - 40, 300);
+        const effectiveHeight = Math.max(plotDimensions.height - 120, 200); // Leave space for statistics
+
         const params: HistogramParameters = {
-            width,
-            height,
+            width: effectiveWidth,
+            height: effectiveHeight,
             bins: settings.bins,
             fillColor: settings.fillColor,
             strokeColor: settings.strokeColor,
@@ -171,7 +178,7 @@ const HistogramComponent: React.FC<HistogramComponentProps> = ({
         return () => {
             // Cleanup if needed
         };
-    }, [selectedColumn, settings, width, height, title, availableColumns]);
+    }, [selectedColumn, settings, plotDimensions, title, availableColumns]);
 
     // Update histogram when data changes
     useEffect(() => {
@@ -202,209 +209,291 @@ const HistogramComponent: React.FC<HistogramComponentProps> = ({
         URL.revokeObjectURL(url);
     };
 
+    const resetView = () => {
+        if (!histogram) return;
+        
+        // Reset to default settings
+        setSettings({
+            bins: 20,
+            fillColor: '#3498db',
+            strokeColor: '#2c3e50',
+            showGrid: true,
+            showDensity: false,
+            showLabels: true,
+            xAxisLabel: 'Value',
+            yAxisLabel: 'Frequency'
+        });
+    };
+
     const getSelectedColumnInfo = () => {
         return availableColumns.find(col =>
             `${col.fileId}::${col.columnIndex}` === selectedColumn
         );
     };
 
-    return (
-        <div className="flex gap-4 h-full">
-            {/* Main histogram container */}
-            <div className="flex-1 min-h-0">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-blue-600" />
-                        <h3 className="text-lg font-semibold">Histogram</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={exportData}
-                            disabled={!histogram}
-                            className="flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+    // Helper components for settings
+    const ColorInput: React.FC<{
+        value: string;
+        onChange: (value: string) => void;
+        label: string;
+    }> = ({ value, onChange, label }) => (
+        <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 min-w-[80px]">{label}:</label>
+            <input
+                type="color"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-8 h-6 border border-gray-300 rounded cursor-pointer"
+            />
+            <span className="text-xs text-gray-500">{value}</span>
+        </div>
+    );
+
+    const NumberInput: React.FC<{
+        value: number;
+        onChange: (value: number) => void;
+        label: string;
+        min?: number;
+        max?: number;
+        step?: number;
+    }> = ({ value, onChange, label, min = 0, max = 100, step = 1 }) => (
+        <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 min-w-[80px]">{label}:</label>
+            <input
+                type="number"
+                value={value}
+                onChange={(e) => onChange(parseFloat(e.target.value))}
+                min={min}
+                max={max}
+                step={step}
+                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+        </div>
+    );
+
+    // Main plot content
+    const plotContent = (
+        <div className="flex flex-col h-full">
+            {/* Column selector */}
+            <div className="mb-4 flex-shrink-0">
+                <label className="block text-sm font-medium mb-2">Select Data Column</label>
+                <select
+                    value={selectedColumn}
+                    onChange={(e) => setSelectedColumn(e.target.value)}
+                    className="w-full p-2 border rounded bg-white text-sm"
+                >
+                    <option value="">Choose a column...</option>
+                    {availableColumns.map(col => (
+                        <option
+                            key={`${col.fileId}::${col.columnIndex}`}
+                            value={`${col.fileId}::${col.columnIndex}`}
                         >
-                            <Download className="w-4 h-4" />
-                            Export
-                        </button>
-                        <button
-                            onClick={() => setShowSettings(!showSettings)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${showSettings
-                                    ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                                    : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                        >
-                            <Settings className="w-4 h-4" />
-                            Settings
-                        </button>
-                    </div>
-                </div>
-
-                {/* Column selector */}
-                <div className="mb-4">
-                    <label className="block text-sm font-medium mb-2">Select Data Column</label>
-                    <select
-                        value={selectedColumn}
-                        onChange={(e) => setSelectedColumn(e.target.value)}
-                        className="w-full p-2 border rounded bg-white"
-                    >
-                        <option value="">Choose a column...</option>
-                        {availableColumns.map(col => (
-                            <option
-                                key={`${col.fileId}::${col.columnIndex}`}
-                                value={`${col.fileId}::${col.columnIndex}`}
-                            >
-                                {col.fileName} → {col.columnName}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Histogram container */}
-                <div
-                    ref={containerRef}
-                    className="w-full border rounded-lg bg-white shadow-sm"
-                    style={{ height: `${height}px` }}
-                />
-
-                {/* Statistics summary */}
-                {statistics && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                            <TrendingUp className="w-5 h-5 text-green-600" />
-                            <h4 className="font-semibold">Statistical Summary</h4>
-                        </div>
-                        <div className="grid grid-cols-4 gap-4 text-sm">
-                            <div>
-                                <span className="font-medium">Count:</span> {statistics.count}
-                            </div>
-                            <div>
-                                <span className="font-medium">Mean:</span> {statistics.mean?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Median:</span> {statistics.median?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Std Dev:</span> {statistics.stdDev?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Min:</span> {statistics.min?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Q1:</span> {statistics.q1?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Q3:</span> {statistics.q3?.toFixed(3)}
-                            </div>
-                            <div>
-                                <span className="font-medium">Max:</span> {statistics.max?.toFixed(3)}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                            {col.fileName} → {col.columnName}
+                        </option>
+                    ))}
+                </select>
             </div>
 
-            {/* Settings panel */}
-            {showSettings && (
-                <div className="w-80 bg-gray-100 p-4 rounded-lg shadow">
-                    <h4 className="font-semibold mb-4">Histogram Settings</h4>
+            {/* Histogram container */}
+            <div className="flex-1 min-h-0 mb-4">
+                <div
+                    ref={containerRef}
+                    className="w-full h-full border rounded-lg bg-white shadow-sm flex items-center justify-center"
+                />
+            </div>
 
-                    <div className="space-y-4">
-                        {/* Number of bins */}
+            {/* Statistics summary */}
+            {statistics && (
+                <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                        <h4 className="font-semibold">Statistical Summary</h4>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4 text-sm">
                         <div>
-                            <label className="block text-sm font-medium mb-1">
-                                Number of Bins: {settings.bins}
-                            </label>
-                            <input
-                                type="range"
-                                min="5"
-                                max="50"
-                                value={settings.bins}
-                                onChange={(e) => handleSettingChange('bins', parseInt(e.target.value))}
-                                className="w-full"
-                            />
+                            <span className="font-medium">Count:</span> {statistics.count}
                         </div>
-
-                        {/* Fill color */}
                         <div>
-                            <label className="block text-sm font-medium mb-1">Fill Color</label>
-                            <input
-                                type="color"
-                                value={settings.fillColor}
-                                onChange={(e) => handleSettingChange('fillColor', e.target.value)}
-                                className="w-full h-8 rounded border"
-                            />
+                            <span className="font-medium">Mean:</span> {statistics.mean?.toFixed(3)}
                         </div>
-
-                        {/* Stroke color */}
                         <div>
-                            <label className="block text-sm font-medium mb-1">Border Color</label>
-                            <input
-                                type="color"
-                                value={settings.strokeColor}
-                                onChange={(e) => handleSettingChange('strokeColor', e.target.value)}
-                                className="w-full h-8 rounded border"
-                            />
+                            <span className="font-medium">Median:</span> {statistics.median?.toFixed(3)}
                         </div>
-
-                        {/* Display options */}
-                        <div className="space-y-2">
-                            <label className="flex items-center">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.showGrid}
-                                    onChange={(e) => handleSettingChange('showGrid', e.target.checked)}
-                                    className="mr-2"
-                                />
-                                Show Grid
-                            </label>
-
-                            <label className="flex items-center">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.showDensity}
-                                    onChange={(e) => handleSettingChange('showDensity', e.target.checked)}
-                                    className="mr-2"
-                                />
-                                Show Density Curve
-                            </label>
-
-                            <label className="flex items-center">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.showLabels}
-                                    onChange={(e) => handleSettingChange('showLabels', e.target.checked)}
-                                    className="mr-2"
-                                />
-                                Show Axis Labels
-                            </label>
-                        </div>
-
-                        {/* Axis labels */}
                         <div>
-                            <label className="block text-sm font-medium mb-1">Y-Axis Label</label>
-                            <input
-                                type="text"
-                                value={settings.yAxisLabel}
-                                onChange={(e) => handleSettingChange('yAxisLabel', e.target.value)}
-                                className="w-full p-2 border rounded"
-                            />
+                            <span className="font-medium">Std Dev:</span> {statistics.stdDev?.toFixed(3)}
                         </div>
-
-                        {/* Column info */}
-                        {getSelectedColumnInfo() && (
-                            <div className="mt-6 p-3 bg-white rounded border">
-                                <h5 className="font-medium mb-2">Column Info</h5>
-                                <div className="text-sm space-y-1">
-                                    <div><strong>File:</strong> {getSelectedColumnInfo()?.fileName}</div>
-                                    <div><strong>Column:</strong> {getSelectedColumnInfo()?.columnName}</div>
-                                    <div><strong>Sample values:</strong> {getSelectedColumnInfo()?.sampleValues.slice(0, 3).join(', ')}...</div>
-                                </div>
-                            </div>
-                        )}
+                        <div>
+                            <span className="font-medium">Min:</span> {statistics.min?.toFixed(3)}
+                        </div>
+                        <div>
+                            <span className="font-medium">Q1:</span> {statistics.q1?.toFixed(3)}
+                        </div>
+                        <div>
+                            <span className="font-medium">Q3:</span> {statistics.q3?.toFixed(3)}
+                        </div>
+                        <div>
+                            <span className="font-medium">Max:</span> {statistics.max?.toFixed(3)}
+                        </div>
                     </div>
                 </div>
             )}
         </div>
+    );
+
+    // Settings panel content
+    const settingsContent = (
+        <div className="space-y-4">
+            {/* Histogram settings */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Histogram Settings</h5>
+                <div className="space-y-3">
+                    {/* Number of bins */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">
+                            Number of Bins: {settings.bins}
+                        </label>
+                        <input
+                            type="range"
+                            min="5"
+                            max="50"
+                            value={settings.bins}
+                            onChange={(e) => handleSettingChange('bins', parseInt(e.target.value))}
+                            className="w-full"
+                        />
+                    </div>
+
+                    {/* Colors */}
+                    <ColorInput
+                        value={settings.fillColor}
+                        onChange={(value) => handleSettingChange('fillColor', value)}
+                        label="Fill Color"
+                    />
+
+                    <ColorInput
+                        value={settings.strokeColor}
+                        onChange={(value) => handleSettingChange('strokeColor', value)}
+                        label="Border Color"
+                    />
+                </div>
+            </div>
+
+            {/* Display options */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Display Options</h5>
+                <div className="space-y-2">
+                    <label className="flex items-center">
+                        <input
+                            type="checkbox"
+                            checked={settings.showGrid}
+                            onChange={(e) => handleSettingChange('showGrid', e.target.checked)}
+                            className="mr-2"
+                        />
+                        Show Grid
+                    </label>
+
+                    <label className="flex items-center">
+                        <input
+                            type="checkbox"
+                            checked={settings.showDensity}
+                            onChange={(e) => handleSettingChange('showDensity', e.target.checked)}
+                            className="mr-2"
+                        />
+                        Show Density Curve
+                    </label>
+
+                    <label className="flex items-center">
+                        <input
+                            type="checkbox"
+                            checked={settings.showLabels}
+                            onChange={(e) => handleSettingChange('showLabels', e.target.checked)}
+                            className="mr-2"
+                        />
+                        Show Axis Labels
+                    </label>
+                </div>
+            </div>
+
+            {/* Axis labels */}
+            <div>
+                <h5 className="font-medium text-gray-800 mb-3">Axis Labels</h5>
+                <div className="space-y-2">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Y-Axis Label</label>
+                        <input
+                            type="text"
+                            value={settings.yAxisLabel}
+                            onChange={(e) => handleSettingChange('yAxisLabel', e.target.value)}
+                            className="w-full p-2 border rounded text-sm"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Column info */}
+            {getSelectedColumnInfo() && (
+                <div className="border-t pt-4">
+                    <h5 className="font-medium text-gray-800 mb-2">Column Info</h5>
+                    <div className="p-3 bg-white rounded border">
+                        <div className="text-sm space-y-1">
+                            <div><strong>File:</strong> {getSelectedColumnInfo()?.fileName}</div>
+                            <div><strong>Column:</strong> {getSelectedColumnInfo()?.columnName}</div>
+                            <div><strong>Sample values:</strong> {getSelectedColumnInfo()?.sampleValues.slice(0, 3).join(', ')}...</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    // Header actions
+    const headerActions = (
+        <>
+            <button
+                onClick={resetView}
+                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+                title="Reset View"
+            >
+                <RotateCcw size={16} />
+            </button>
+            <button
+                onClick={exportData}
+                disabled={!histogram}
+                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                title="Export Data"
+            >
+                <Download size={16} />
+            </button>
+        </>
+    );
+
+    return (
+        <StablePlotWithSettings
+            title="Histogram"
+            settingsPanel={settingsContent}
+            headerActions={headerActions}
+            borderColor="#d1d5db"
+            borderWidth={1}
+            settingsPanelWidth={300}
+            onSettingsToggle={(isOpen) => {
+                // When settings panel opens/closes, adjust the plot dimensions
+                // but do NOT change the parent container size
+                setTimeout(() => {
+                    if (containerRef.current) {
+                        // Calculate available width for the plot
+                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 600;
+                        const settingsPanelWidth = isOpen ? 300 : 0;
+                        const availableWidth = containerWidth - settingsPanelWidth - 40; // 40px for padding
+                        
+                        setPlotDimensions({
+                            width: Math.max(availableWidth, 250), // Minimum width for plot
+                            height: containerRef.current?.clientHeight || height || 400
+                        });
+                    }
+                }, 150);
+            }}
+        >
+            {plotContent}
+        </StablePlotWithSettings>
     );
 };
 

@@ -8,4 +8,5 @@ export default interface VisualizationProps {
     height?: number;
     state?: VisualizationState;
     onStateChange?: (state: VisualizationState) => void;
+    onDimensionChange?: (newWidth: number, newHeight: number) => void;
 }
