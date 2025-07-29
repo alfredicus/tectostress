@@ -13,19 +13,21 @@ License: MIT
  *  MIT Licence
  */
 
-/*! ../../io/DataReader */
+/*! ../../helpers/PlaneHelper */
 
 /*! ../../types */
 
+/*! ../../types/SphericalCoords */
+
+/*! ../../types/math */
+
 /*! ../../types/mechanics */
 
-/*! ../../utils */
-
-/*! ../../utils/FaultHelper */
-
-/*! ../../utils/PlaneHelper */
+/*! ../../utils/assertJson */
 
 /*! ../../utils/fromAnglesToNormal */
+
+/*! ../../utils/trimAlls */
 
 /*! ../Data */
 
@@ -37,6 +39,8 @@ License: MIT
 
 /*! ../data */
 
+/*! ../data/fault/types */
+
 /*! ../debug */
 
 /*! ../geomeca */
@@ -45,9 +49,9 @@ License: MIT
 
 /*! ../search */
 
-/*! ../types */
+/*! ../stress/StressData */
 
-/*! ../types/SphericalCoords */
+/*! ../types */
 
 /*! ../types/math */
 
@@ -56,10 +60,6 @@ License: MIT
 /*! ../utils */
 
 /*! ../utils/assertJson */
-
-/*! ./CompactionShearBandsHelper */
-
-/*! ./ConjugatePlanesHelper */
 
 /*! ./Curve3D */
 
@@ -81,13 +81,15 @@ License: MIT
 
 /*! ./FaultData */
 
-/*! ./FaultHelper */
+/*! ./FaultDataHelper */
 
 /*! ./FractureData */
 
 /*! ./FullParameterSpace */
 
 /*! ./GenericCurve */
+
+/*! ./GridSearch */
 
 /*! ./HomogeneousEngine */
 
@@ -131,13 +133,15 @@ License: MIT
 
 /*! ./analysis */
 
-/*! ./assertJson */
-
 /*! ./csv2json */
 
 /*! ./data */
 
 /*! ./eigen */
+
+/*! ./fault/NeoformedStriatedPlane */
+
+/*! ./fault/StriatedPlane_Kin */
 
 /*! ./fieldMove2json */
 
@@ -166,10 +170,6 @@ License: MIT
 /*! ./stress/DilationBand */
 
 /*! ./stress/ExtensionFracture */
-
-/*! ./stress/NeoformedStriatedPlane */
-
-/*! ./stress/StriatedPlane_Kin */
 
 /*! ./stress/StyloliteInterface */
 
@@ -255,10 +255,6 @@ License: MIT
   !*** ./lib/geomeca/index.ts ***!
   \******************************/
 
-/*!******************************!*\
-  !*** ./lib/io/DataReader.ts ***!
-  \******************************/
-
 /*!*******************************!*\
   !*** ./lib/analysis/index.ts ***!
   \*******************************/
@@ -296,6 +292,10 @@ License: MIT
   \*********************************/
 
 /*!*********************************!*\
+  !*** ./lib/data/fault/types.ts ***!
+  \*********************************/
+
+/*!*********************************!*\
   !*** ./lib/filters/csv2json.ts ***!
   \*********************************/
 
@@ -312,15 +312,11 @@ License: MIT
   \**********************************/
 
 /*!**********************************!*\
+  !*** ./lib/search/GridSearch.ts ***!
+  \**********************************/
+
+/*!**********************************!*\
   !*** ./lib/search/MonteCarlo.ts ***!
-  \**********************************/
-
-/*!**********************************!*\
-  !*** ./lib/utils/FaultHelper.ts ***!
-  \**********************************/
-
-/*!**********************************!*\
-  !*** ./lib/utils/PlaneHelper.ts ***!
   \**********************************/
 
 /*!**********************************!*\
@@ -348,6 +344,10 @@ License: MIT
   \************************************/
 
 /*!************************************!*\
+  !*** ./lib/helpers/PlaneHelper.ts ***!
+  \************************************/
+
+/*!************************************!*\
   !*** ./lib/search/SearchMethod.ts ***!
   \************************************/
 
@@ -355,9 +355,9 @@ License: MIT
   !*** ./lib/data/DataDescription.ts ***!
   \*************************************/
 
-/*!**************************************!*\
-  !*** ./lib/data/stress/FaultData.ts ***!
-  \**************************************/
+/*!*************************************!*\
+  !*** ./lib/data/fault/FaultData.ts ***!
+  \*************************************/
 
 /*!**************************************!*\
   !*** ./lib/types/SphericalCoords.ts ***!
@@ -420,6 +420,10 @@ License: MIT
   \*******************************************/
 
 /*!*******************************************!*\
+  !*** ./lib/data/fault/FaultDataHelper.ts ***!
+  \*******************************************/
+
+/*!*******************************************!*\
   !*** ./lib/data/stress/CompactionBand.ts ***!
   \*******************************************/
 
@@ -431,16 +435,12 @@ License: MIT
   !*** ./lib/analysis/FullParameterSpace.ts ***!
   \********************************************/
 
-/*!********************************************!*\
-  !*** ./lib/utils/ConjugatePlanesHelper.ts ***!
-  \********************************************/
+/*!*********************************************!*\
+  !*** ./lib/data/fault/StriatedPlane_Kin.ts ***!
+  \*********************************************/
 
 /*!**********************************************!*\
   !*** ./lib/data/stress/ExtensionFracture.ts ***!
-  \**********************************************/
-
-/*!**********************************************!*\
-  !*** ./lib/data/stress/StriatedPlane_Kin.ts ***!
   \**********************************************/
 
 /*!**********************************************!*\
@@ -451,13 +451,9 @@ License: MIT
   !*** ./lib/data/stress/StyloliteInterface.ts ***!
   \***********************************************/
 
-/*!*************************************************!*\
-  !*** ./lib/utils/CompactionShearBandsHelper.ts ***!
-  \*************************************************/
-
-/*!***************************************************!*\
-  !*** ./lib/data/stress/NeoformedStriatedPlane.ts ***!
-  \***************************************************/
+/*!**************************************************!*\
+  !*** ./lib/data/fault/NeoformedStriatedPlane.ts ***!
+  \**************************************************/
 
 /*!*************************************************************!*\
   !*** ./lib/geomeca/HypotheticalSolutionTensorParameters.ts ***!
