@@ -7,28 +7,160 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DataFile } from './DataFile';
 
+const RoseIcon: React.FC<{ size?: number; className?: string }> = ({
+    size = 24,
+    className = ""
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+    >
+        {/* Outer circle */}
+        <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.6" />
+
+        {/* Rose diagram sectors */}
+        <g fill="currentColor" opacity="0.95">
+            {/* Large sector at North (0°) - tallest */}
+            <path d="M 12 12 L 11.5 1 A 10.5 10.5 0 0 1 12.5 1 L 12 12 Z" />
+
+            {/* Medium sector at NNE (30°) */}
+            <path d="M 12 12 L 18.3 3.5 A 7 7 0 0 1 19 4.5 L 12 12 Z" />
+
+            {/* Small sector at NE (60°) */}
+            <path d="M 12 12 L 20.5 8 A 4 4 0 0 1 20.8 9 L 12 12 Z" />
+
+            {/* Medium sector at ENE (90°) */}
+            <path d="M 12 12 L 22.5 11.5 A 6 6 0 0 1 22.5 12.5 L 12 12 Z" />
+
+            {/* Small sector at SE (120°) */}
+            <path d="M 12 12 L 20.5 16 A 3.5 3.5 0 0 1 20 16.8 L 12 12 Z" />
+
+            {/* Small sector at SSE (150°) */}
+            <path d="M 12 12 L 18.3 20.5 A 3 3 0 0 1 17.7 20.8 L 12 12 Z" />
+
+            {/* Very large sector at South (180°) - second tallest */}
+            <path d="M 12 12 L 12.5 23 A 10 10 0 0 1 11.5 23 L 12 12 Z" />
+
+            {/* Large sector at SSW (210°) */}
+            <path d="M 12 12 L 5.7 20.5 A 8 8 0 0 1 5 19.5 L 12 12 Z" />
+
+            {/* Medium sector at SW (240°) */}
+            <path d="M 12 12 L 3.5 16 A 6 6 0 0 1 3.2 15 L 12 12 Z" />
+
+            {/* Large sector at WSW (270°) */}
+            <path d="M 12 12 L 1.5 12.5 A 8.5 8.5 0 0 1 1.5 11.5 L 12 12 Z" />
+
+            {/* Medium sector at NW (300°) */}
+            <path d="M 12 12 L 3.5 8 A 6.5 6.5 0 0 1 4.2 7 L 12 12 Z" />
+
+            {/* Medium sector at NNW (330°) */}
+            <path d="M 12 12 L 5.7 3.5 A 7.5 7.5 0 0 1 6.5 3 L 12 12 Z" />
+        </g>
+
+        {/* Center point */}
+        <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+    </svg>
+);
+
+const MohrIcon: React.FC<{ size?: number; className?: string }> = ({
+    size = 24,
+    className = ""
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className={className}
+    >
+        {/* Outer circle */}
+        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
+
+        {/* Inner circles representing Mohr circles */}
+        <circle cx="8" cy="12" r="3" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
+        <circle cx="14" cy="12" r="2" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
+        <circle cx="11" cy="12" r="1.5" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
+
+        {/* Principal stress points */}
+        <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+        <circle cx="16" cy="12" r="1.5" fill="currentColor" />
+
+        {/* Stress point */}
+        <circle cx="10" cy="8" r="1" fill="purple" />
+
+        {/* Axes */}
+        <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="0.5" />
+        <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="0.5" />
+    </svg>
+);
+
+const HistogramIcon: React.FC<{ size?: number; className?: string }> = ({
+    size = 40,
+    className = ""
+}) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+    >
+        {/* Chart area background */}
+        <rect x="3" y="3" width="18" height="16" fill="none" stroke="currentColor" strokeWidth="0.3" opacity="0.2" />
+
+        {/* Grid lines */}
+        {/* <g stroke="currentColor" strokeWidth="0.2" opacity="0.15">
+            <line x1="3" y1="15" x2="21" y2="15" />
+            <line x1="3" y1="11" x2="21" y2="11" />
+            <line x1="3" y1="7" x2="21" y2="7" />
+        </g> */}
+
+        {/* Histogram bars */}
+        <g fill="currentColor" opacity="0.8">
+            <rect x="4" y="16" width="2.5" height="3" />
+            <rect x="6.5" y="15" width="2.5" height="4" />
+            <rect x="9" y="11" width="2.5" height="8" />
+            <rect x="11.5" y="9" width="2.5" height="10" />
+            <rect x="14" y="13" width="2.5" height="6" />
+            <rect x="16.5" y="17" width="2.5" height="2" />
+        </g>
+
+        {/* Axes */}
+        {/* <g stroke="currentColor" strokeWidth="0.8" opacity="0.7">
+            <line x1="3" y1="3" x2="3" y2="19" />
+            <line x1="3" y1="19" x2="21" y2="19" />
+        </g> */}
+    </svg>
+);
+
 const visualizationTypes = [
-    { id: 'table', title: 'Tableau', icon: Table },
-    { id: 'rose', title: 'Rose diagram', icon: PieChart },
+    // { id: 'table', title: 'Tableau', icon: Table },
+    { id: 'rose', title: 'Rose diagram', icon: RoseIcon },
     { id: 'wulff', title: 'Wulff Stereonet', icon: Target },
-    { id: 'histogram', title: 'Histo', icon: Target },
-    { id: 'sphere', title: 'Sphere', icon: Dribbble },
-    { id: 'line', title: 'Graphique en ligne', icon: LineChart },
-    { id: 'three', title: 'Test 3D', icon: PieChart },
-    { id: 'two', title: 'Test 2D', icon: PieChart },
+    { id: 'histogram', title: 'Histo', icon: HistogramIcon },
+    { id: 'mohr', title: 'Mohr Circle', icon: MohrIcon },
+    // { id: 'sphere', title: 'Sphere', icon: Dribbble },
+    // { id: 'line', title: 'Graphique en ligne', icon: LineChart },
+    // { id: 'three', title: 'Test 3D', icon: PieChart },
+    // { id: 'two', title: 'Test 2D', icon: PieChart },
 ];
 
 // Simple default layout
 const getDefaultLayoutForType = (type: string) => {
     const layouts = {
-        table: { w: 12, h: 3 },
+        // table: { w: 12, h: 3 },
         rose: { w: 4, h: 4 },
         wulff: { w: 6, h: 4 },
         histogram: { w: 6, h: 4 },
-        sphere: { w: 6, h: 4 },
-        line: { w: 8, h: 3 },
-        three: { w: 6, h: 4 },
-        two: { w: 6, h: 3 },
+        mohr: { w: 6, h: 4 },
+        // sphere: { w: 6, h: 4 },
+        // line: { w: 8, h: 3 },
+        // three: { w: 6, h: 4 },
+        // two: { w: 6, h: 3 },
         default: { w: 6, h: 3 }
     };
 
@@ -54,7 +186,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
 }) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sharedData, setSharedData] = useState<SharedData>({});
-    
+
     // Container ref to measure available width
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState<number>(1400);
@@ -98,7 +230,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
 
         // Find the maximum Y position + height of all existing visualizations
         const maxY = Math.max(...visualizations.map(viz => viz.layout.y + viz.layout.h));
-        
+
         // Place new visualization at the bottom, starting from x = 0
         return { x: 0, y: maxY };
     };
@@ -153,10 +285,10 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
         const cellWidth = containerWidth / 12;
         const cellHeight = 120;
         const padding = 32;
-        
+
         const width = Math.max(viz.layout.w * cellWidth - padding, 300);
         const height = Math.max(viz.layout.h * cellHeight - padding, 200);
-        
+
         return { width, height };
     };
 
@@ -192,7 +324,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
                 >
                     {visualizations.map((viz) => {
                         const dimensions = calculateVisualizationDimensions(viz);
-                        
+
                         return (
                             <div
                                 key={viz.id}
@@ -224,7 +356,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
                                         height={dimensions.height}
                                         state={viz.state}
                                         onStateChange={(newState) => onVisualizationStateChanged(viz.id, newState)}
-                                        onDimensionChange={(newWidth, newHeight) => 
+                                        onDimensionChange={(newWidth, newHeight) =>
                                             handleVisualizationDimensionChange(viz.id, newWidth, newHeight)
                                         }
                                     />
@@ -257,14 +389,14 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
                             {visualizationTypes.map((type) => {
                                 const Icon = type.icon;
                                 const layout = getDefaultLayoutForType(type.id);
-                                
+
                                 return (
                                     <button
                                         key={type.id}
                                         onClick={() => addVisualization(type.id, type.title)}
                                         className="p-4 border rounded-md hover:bg-gray-50 flex flex-col items-center gap-2 transition-colors hover:border-blue-300"
                                     >
-                                        <Icon size={32} className="text-gray-600" />
+                                        <Icon size={42} className="text-gray-600" />
                                         <span className="font-medium">{type.title}</span>
                                         <span className="text-xs text-gray-500">
                                             {layout.w}×{layout.h} grid units
