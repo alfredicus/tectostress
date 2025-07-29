@@ -9,7 +9,7 @@ import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DataFile } from './DataFile';
-import { processCSV, ProcessCSVReturnType } from './data-processor';
+import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing'
 
 
 interface DataComponentProps {

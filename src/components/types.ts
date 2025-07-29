@@ -31,6 +31,27 @@ export interface Visualization {
     data?: any;
 }
 
+// ----------------------------------------------------
+
+// Result interfaces
+export interface StressSolution {
+    stressRatio: number;
+    misfit: number;
+    stressTensorSolution: number[][];
+    analysis?: {
+        eigenvalues: number[];
+        eigenvectors: number[][];
+        eulerAngles: { phi: number; theta: number; psi: number };
+        eulerAnglesDegrees: { phi: number; theta: number; psi: number };
+        principalStresses: {
+            sigma1: { value: number; direction: number[] };
+            sigma2: { value: number; direction: number[] };
+            sigma3: { value: number; direction: number[] };
+        };
+        calculatedStressRatio: number;
+    };
+}
+
 
 
 
