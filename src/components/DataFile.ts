@@ -9,7 +9,7 @@
  * The interface has evolved from using string[][] for content to
  * Record<string, any> to support more flexible data structures with named columns.
  */
-interface DataFile {
+export interface DataFile {
     id: string;                    // Unique identifier for the file
     name: string;                  // Original filename
     headers: string[];             // Column headers from the file

@@ -8,12 +8,12 @@ import GridLayout, { Layout } from 'react-grid-layout';
 import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { DataFile } from './DataFile';
+import { DataFiles, DataFile } from './DataFile';
 import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing'
 
 
 interface DataComponentProps {
-    files: DataFile[];
+    files: DataFiles;
     onFileLoaded: (file: DataFile) => void;
     onFileRemoved: (fileId: string) => void;
 }
