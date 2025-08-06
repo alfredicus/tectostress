@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     TableContainer, Table, TableHead, TableBody,
     TableRow, TableCell, Button, Typography
@@ -12,12 +12,14 @@ import { DataFile } from './DataFile';
 import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing';
 import { Visualization, VisualizationState } from './types';
 import { VisualizationComponent } from './VisualizationComponent';
-import { 
-    useVisualizationManager, 
-    AddVisualizationDialog, 
-    VisualizationGrid, 
-    DATA_VISUALIZATIONS 
+import {
+    useVisualizationManager,
+    AddVisualizationDialog,
+    VisualizationGrid,
+    DATA_VISUALIZATIONS
 } from './VisualizationManager';
+import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
+import { add } from 'mathjs';
 
 interface DataComponentProps {
     files: DataFile[];
@@ -35,7 +37,41 @@ const DataComponent: React.FC<DataComponentProps> = ({
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [containerWidth, setContainerWidth] = useState<number>(1400);
-    
+
+    // Console-related state
+    const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
+    const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
+
+    // Helper function to add messages to console
+    const addConsoleMessage = useCallback((
+        type: ConsoleMessage['type'],
+        message: string,
+        details?: string
+    ) => {
+        const newMessage: ConsoleMessage = {
+            id: `msg-${Date.now()}-${Math.random()}`,
+            timestamp: new Date(),
+            type,
+            message,
+            details
+        };
+
+        setConsoleMessages(prev => [...prev, newMessage]);
+
+        // Auto-open console for errors
+        if (type === 'error') {
+            setIsConsoleOpen(true);
+        }
+    }, []);
+
+    const clearConsole = useCallback(() => {
+        setConsoleMessages([]);
+    }, []);
+
+    const toggleConsole = useCallback(() => {
+        setIsConsoleOpen(prev => !prev);
+    }, []);
+
     // Use the visualization manager hook with DATA_VISUALIZATIONS
     const {
         visualizations,
@@ -86,7 +122,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     const retType: ProcessCSVReturnType = processCSV(e.target?.result as string);
 
                     if (!retType || !retType.data || !Array.isArray(retType.data)) {
-                        console.error(`Invalid data structure from file: ${file.name}`);
+                        addConsoleMessage('error', `Invalid data structure from file: ${file.name}`);
                         return;
                     }
 
@@ -104,13 +140,14 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     };
 
                     onFileLoaded(newFile);
+                    addConsoleMessage('info', `File ${file.name} uploaded successfully.`);
                 } catch (error) {
-                    console.error(`Error processing file ${file.name}:`, error);
+                    addConsoleMessage('error', `Error processing file ${file.name}`, error instanceof Error ? error.message : String(error));
                 }
             };
 
             reader.onerror = (error) => {
-                console.error(`Error reading file ${file.name}:`, error);
+                addConsoleMessage('error', `Error reading file ${file.name}`, error instanceof Error ? error.message : String(error));
             };
 
             reader.readAsText(file);
@@ -186,7 +223,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     >
                         Upload Files
                     </Button>
-                    
+
                     {/* Add View button */}
                     {files.length > 0 && (
                         <Button
@@ -198,7 +235,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                             Add View
                         </Button>
                     )}
-                    
+
                     {selectedFiles.length > 0 && (
                         <Button
                             variant="outlined"
@@ -255,9 +292,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         {files.map((file) => (
                             <div
                                 key={file.id}
-                                className={`border rounded-md shadow-sm overflow-hidden ${
-                                    selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
-                                }`}
+                                className={`border rounded-md shadow-sm overflow-hidden ${selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
+                                    }`}
                             >
                                 <div className="flex items-center justify-between p-2 border-b bg-gray-50">
                                     <div className="flex items-center gap-2">
@@ -301,10 +337,10 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                                     {file.headers.map((header, index) => (
                                                         <TableCell
                                                             key={index}
-                                                            style={{ 
-                                                                fontWeight: 'bold', 
-                                                                whiteSpace: 'nowrap', 
-                                                                backgroundColor: '#f5f5f5' 
+                                                            style={{
+                                                                fontWeight: 'bold',
+                                                                whiteSpace: 'nowrap',
+                                                                backgroundColor: '#f5f5f5'
                                                             }}
                                                         >
                                                             {header}
@@ -327,12 +363,12 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                                 ))}
                                                 {file.content.length > 10 && (
                                                     <TableRow>
-                                                        <TableCell 
+                                                        <TableCell
                                                             colSpan={file.headers.length}
-                                                            style={{ 
-                                                                textAlign: 'center', 
-                                                                fontStyle: 'italic', 
-                                                                color: '#666' 
+                                                            style={{
+                                                                textAlign: 'center',
+                                                                fontStyle: 'italic',
+                                                                color: '#666'
                                                             }}
                                                         >
                                                             ... and {file.content.length - 10} more rows
@@ -348,6 +384,15 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     </GridLayout>
                 </div>
             )}
+
+            {/* Console Component */}
+            <ConsoleComponent
+                messages={consoleMessages}
+                onClear={clearConsole}
+                isOpen={isConsoleOpen}
+                onToggle={toggleConsole}
+                maxHeight="350px"
+            />
 
             {/* Integrated Visualizations Grid */}
             <VisualizationGrid

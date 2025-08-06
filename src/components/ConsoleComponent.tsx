@@ -97,7 +97,7 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
                 onClick={onToggle}
             >
                 <div className="flex items-center space-x-3">
-                    <Terminal className="w-5 h-5" />
+                    {/* <Terminal className="w-5 h-5" /> */}
                     <h3 className="text-lg font-medium">Console</h3>
                     {messages.length > 0 && (
                         <span className="px-2 py-1 bg-gray-700 rounded-md text-xs">
@@ -182,7 +182,7 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
                             <div className="p-6 text-center text-gray-500">
                                 {messages.length === 0 ? (
                                     <>
-                                        <Terminal className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                        {/* <Terminal className="w-12 h-12 mx-auto mb-3 opacity-50" /> */}
                                         <p>No messages to display</p>
                                         <p className="text-xs mt-1">Console output will appear here</p>
                                     </>

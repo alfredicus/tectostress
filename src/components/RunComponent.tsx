@@ -6,7 +6,7 @@ import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio } fro
 import ErrorModal from './ErrorModal';
 import LoadingOverlay from './LoadingOverlay';
 import { Download, FileText } from 'lucide-react';
-import { ConsoleComponent } from './ConsoleComponent';
+import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { StressSolution } from './types';
 import { ExportDialog } from './ExportDialog';
 import { 
@@ -144,14 +144,6 @@ const CONFIG_DATA: ConfigData = {
     }
 };
 
-// Console message interface
-interface ConsoleMessage {
-    id: string;
-    timestamp: Date;
-    type: 'info' | 'warning' | 'error' | 'success';
-    message: string;
-    details?: string;
-}
 
 // Observer class for simulation progress
 class SimulationObserver {
