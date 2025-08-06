@@ -67,6 +67,8 @@ License: MIT
 
 /*! ./DataDescription */
 
+/*! ./DataFieldsHelper */
+
 /*! ./DataParameters */
 
 /*! ./DebugSearch */
@@ -358,6 +360,10 @@ License: MIT
 /*!*************************************!*\
   !*** ./lib/data/fault/FaultData.ts ***!
   \*************************************/
+
+/*!**************************************!*\
+  !*** ./lib/data/DataFieldsHelper.ts ***!
+  \**************************************/
 
 /*!**************************************!*\
   !*** ./lib/types/SphericalCoords.ts ***!
