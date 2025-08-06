@@ -19,6 +19,7 @@ import {
     DATA_VISUALIZATIONS
 } from './VisualizationManager';
 import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
+import { AddDataDialog } from './AddDataDialog';
 import { add } from 'mathjs';
 
 interface DataComponentProps {
@@ -37,6 +38,9 @@ const DataComponent: React.FC<DataComponentProps> = ({
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [containerWidth, setContainerWidth] = useState<number>(1400);
+
+    // Add Data Dialog state
+    const [isAddDataDialogOpen, setIsAddDataDialogOpen] = useState(false);
 
     // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
@@ -158,6 +162,22 @@ const DataComponent: React.FC<DataComponentProps> = ({
         }
     };
 
+    const handleAddDataFromDialog = useCallback((newFile: DataFile) => {
+        // Position the new file at the bottom of existing files
+        const filesCount = files.length;
+        const row = Math.floor(filesCount / 2);
+        const col = filesCount % 2;
+        const position = { x: col * 2, y: row * 2 };
+
+        const positionedFile: DataFile = {
+            ...newFile,
+            layout: { ...position, w: 4, h: 2 }
+        };
+
+        onFileLoaded(positionedFile);
+        addConsoleMessage('info', `Manual data "${newFile.name}" added successfully.`);
+    }, [files.length, onFileLoaded, addConsoleMessage]);
+
     const handleLayoutChange = (layout: Layout[]) => {
         layout.forEach(newLayout => {
             const file = files.find(f => f.id === newLayout.i);
@@ -216,6 +236,18 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         accept=".csv,.col"
                         multiple
                     />
+                    
+                    {/* Add Data button */}
+                    <Button
+                        variant="outlined"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setIsAddDataDialogOpen(true)}
+                        className="mr-2"
+                    >
+                        Add Data
+                    </Button>
+
+                    {/* Upload Files button */}
                     <Button
                         variant="contained"
                         startIcon={<Upload size={20} />}
@@ -404,6 +436,13 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 containerWidth={containerWidth}
                 gridCols={12}
                 rowHeight={120}
+            />
+
+            {/* Add Data Dialog */}
+            <AddDataDialog
+                isOpen={isAddDataDialogOpen}
+                onClose={() => setIsAddDataDialogOpen(false)}
+                onAddData={handleAddDataFromDialog}
             />
 
             {/* Add Visualization Dialog */}
