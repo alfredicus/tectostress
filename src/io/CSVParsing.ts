@@ -330,6 +330,8 @@ function validateGeologicalData(
     const planeDataTypes = [
         'striated plane',
         'extension fracture',
+        'joint',
+        'dyke',
         'stylolite interface',
         'dilation band',
         'compaction band',

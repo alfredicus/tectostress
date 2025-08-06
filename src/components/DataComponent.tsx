@@ -1,19 +1,26 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     TableContainer, Table, TableHead, TableBody,
     TableRow, TableCell, Button, Typography
 } from '@mui/material';
-import { Plus, X, GripHorizontal, CheckSquare, Square, Upload } from 'lucide-react';
+import { Plus, X, GripHorizontal, CheckSquare, Square, Upload, Eye, BarChart3 } from 'lucide-react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { DataFiles, DataFile } from './DataFile';
-import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing'
-
+import { DataFile } from './DataFile';
+import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing';
+import { Visualization, VisualizationState } from './types';
+import { VisualizationComponent } from './VisualizationComponent';
+import { 
+    useVisualizationManager, 
+    AddVisualizationDialog, 
+    VisualizationGrid, 
+    DATA_VISUALIZATIONS 
+} from './VisualizationManager';
 
 interface DataComponentProps {
-    files: DataFiles;
+    files: DataFile[];
     onFileLoaded: (file: DataFile) => void;
     onFileRemoved: (fileId: string) => void;
 }
@@ -24,8 +31,47 @@ const DataComponent: React.FC<DataComponentProps> = ({
     onFileRemoved
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
+    const [containerWidth, setContainerWidth] = useState<number>(1400);
+    
+    // Use the visualization manager hook with DATA_VISUALIZATIONS
+    const {
+        visualizations,
+        isDialogOpen,
+        selectedFileForView,
+        openAddDialog,
+        closeAddDialog,
+        createVisualization,
+        setSelectedFileForView,
+        handleVisualizationRemoved,
+        handleVisualizationLayoutChanged,
+        handleVisualizationStateChanged
+    } = useVisualizationManager({
+        files,
+        availableTypes: DATA_VISUALIZATIONS
+    });
+
+    // Measure container width for responsive grid
+    useEffect(() => {
+        const updateWidth = () => {
+            if (containerRef.current) {
+                const newWidth = containerRef.current.clientWidth;
+                setContainerWidth(newWidth);
+            }
+        };
+
+        updateWidth();
+        const resizeObserver = new ResizeObserver(updateWidth);
+        if (containerRef.current) {
+            resizeObserver.observe(containerRef.current);
+        }
+
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, []);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileList = event.target.files;
@@ -39,7 +85,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 try {
                     const retType: ProcessCSVReturnType = processCSV(e.target?.result as string);
 
-                    // Add validation
                     if (!retType || !retType.data || !Array.isArray(retType.data)) {
                         console.error(`Invalid data structure from file: ${file.name}`);
                         return;
@@ -71,7 +116,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
             reader.readAsText(file);
         });
 
-        // Clear the input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -107,11 +151,9 @@ const DataComponent: React.FC<DataComponentProps> = ({
 
     const toggleSelectAll = () => {
         if (selectAll || selectedFiles.length === files.length) {
-            // If all are selected or selectAll is true, deselect all
             setSelectedFiles([]);
             setSelectAll(false);
         } else {
-            // Select all files
             setSelectedFiles(files.map(file => file.id));
             setSelectAll(true);
         }
@@ -124,7 +166,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
     };
 
     return (
-        <div className="p-6 max-w-6xl mx-auto">
+        <div ref={containerRef} className="p-6 max-w-6xl mx-auto">
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <Typography variant="h5">Data</Typography>
                 <div className="flex items-center gap-2">
@@ -133,8 +176,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         ref={fileInputRef}
                         onChange={handleFileUpload}
                         className="hidden"
-                        accept=".csv;*.col"
-                        multiple // Enable multiple file selection
+                        accept=".csv,.col"
+                        multiple
                     />
                     <Button
                         variant="contained"
@@ -143,6 +186,19 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     >
                         Upload Files
                     </Button>
+                    
+                    {/* Add View button */}
+                    {files.length > 0 && (
+                        <Button
+                            variant="outlined"
+                            startIcon={<Eye size={20} />}
+                            onClick={() => openAddDialog()}
+                            className="ml-2"
+                        >
+                            Add View
+                        </Button>
+                    )}
+                    
                     {selectedFiles.length > 0 && (
                         <Button
                             variant="outlined"
@@ -177,90 +233,146 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 </div>
             )}
 
-            <GridLayout
-                className="layout"
-                layout={files.map(file => ({
-                    i: file.id,
-                    x: file.layout.x,
-                    y: file.layout.y,
-                    w: file.layout.w,
-                    h: file.layout.h,
-                    isDraggable: true
-                }))}
-                cols={4}
-                rowHeight={150}
-                width={1200}
-                onLayoutChange={handleLayoutChange}
-                draggableHandle=".drag-handle"
-            >
-                {files.map((file) => (
-                    <div
-                        key={file.id}
-                        className={`border rounded-md shadow-sm overflow-hidden ${selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
-                            }`}
+            {/* Data Files Grid */}
+            {files.length > 0 && (
+                <div className="mb-8">
+                    <GridLayout
+                        className="layout"
+                        layout={files.map(file => ({
+                            i: file.id,
+                            x: file.layout.x,
+                            y: file.layout.y,
+                            w: file.layout.w,
+                            h: file.layout.h,
+                            isDraggable: true
+                        }))}
+                        cols={4}
+                        rowHeight={150}
+                        width={containerWidth}
+                        onLayoutChange={handleLayoutChange}
+                        draggableHandle=".drag-handle"
                     >
-                        <div className="flex items-center justify-between p-2 border-b bg-gray-50">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => toggleSelectFile(file.id)}
-                                    className="flex items-center justify-center w-5 h-5"
-                                >
-                                    {selectedFiles.includes(file.id) ? (
-                                        <CheckSquare className="w-5 h-5 text-blue-500" />
-                                    ) : (
-                                        <Square className="w-5 h-5 text-gray-400" />
-                                    )}
-                                </button>
-                                <div className="drag-handle cursor-move p-1 hover:bg-gray-200 rounded">
-                                    <GripHorizontal size={20} className="text-gray-400" />
-                                </div>
-                                <Typography variant="subtitle1">{file.name}</Typography>
-                            </div>
-                            <Button
-                                onClick={() => onFileRemoved(file.id)}
-                                className="text-gray-400 hover:text-red-500 p-1"
-                                style={{ minWidth: 'auto', padding: '6px' }}
+                        {files.map((file) => (
+                            <div
+                                key={file.id}
+                                className={`border rounded-md shadow-sm overflow-hidden ${
+                                    selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
+                                }`}
                             >
-                                <X size={20} />
-                            </Button>
-                        </div>
-                        <div className="p-4 h-[calc(100%-3rem)] overflow-auto">
-                            <TableContainer>
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            {file.headers.map((header, index) => (
-                                                <TableCell
-                                                    key={index}
-                                                    style={{ fontWeight: 'bold', whiteSpace: 'nowrap', backgroundColor: '#f5f5f5' }}
-                                                >
-                                                    {header}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {file.content.map((row: any, rowIndex: number) => (
-                                            <TableRow hover>
-                                                {
-                                                    Object.entries(row).map(([name, value]) => (
+                                <div className="flex items-center justify-between p-2 border-b bg-gray-50">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => toggleSelectFile(file.id)}
+                                            className="flex items-center justify-center w-5 h-5"
+                                        >
+                                            {selectedFiles.includes(file.id) ? (
+                                                <CheckSquare className="w-5 h-5 text-blue-500" />
+                                            ) : (
+                                                <Square className="w-5 h-5 text-gray-400" />
+                                            )}
+                                        </button>
+                                        <div className="drag-handle cursor-move p-1 hover:bg-gray-200 rounded">
+                                            <GripHorizontal size={20} className="text-gray-400" />
+                                        </div>
+                                        <Typography variant="subtitle1">{file.name}</Typography>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => openAddDialog(file.id)}
+                                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
+                                            title="Create visualization from this file"
+                                        >
+                                            <BarChart3 size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => onFileRemoved(file.id)}
+                                            className="text-gray-400 hover:text-red-500 p-1"
+                                            title="Remove file"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="p-4 h-[calc(100%-3rem)] overflow-auto">
+                                    <TableContainer>
+                                        <Table size="small">
+                                            <TableHead>
+                                                <TableRow>
+                                                    {file.headers.map((header, index) => (
                                                         <TableCell
-                                                            key={name}
-                                                            style={{ whiteSpace: 'nowrap' }}
+                                                            key={index}
+                                                            style={{ 
+                                                                fontWeight: 'bold', 
+                                                                whiteSpace: 'nowrap', 
+                                                                backgroundColor: '#f5f5f5' 
+                                                            }}
                                                         >
-                                                            {value}
+                                                            {header}
                                                         </TableCell>
-                                                    ))
-                                                }
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        </div>
-                    </div>
-                ))}
-            </GridLayout>
+                                                    ))}
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {file.content.slice(0, 10).map((row: any, rowIndex: number) => (
+                                                    <TableRow key={rowIndex} hover>
+                                                        {Object.entries(row).map(([name, value]) => (
+                                                            <TableCell
+                                                                key={name}
+                                                                style={{ whiteSpace: 'nowrap' }}
+                                                            >
+                                                                {String(value)}
+                                                            </TableCell>
+                                                        ))}
+                                                    </TableRow>
+                                                ))}
+                                                {file.content.length > 10 && (
+                                                    <TableRow>
+                                                        <TableCell 
+                                                            colSpan={file.headers.length}
+                                                            style={{ 
+                                                                textAlign: 'center', 
+                                                                fontStyle: 'italic', 
+                                                                color: '#666' 
+                                                            }}
+                                                        >
+                                                            ... and {file.content.length - 10} more rows
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                </div>
+                            </div>
+                        ))}
+                    </GridLayout>
+                </div>
+            )}
+
+            {/* Integrated Visualizations Grid */}
+            <VisualizationGrid
+                visualizations={visualizations}
+                files={files}
+                onVisualizationRemoved={handleVisualizationRemoved}
+                onLayoutChanged={handleVisualizationLayoutChanged}
+                onVisualizationStateChanged={handleVisualizationStateChanged}
+                containerWidth={containerWidth}
+                gridCols={12}
+                rowHeight={120}
+            />
+
+            {/* Add Visualization Dialog */}
+            <AddVisualizationDialog
+                isOpen={isDialogOpen}
+                onClose={closeAddDialog}
+                onCreateVisualization={createVisualization}
+                availableTypes={DATA_VISUALIZATIONS}
+                files={files}
+                selectedFileForView={selectedFileForView}
+                onSelectedFileChange={setSelectedFileForView}
+                showFileSelector={true}
+                dialogTitle="Add Data Visualization"
+            />
         </div>
     );
 };

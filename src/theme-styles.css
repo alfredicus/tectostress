@@ -1,0 +1,537 @@
+/* theme-styles.css - Complete theme system styles */
+
+/* ============================================================================ */
+/* ROOT VARIABLES - Light Theme (Default) */
+/* ============================================================================ */
+
+:root {
+  /* Background colors */
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f8fafc;
+  --color-background-tertiary: #f1f5f9;
+  --color-background-elevated: #ffffff;
+  --color-background-paper: #ffffff;
+  
+  /* Text colors */
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #64748b;
+  --color-text-inverse: #ffffff;
+  
+  /* Border colors */
+  --color-border-primary: #e2e8f0;
+  --color-border-secondary: #cbd5e1;
+  --color-border-focus: #3b82f6;
+  
+  /* Status colors */
+  --color-status-success: #10b981;
+  --color-status-warning: #f59e0b;
+  --color-status-error: #ef4444;
+  --color-status-info: #3b82f6;
+  
+  /* Interactive colors */
+  --color-interactive-primary: #3b82f6;
+  --color-interactive-primary-hover: #2563eb;
+  --color-interactive-secondary: #6b7280;
+  --color-interactive-secondary-hover: #4b5563;
+  --color-interactive-danger: #ef4444;
+  --color-interactive-danger-hover: #dc2626;
+  
+  /* Visualization colors */
+  --color-visualization-rose: #ff6b6b;
+  --color-visualization-histogram: #4ecdc4;
+  --color-visualization-wulff: #45b7d1;
+  --color-visualization-mohr: #96ceb4;
+  --color-visualization-grid: #e5e7eb;
+  --color-visualization-axis: #374151;
+  
+  /* Component colors */
+  --color-components-header: #1f2937;
+  --color-components-sidebar: #f9fafb;
+  --color-components-card: #ffffff;
+  --color-components-input: #ffffff;
+  --color-components-button: #3b82f6;
+  --color-components-console: #1f2937;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  
+  /* Spacing */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+}
+
+/* ============================================================================ */
+/* DARK THEME VARIABLES */
+/* ============================================================================ */
+
+.dark {
+  /* Background colors */
+  --color-background-primary: #0f172a;
+  --color-background-secondary: #1e293b;
+  --color-background-tertiary: #334155;
+  --color-background-elevated: #1e293b;
+  --color-background-paper: #334155;
+  
+  /* Text colors */
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-tertiary: #94a3b8;
+  --color-text-inverse: #1e293b;
+  
+  /* Border colors */
+  --color-border-primary: #334155;
+  --color-border-secondary: #475569;
+  --color-border-focus: #60a5fa;
+  
+  /* Status colors */
+  --color-status-success: #34d399;
+  --color-status-warning: #fbbf24;
+  --color-status-error: #f87171;
+  --color-status-info: #60a5fa;
+  
+  /* Interactive colors */
+  --color-interactive-primary: #60a5fa;
+  --color-interactive-primary-hover: #3b82f6;
+  --color-interactive-secondary: #9ca3af;
+  --color-interactive-secondary-hover: #6b7280;
+  --color-interactive-danger: #f87171;
+  --color-interactive-danger-hover: #ef4444;
+  
+  /* Visualization colors - adjusted for dark theme */
+  --color-visualization-rose: #ff8a80;
+  --color-visualization-histogram: #64d8cb;
+  --color-visualization-wulff: #64b5f6;
+  --color-visualization-mohr: #aed581;
+  --color-visualization-grid: #4b5563;
+  --color-visualization-axis: #e5e7eb;
+  
+  /* Component colors */
+  --color-components-header: #0f172a;
+  --color-components-sidebar: #1e293b;
+  --color-components-card: #334155;
+  --color-components-input: #334155;
+  --color-components-button: #60a5fa;
+  --color-components-console: #0f172a;
+  
+  /* Shadows - adjusted for dark theme */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+}
+
+/* ============================================================================ */
+/* COMPONENT SPECIFIC STYLES */
+/* ============================================================================ */
+
+/* Base styles that respect theme */
+.themed-background {
+  background-color: var(--color-background-primary);
+  color: var(--color-text-primary);
+}
+
+.themed-card {
+  background-color: var(--color-components-card);
+  border: 1px solid var(--color-border-primary);
+  box-shadow: var(--shadow-md);
+  border-radius: 0.5rem;
+}
+
+.themed-input {
+  background-color: var(--color-components-input);
+  border: 1px solid var(--color-border-primary);
+  color: var(--color-text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.themed-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+}
+
+.themed-button-primary {
+  background-color: var(--color-interactive-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.themed-button-primary:hover {
+  background-color: var(--color-interactive-primary-hover);
+}
+
+.themed-button-secondary {
+  background-color: transparent;
+  color: var(--color-interactive-secondary);
+  border: 1px solid var(--color-border-primary);
+  transition: all 0.2s;
+}
+
+.themed-button-secondary:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-interactive-secondary-hover);
+}
+
+/* ============================================================================ */
+/* VISUALIZATION SPECIFIC STYLES */
+/* ============================================================================ */
+
+.visualization-container {
+  background-color: var(--color-background-paper);
+  border: 1px solid var(--color-border-primary);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.visualization-header {
+  background-color: var(--color-background-secondary);
+  border-bottom: 1px solid var(--color-border-primary);
+  padding: var(--spacing-sm);
+}
+
+.visualization-grid {
+  stroke: var(--color-visualization-grid);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.visualization-axis {
+  stroke: var(--color-visualization-axis);
+  stroke-width: 2;
+}
+
+.visualization-text {
+  fill: var(--color-text-primary);
+  font-size: 12px;
+}
+
+/* Rose diagram specific */
+.rose-diagram-sector {
+  fill: var(--color-visualization-rose);
+  stroke: var(--color-visualization-axis);
+  stroke-width: 1;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.rose-diagram-sector:hover {
+  opacity: 1;
+}
+
+/* Histogram specific */
+.histogram-bar {
+  fill: var(--color-visualization-histogram);
+  stroke: var(--color-visualization-axis);
+  stroke-width: 1;
+  transition: opacity 0.2s;
+}
+
+.histogram-bar:hover {
+  opacity: 0.8;
+}
+
+/* Mohr circle specific */
+.mohr-circle {
+  fill: none;
+  stroke: var(--color-visualization-mohr);
+  stroke-width: 2;
+}
+
+.mohr-stress-point {
+  fill: var(--color-interactive-primary);
+  stroke: var(--color-background-paper);
+  stroke-width: 2;
+}
+
+/* ============================================================================ */
+/* CONSOLE STYLES */
+/* ============================================================================ */
+
+.console-container {
+  background-color: var(--color-components-console);
+  color: var(--color-text-inverse);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.console-header {
+  background-color: var(--color-background-secondary);
+  border-bottom: 1px solid var(--color-border-primary);
+}
+
+.console-message {
+  border-left: 4px solid transparent;
+  padding: var(--spacing-sm);
+  margin: 0.25rem 0;
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.console-message.info {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-left-color: var(--color-status-info);
+}
+
+.console-message.warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-left-color: var(--color-status-warning);
+}
+
+.console-message.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left-color: var(--color-status-error);
+}
+
+.console-message.success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-left-color: var(--color-status-success);
+}
+
+/* ============================================================================ */
+/* GRID LAYOUT INTEGRATION */
+/* ============================================================================ */
+
+.react-grid-layout {
+  position: relative;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top;
+  background-color: var(--color-components-card);
+  border: 1px solid var(--color-border-primary);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.react-grid-item.react-grid-item-resizing {
+  transition: none;
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-grid-item-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+  box-shadow: var(--shadow-xl);
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNiIgaGVpZ2h0PSI2IiB2aWV3Qm94PSIwIDAgNiA2IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZG90cyBmaWxsPSIjODg4IiBkPSJtMTUgMTJjMCAyLjQ4NS0yLjAxNSA0LjUtNCA0LjVzLTQtMi4wMTUtNC00LjUgMi4wMTUtNC41IDQtNC41IDQgMi4wMTUgNCA0LjV6bTAgNWMwIDIuNDg1LTIuMDE1IDQuNS00IDQuNXMtNC0yLjAxNS00LTQuNSAyLjAxNS00LjUgNC00LjUgNCAyLjAxNSA0IDQuNXoiLz4KPHN2Zz4=');
+  background-position: bottom right;
+  padding: 0 3px 3px 0;
+  background-repeat: no-repeat;
+  background-origin: content-box;
+  box-sizing: border-box;
+  cursor: se-resize;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 0.8;
+}
+
+.react-grid-placeholder {
+  background-color: var(--color-interactive-primary);
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+  border-radius: 0.5rem;
+}
+
+/* ============================================================================ */
+/* ANIMATION AND TRANSITIONS */
+/* ============================================================================ */
+
+.theme-transition {
+  transition: background-color 0.3s ease, 
+              color 0.3s ease, 
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================================================ */
+/* RESPONSIVE DESIGN */
+/* ============================================================================ */
+
+@media (max-width: 768px) {
+  :root {
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+  }
+  
+  .themed-card {
+    border-radius: 0.25rem;
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .react-grid-item {
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .react-grid-item > .react-resizable-handle {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+/* ============================================================================ */
+/* ACCESSIBILITY */
+/* ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transition,
+  .react-grid-item,
+  .themed-button-primary,
+  .themed-button-secondary,
+  .themed-input {
+    transition: none;
+  }
+  
+  .fade-in,
+  .slide-in-right,
+  .scale-in {
+    animation: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --color-border-primary: #000000;
+    --color-border-secondary: #000000;
+    --color-text-primary: #000000;
+    --color-text-secondary: #000000;
+  }
+  
+  .dark {
+    --color-border-primary: #ffffff;
+    --color-border-secondary: #ffffff;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #ffffff;
+  }
+}
+
+/* Focus indicators */
+.themed-input:focus,
+.themed-button-primary:focus,
+.themed-button-secondary:focus {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================ */
+/* PRINTING STYLES */
+/* ============================================================================ */
+
+@media print {
+  .themed-background,
+  .themed-card,
+  .visualization-container {
+    background-color: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+  
+  .react-grid-item > .react-resizable-handle {
+    display: none;
+  }
+  
+  .console-container {
+    display: none;
+  }
+}
+
+/* ============================================================================ */
+/* UTILITY CLASSES */
+/* ============================================================================ */
+
+.text-themed-primary { color: var(--color-text-primary); }
+.text-themed-secondary { color: var(--color-text-secondary); }
+.text-themed-tertiary { color: var(--color-text-tertiary); }
+
+.bg-themed-primary { background-color: var(--color-background-primary); }
+.bg-themed-secondary { background-color: var(--color-background-secondary); }
+.bg-themed-tertiary { background-color: var(--color-background-tertiary); }
+
+.border-themed-primary { border-color: var(--color-border-primary); }
+.border-themed-secondary { border-color: var(--color-border-secondary); }
+
+.shadow-themed-sm { box-shadow: var(--shadow-sm); }
+.shadow-themed-md { box-shadow: var(--shadow-md); }
+.shadow-themed-lg { box-shadow: var(--shadow-lg); }
+.shadow-themed-xl { box-shadow: var(--shadow-xl); }
+
+/* Status colors */
+.text-success { color: var(--color-status-success); }
+.text-warning { color: var(--color-status-warning); }
+.text-error { color: var(--color-status-error); }
+.text-info { color: var(--color-status-info); }
+
+.bg-success { background-color: var(--color-status-success); }
+.bg-warning { background-color: var(--color-status-warning); }
+.bg-error { background-color: var(--color-status-error); }
+.bg-info { background-color: var(--color-status-info); }

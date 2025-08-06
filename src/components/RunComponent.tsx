@@ -9,8 +9,13 @@ import { Download, FileText } from 'lucide-react';
 import { ConsoleComponent } from './ConsoleComponent';
 import { StressSolution } from './types';
 import { ExportDialog } from './ExportDialog';
+import { 
+    StressAnalysisComponent, 
+    VisualizationContext, 
+    VisualizationRegistry 
+} from './VisualizationTypeRegistry';
 
-// Configuration interfaces
+// Configuration interfaces (same as before)
 interface ParamConfig {
     name: string;
     display: string;
@@ -55,7 +60,7 @@ interface RunComponentProps {
     }) => void;
 }
 
-// Configuration data
+// Configuration data (same as before)
 const CONFIG_DATA: ConfigData = {
     search: {
         display: "Search method",
@@ -139,7 +144,7 @@ const CONFIG_DATA: ConfigData = {
     }
 };
 
-// Add this interface near your other interfaces
+// Console message interface
 interface ConsoleMessage {
     id: string;
     timestamp: Date;
@@ -167,7 +172,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
     persistentState,
     onStateChange
 }) => {
-    // State management
+    // State management (same as before, but simplified for key parts)
     const [selectedMethod, setSelectedMethod] = useState<string>('');
     const [allParams, setAllParams] = useState<Record<string, Record<string, number>>>({});
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -182,10 +187,9 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [isComputing, setIsComputing] = useState<boolean>(false);
     const [computingMessage, setComputingMessage] = useState<string>('');
     const [computingProgress, setComputingProgress] = useState<number>(0);
-
     const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
 
-    // Add console-related state
+    // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
 
@@ -243,7 +247,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
         const initialParams = persistentState?.allParams || initializeParams();
         setAllParams(initialParams);
 
-        // Determine initial method
         let initialMethod = persistentState?.selectedMethod;
         if (initialMethod) {
             const method = CONFIG_DATA.search.list.find(m => m.name === initialMethod);
@@ -345,7 +348,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
         });
     };
 
-    // Main simulation function
+    // Main simulation function (same as before, but with additional visualization data preparation)
     const startSimulation = useCallback(async () => {
         if (selectedFiles.length === 0) return;
 
@@ -355,8 +358,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
         try {
             setConsoleMessages([]);
-
-            // Initialize computing state
             setIsComputing(true);
             setComputingMessage('Initializing computation...');
             setComputingProgress(0);
@@ -368,7 +369,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
             addConsoleMessage('info', `Selected method: ${selectedMethod}`);
             addConsoleMessage('info', `Processing ${selectedFilesData.length} file(s): ${selectedFilesData.map(f => f.name).join(', ')}`);
 
-
             await delay(50);
 
             // Setup inversion method
@@ -377,15 +377,12 @@ const RunComponent: React.FC<RunComponentProps> = ({
             addConsoleMessage('info', 'Setting up inversion method...');
             await delay(50);
 
-            // console.log(currentParams)
-
             const inv = new InverseMethod();
             const searchMethod: SearchMethod = SearchMethodFactory.create(
                 selectedMethod,
                 currentParams
             );
 
-            // Log current parameters
             const paramDetails = Object.entries(currentParams)
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('\n');
@@ -422,7 +419,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
                                 `File "${file.name}", row ${index + 1}: Unsupported data type "${dataType}"`
                             );
                             addConsoleMessage('error', `Unsupported data type: ${dataType}`, `File: ${file.name}, Row: ${index + 1}`);
-
                             return;
                         }
 
@@ -440,7 +436,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 });
             });
 
-            // Log processing results
             addConsoleMessage('info', `Data processing completed: ${processingStats.processed}/${processingStats.total} items processed successfully`);
 
             if (processingStats.errors.length > 0) {
@@ -451,7 +446,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 }
             }
 
-            // Validate we have enough data to continue
             if (processingStats.processed === 0) {
                 const errorMsg = `No valid data could be processed. Found unsupported types: ${Array.from(processingStats.unsupportedTypes).join(', ')}`;
                 addConsoleMessage('error', 'No valid data to process', errorMsg);
@@ -461,30 +455,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
             if (processingStats.processed < 3) {
                 addConsoleMessage('warning', `Only ${processingStats.processed} data items were processed. Results may not be reliable.`);
             }
-
-            // Update UI with processing results
-            // if (processingStats.errors.length > 0) {
-            //     console.warn(`Processing completed with ${processingStats.errors.length} warnings:`);
-            //     processingStats.errors.forEach(error => console.warn(error));
-
-            //     // Show summary message
-            //     const summaryMessage = `Processed ${processingStats.processed} out of ${processingStats.total} data items. ${processingStats.errors.length} items were skipped due to errors.
-            //     Unsupported types: ${Array.from(processingStats.unsupportedTypes).join(', ')}`;
-
-            //     // You could show this in a toast notification or status message
-            //     setComputingMessage(summaryMessage);
-            //     await delay(2000); // Show message for 2 seconds
-            // }
-
-            // // Validate we have enough data to continue
-            // if (processingStats.processed === 0) {
-            //     throw new Error(`No valid data could be processed. Found unsupported types: ${Array.from(processingStats.unsupportedTypes).join(', ')}`);
-            // }
-
-            // if (processingStats.processed < 3) {
-            //     console.warn(`Only ${processingStats.processed} data items were processed. Results may not be reliable.`);
-            // }
-
 
             // Run inversion
             setComputingMessage('Running stress inversion...');
@@ -501,20 +471,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             await delay(50);
 
             const stressTensor = sol.stressTensorSolution;
-
-            {
-                console.log('🔍 Stress tensor before analysis:', stressTensor);
-                console.log('🔍 Stress tensor type:', typeof stressTensor);
-                console.log('🔍 Stress tensor structure:', JSON.stringify(stressTensor, null, 2));
-            }
-
             const analysis = decomposeStressTensor(stressTensor);
-
-            {
-                console.log('🔍 Analysis result:', analysis);
-                console.log('🔍 Analysis has trendS1?:', 'trendS1' in analysis);
-            }
-
             const eulerDegrees = eulerAnglesToDegrees(analysis.eulerAngles);
             const calculatedStressRatio = calculateStressRatio(analysis.eigenvalues);
 
@@ -529,19 +486,24 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setComputingProgress(100);
             await delay(100);
 
-            console.log('=== STRESS TENSOR ANALYSIS ===');
-            console.log('Original stress ratio:', sol.stressRatio);
-            console.log('Calculated stress ratio:', calculatedStressRatio);
-
-            // Set final results
-            setSolution({
+            // Set final results with enhanced data for visualizations
+            const enhancedSolution: StressSolution = {
                 ...sol,
                 analysis: {
                     ...analysis,
                     eulerAnglesDegrees: eulerDegrees,
                     calculatedStressRatio
+                },
+                // Add visualization-ready data
+                visualizationData: {
+                    inputData: selectedFilesData,
+                    processedDataCount: processingStats.processed,
+                    methodParameters: currentParams,
+                    processingStatistics: processingStats
                 }
-            });
+            };
+
+            setSolution(enhancedSolution);
             setSimulationStatus({ status: 'Completed', progress: 100 });
             setShowResultsPanel(true);
 
@@ -563,7 +525,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
         }
     }, [selectedFiles, files, selectedMethod, currentParams, handleSimulationProgress, addConsoleMessage]);
 
-    // Export functionality
+    // Export functionality (same as before)
     const exportResults = useCallback((filename: string, format: 'json' | 'csv' | 'txt') => {
         if (!solution) return;
 
@@ -576,6 +538,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             files.find(f => f.id === id)?.name || 'unknown'
         ).join(', ');
 
+        // Export logic remains the same as before...
         switch (format) {
             case 'json':
                 content = JSON.stringify({
@@ -707,7 +670,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
         addConsoleMessage('success', `Results exported to ${filename}.${fileExtension}`);
     }, [solution, selectedMethod, currentParams, selectedFiles, files, addConsoleMessage]);
 
-    // Results panel component
+    // Results panel component (enhanced with integration information)
     const ResultsPanel = () => {
         if (!solution) return null;
 
@@ -763,134 +726,97 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             </div>
                         </div>
 
-                        {/* Euler Angles */}
-                        {solution.analysis && (
-                            <div>
-                                <h4 className="text-base font-medium mb-3">Euler Angles (ZXZ Convention)</h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                                        <h5 className="text-sm font-medium text-purple-800 mb-2">φ (Phi)</h5>
-                                        <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.phi.toFixed(1)}°</p>
-                                        <p className="text-xs text-gray-600">{solution.analysis.eulerAngles.phi.toFixed(4)} rad</p>
-                                    </div>
-                                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                                        <h5 className="text-sm font-medium text-purple-800 mb-2">θ (Theta)</h5>
-                                        <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.theta.toFixed(1)}°</p>
-                                        <p className="text-xs text-gray-600">{solution.analysis.eulerAngles.theta.toFixed(4)} rad</p>
-                                    </div>
-                                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                                        <h5 className="text-sm font-medium text-purple-800 mb-2">ψ (Psi)</h5>
-                                        <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.psi.toFixed(1)}°</p>
-                                        <p className="text-xs text-gray-600">{solution.analysis.eulerAngles.psi.toFixed(4)} rad</p>
-                                    </div>
-                                </div>
+                        {/* Integration notice */}
+                        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-200">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-purple-600">🎯</span>
+                                <h4 className="text-sm font-medium text-purple-800">Results Available for Visualization</h4>
                             </div>
-                        )}
-
-                        {/* Principal Stresses */}
-                        {solution.analysis && (
-                            <div>
-                                <h4 className="text-base font-medium mb-3">Principal Stresses</h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="bg-red-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-red-800 mb-2">σ₁ (Maximum)</h5>
-                                        <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma1.value.toFixed(4)}</p>
-                                        <p className="text-xs text-gray-600">
-                                            Direction: [{solution.analysis.principalStresses.sigma1.direction.map(v => v.toFixed(3)).join(', ')}]
-                                        </p>
-                                    </div>
-                                    <div className="bg-yellow-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-yellow-800 mb-2">σ₂ (Intermediate)</h5>
-                                        <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma2.value.toFixed(4)}</p>
-                                        <p className="text-xs text-gray-600">
-                                            Direction: [{solution.analysis.principalStresses.sigma2.direction.map(v => v.toFixed(3)).join(', ')}]
-                                        </p>
-                                    </div>
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-blue-800 mb-2">σ₃ (Minimum)</h5>
-                                        <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma3.value.toFixed(4)}</p>
-                                        <p className="text-xs text-gray-600">
-                                            Direction: [{solution.analysis.principalStresses.sigma3.direction.map(v => v.toFixed(3)).join(', ')}]
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Add this new section for Eigenvectors */}
-                        {solution.analysis && (
-                            <div>
-                                <h4 className="text-base font-medium mb-3">Eigenvector Coordinates</h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="bg-red-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-red-800 mb-2">v₁ (σ₁ direction)</h5>
-                                        <div className="space-y-1">
-                                            <p className="text-sm"><span className="font-medium">X:</span> {solution.analysis.eigenvectors[0][0].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[0][1].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[0][2].toFixed(4)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-yellow-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-yellow-800 mb-2">v₂ (σ₂ direction)</h5>
-                                        <div className="space-y-1">
-                                            <p className="text-sm"><span className="font-medium">X:</span> {solution.analysis.eigenvectors[1][0].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[1][1].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[1][2].toFixed(4)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <h5 className="text-sm font-medium text-blue-800 mb-2">v₃ (σ₃ direction)</h5>
-                                        <div className="space-y-1">
-                                            <p className="text-sm"><span className="font-medium">X:</span> {solution.analysis.eigenvectors[2][0].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[2][1].toFixed(4)}</p>
-                                            <p className="text-sm"><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[2][2].toFixed(4)}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Stress tensor matrix */}
-                        <div>
-                            <h4 className="text-base font-medium mb-3">Stress Tensor Solution</h4>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">X</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Y</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Z</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {solution.stressTensorSolution.map((row, rowIndex) => (
-                                            <tr key={rowIndex}>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                    {rowIndex === 0 ? 'X' : rowIndex === 1 ? 'Y' : 'Z'}
-                                                </td>
-                                                {row.map((value, colIndex) => (
-                                                    <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {value.toFixed(4)}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <p className="text-sm text-purple-700">
+                                Your stress inversion results are now available. Use the visualizations below to explore 
+                                the stress state, view Mohr circles, plot data on stereonets, and analyze the solution.
+                            </p>
                         </div>
+
+                        {/* Euler Angles and other results - same as before but condensed for space */}
+                        {solution.analysis && (
+                            <>
+                                <div>
+                                    <h4 className="text-base font-medium mb-3">Euler Angles (ZXZ Convention)</h4>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="bg-purple-50 p-4 rounded-lg text-center">
+                                            <h5 className="text-sm font-medium text-purple-800 mb-2">φ (Phi)</h5>
+                                            <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.phi.toFixed(1)}°</p>
+                                        </div>
+                                        <div className="bg-purple-50 p-4 rounded-lg text-center">
+                                            <h5 className="text-sm font-medium text-purple-800 mb-2">θ (Theta)</h5>
+                                            <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.theta.toFixed(1)}°</p>
+                                        </div>
+                                        <div className="bg-purple-50 p-4 rounded-lg text-center">
+                                            <h5 className="text-sm font-medium text-purple-800 mb-2">ψ (Psi)</h5>
+                                            <p className="text-xl font-bold">{solution.analysis.eulerAnglesDegrees.psi.toFixed(1)}°</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 className="text-base font-medium mb-3">Principal Stresses</h4>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="bg-red-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-red-800 mb-2">σ₁ (Maximum)</h5>
+                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma1.value.toFixed(4)}</p>
+                                        </div>
+                                        <div className="bg-yellow-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-yellow-800 mb-2">σ₂ (Intermediate)</h5>
+                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma2.value.toFixed(4)}</p>
+                                        </div>
+                                        <div className="bg-blue-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-blue-800 mb-2">σ₃ (Minimum)</h5>
+                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma3.value.toFixed(4)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
         );
     };
 
+    // Create enhanced files with solution data for visualizations
+    const enhancedFiles = useMemo(() => {
+        if (!solution) return files;
+
+        // Create a virtual "results" file with the solution data
+        const resultsFile: DataFile = {
+            id: 'stress-inversion-results',
+            name: 'Stress Inversion Results',
+            headers: ['parameter', 'value', 'unit'],
+            content: [
+                { parameter: 'stress_ratio', value: solution.stressRatio, unit: '' },
+                { parameter: 'fit_percentage', value: (1 - solution.misfit) * 100, unit: '%' },
+                { parameter: 'misfit_degrees', value: solution.misfit * 180 / Math.PI, unit: 'degrees' },
+                ...(solution.analysis ? [
+                    { parameter: 'sigma1', value: solution.analysis.principalStresses.sigma1.value, unit: '' },
+                    { parameter: 'sigma2', value: solution.analysis.principalStresses.sigma2.value, unit: '' },
+                    { parameter: 'sigma3', value: solution.analysis.principalStresses.sigma3.value, unit: '' },
+                    { parameter: 'phi_degrees', value: solution.analysis.eulerAnglesDegrees.phi, unit: 'degrees' },
+                    { parameter: 'theta_degrees', value: solution.analysis.eulerAnglesDegrees.theta, unit: 'degrees' },
+                    { parameter: 'psi_degrees', value: solution.analysis.eulerAnglesDegrees.psi, unit: 'degrees' }
+                ] : [])
+            ],
+            layout: { x: 0, y: 0, w: 6, h: 3 }
+        };
+
+        return [...files, resultsFile];
+    }, [files, solution]);
+
     return (
         <div className="bg-white rounded-lg shadow-lg p-6 max-w-6xl mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl">Run</h2>
+                <h2 className="text-2xl">Run Stress Inversion</h2>
                 <div className="flex items-center">
                     <div className="mr-4">
                         <label htmlFor="search-method" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1063,7 +989,34 @@ const RunComponent: React.FC<RunComponentProps> = ({
             {/* Results panel */}
             <ResultsPanel />
 
-            {/* Console Component - Add this after ResultsPanel */}
+            {/* Integrated Stress Analysis Visualizations */}
+            {solution && (
+                <StressAnalysisComponent
+                    files={enhancedFiles}
+                    containerWidth={1200}
+                    gridCols={12}
+                    rowHeight={120}
+                    addButtonText="Add Analysis View"
+                    dialogTitle="Add Stress Analysis Visualization"
+                    showFileSelector={true}
+                >
+                    <div className="mt-8 mb-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">📊</span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold text-gray-800">Stress Analysis Visualizations</h3>
+                                <p className="text-sm text-gray-600">
+                                    Explore your stress inversion results with interactive visualizations
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </StressAnalysisComponent>
+            )}
+
+            {/* Console Component */}
             <ConsoleComponent
                 messages={consoleMessages}
                 onClear={clearConsole}
@@ -1093,7 +1046,6 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 onExport={exportResults}
                 solution={solution}
             />
-
         </div>
     );
 };
