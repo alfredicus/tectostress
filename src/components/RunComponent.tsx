@@ -9,11 +9,12 @@ import { Download, FileText } from 'lucide-react';
 import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { StressSolution } from './types';
 import { ExportDialog } from './ExportDialog';
-import { 
-    StressAnalysisComponent, 
-    VisualizationContext, 
-    VisualizationRegistry 
+import {
+    StressAnalysisComponent,
+    VisualizationContext,
+    VisualizationRegistry
 } from './VisualizationTypeRegistry';
+import { Button } from '@mui/material';
 
 // Configuration interfaces (same as before)
 interface ParamConfig {
@@ -167,7 +168,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
     // State management (same as before, but simplified for key parts)
     const [selectedMethod, setSelectedMethod] = useState<string>('');
     const [allParams, setAllParams] = useState<Record<string, Record<string, number>>>({});
-    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    const [selectedFiles, setSelectedFiles] = useState<string[]>(files.map(file => file.id));
     const [showSettings, setShowSettings] = useState<boolean>(true);
     const [simulationStatus, setSimulationStatus] = useState<SimulationStatus>({
         status: 'En attente',
@@ -233,6 +234,12 @@ const RunComponent: React.FC<RunComponentProps> = ({
         const firstActive = CONFIG_DATA.search.list.find(m => m.active);
         return firstActive ? firstActive.name : CONFIG_DATA.search.list[0].name;
     }, []);
+
+    useEffect(() => {
+        // Auto-select all files when files list changes
+        setSelectedFiles(files.map(file => file.id));
+        // setSelectAll(true);
+    }, [files]);
 
     // Initialize state from props or defaults
     useEffect(() => {
@@ -410,7 +417,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             processingStats.errors.push(
                                 `File "${file.name}", row ${index + 1}: Unsupported data type "${dataType}"`
                             );
-                            addConsoleMessage('error', `Unsupported data type: ${dataType}`, `File: ${file.name}, Row: ${index + 1}`);
+                            addConsoleMessage('warning', `Unsupported data type: ${dataType}`, `File: ${file.name}, Row: ${index + 1}`);
                             return;
                         }
 
@@ -662,6 +669,14 @@ const RunComponent: React.FC<RunComponentProps> = ({
         addConsoleMessage('success', `Results exported to ${filename}.${fileExtension}`);
     }, [solution, selectedMethod, currentParams, selectedFiles, files, addConsoleMessage]);
 
+    const selectAllFiles = () => {
+        setSelectedFiles(files.map(file => file.id));
+    };
+
+    const deselectAllFiles = () => {
+        setSelectedFiles([]);
+    };
+
     // Results panel component (enhanced with integration information)
     const ResultsPanel = () => {
         if (!solution) return null;
@@ -695,6 +710,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     </div>
                 </div>
 
+
                 {showResultsPanel && (
                     <div className="p-6 space-y-6">
                         {/* Key metrics */}
@@ -725,7 +741,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                                 <h4 className="text-sm font-medium text-purple-800">Results Available for Visualization</h4>
                             </div>
                             <p className="text-sm text-purple-700">
-                                Your stress inversion results are now available. Use the visualizations below to explore 
+                                Your stress inversion results are now available. Use the visualizations below to explore
                                 the stress state, view Mohr circles, plot data on stereonets, and analyze the solution.
                             </p>
                         </div>
@@ -894,7 +910,25 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
             {/* File selection */}
             <div className="mb-4">
-                <h3 className="text-lg font-medium mb-2">Sélection des données</h3>
+                <h3 className="text-lg font-medium mb-2">Selected data</h3>
+                <div className="flex gap-2 mb-4">
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={selectAllFiles}
+                        disabled={selectedFiles.length === files.length}
+                    >
+                        Select All
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={deselectAllFiles}
+                        disabled={selectedFiles.length === 0}
+                    >
+                        Deselect All
+                    </Button>
+                </div>
                 <div className="space-y-2">
                     {files.length === 0 ? (
                         <div className="text-gray-500 italic">Aucun fichier disponible</div>

@@ -222,6 +222,98 @@ const DataComponent: React.FC<DataComponentProps> = ({
         setSelectAll(false);
     };
 
+    // Example data sets
+    const EXAMPLE_DATASETS = {
+        extensions: {
+            name: "Extension fractures",
+            csv: `id;type;strike;dip;dip direction
+1;Extension Fracture;120;90;NE
+2;Extension Fracture;300;90;SW`
+        },
+        stylolites: {
+            name: "Stylolite interfaces",
+            csv: `type;strike;dip;dip direction
+Stylolite Interface;30;90;NW
+Stylolite Interface;210;90;SE`
+        },
+        crystals: {
+            name: "Crystal fibers in vein",
+            csv: `type;line trend;line plunge
+Crystal fibers in vein;30;0
+Crystal fibers in vein;210;0`
+        },
+        stylolites_teeth: {
+            name: "Stylolite teeth",
+            csv: `type;line trend;line plunge
+Stylolite teeth;120;0
+Stylolite teeth;300;0`
+        },
+        dilation_bands: {
+            name: "Dilation bands",
+            csv: `type; strike; dip; dip direction
+dilation band;120;90;N
+10;dilation band;300;90;S`
+        },
+        striated_planes: {
+            name: "Striated planes",
+            csv: `type; strike; dip; dip direction; rake; strike direction; type of movement
+Striated plane;75;70;S;0;N;right lateral
+Striated plane;165;70;N;0;S;left-lateral
+striated plane;30;30;SE;90;N;Inverse
+Striated plane;75;40;E;0;N;right-lateral
+Striated plane;165;40;W;0;S;left-lateral
+Striated plane;75;30;W;0;N;right-lateral
+Striated plane;165;30;E;0;S;left-lateral`
+        },
+        neoformed: {
+            name: "Neoformed striated planes",
+            csv: `type; strike;dip;dip direction;rake;strike direction;type of movement
+neoformed striated plane;150;90;N;0;N;left-lateral
+neoformed striated plane;90;90;S;0;W;right-lateral`
+        },
+        conjugates: {
+            name: "Conjugate planes",
+            csv: `type; strike; dip; dip direction; type of movement
+conjugate plane 1;80 ;90;S;right-lateral
+conjugate plane 2;160;90;N;left-lateral`
+        }
+    };
+
+    const loadExampleData = () => {
+        const exampleKeys = Object.keys(EXAMPLE_DATASETS);
+
+        exampleKeys.forEach((key, index) => {
+            const dataset = EXAMPLE_DATASETS[key as keyof typeof EXAMPLE_DATASETS];
+
+            try {
+                const retType: ProcessCSVReturnType = processCSV(dataset.csv);
+
+                if (!retType || !retType.data || !Array.isArray(retType.data)) {
+                    addConsoleMessage('error', `Invalid data structure from example: ${dataset.name}`);
+                    return;
+                }
+
+                // Position examples in a grid
+                const row = Math.floor((files.length + index) / 2);
+                const col = (files.length + index) % 2;
+                const position = { x: col * 2, y: row * 2 };
+
+                const newFile: DataFile = {
+                    id: `example-${key}-${Date.now()}`,
+                    name: dataset.name,
+                    headers: retType.headers || [],
+                    content: retType.data || [],
+                    layout: { ...position, w: 4, h: 2 }
+                };
+
+                onFileLoaded(newFile);
+                addConsoleMessage('info', `Example dataset "${dataset.name}" loaded successfully.`);
+            } catch (error) {
+                addConsoleMessage('error', `Error processing example ${dataset.name}`, error instanceof Error ? error.message : String(error));
+            }
+        });
+    };
+
     return (
         <div ref={containerRef} className="p-6 max-w-6xl mx-auto">
             {/* Header */}
@@ -236,7 +328,18 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         accept=".csv,.col"
                         multiple
                     />
-                    
+
+                    {/* Example button */}
+                    <Button
+                        variant="outlined"
+                        startIcon={<Eye size={20} />}
+                        onClick={loadExampleData}
+                        className="mr-2"
+                        color="success"
+                    >
+                        Example
+                    </Button>
+
                     {/* Add Data button */}
                     <Button
                         variant="outlined"
