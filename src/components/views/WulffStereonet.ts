@@ -27,7 +27,7 @@ export interface PoleData {
 }
 
 export interface ExtensionFractureData extends PlaneData {
-    id?: number | string;
+    //id?: number | string;
 }
 
 export interface LineData {
@@ -126,6 +126,151 @@ export class WulffStereonet {
         this.initializeSVG(containerId);
         this.drawBaseStereonet();
     }
+
+    // Public methods for adding different types of geological data
+
+    /**
+     * Add a striated fault plane
+     */
+    public addStriatedPlane(data: StriatedPlaneData, style: DataStyle = {}): void {
+        // Draw the fault plane as a great circle
+        this.drawGreatCircle(data.strike, data.dip, { ...style, opacity: 0.7 });
+
+        // Draw the striation arrow
+        this.drawStriation(data.strike, data.dip, data.rake, style, data.id);
+    }
+
+    /**
+     * Add multiple striated fault planes
+     */
+    public addStriatedPlanes(data: StriatedPlaneData[], style: DataStyle = {}): void {
+        data.forEach(plane => this.addStriatedPlane(plane, style));
+    }
+
+    /**
+     * Add an extension fracture (great circle)
+     */
+    public addExtensionFracture(data: ExtensionFractureData, style: DataStyle = {}): void {
+        this.drawGreatCircle(data.strike, data.dip, style);
+
+        // Optionally add pole point
+        const pole = this.planeTopole(data.strike, data.dip);
+        this.drawPoint(pole.trend, pole.plunge, {
+            ...style,
+            size: (style.size || 4) / 2,
+            fillColor: 'white',
+            strokeColor: style.color || 'blue'
+        }, 'circle', data.id);
+    }
+
+    /**
+     * Add multiple extension fractures
+     */
+    public addExtensionFractures(data: ExtensionFractureData[], style: DataStyle = {}): void {
+        data.forEach(fracture => this.addExtensionFracture(fracture, style));
+    }
+
+    /**
+     * Add a stylolite pole
+     */
+    public addStylolitePole(data: PoleData, style: DataStyle = {}): void {
+        this.drawPoint(data.trend, data.plunge, style, 'cross', data.id);
+    }
+
+    /**
+     * Add multiple stylolite poles
+     */
+    public addStylolitePoles(data: PoleData[], style: DataStyle = {}): void {
+        data.forEach(pole => this.addStylolitePole(pole, style));
+    }
+
+    /**
+     * Add a lineation
+     */
+    public addLineation(data: LineData, style: DataStyle = {}): void {
+        this.drawPoint(data.trend, data.plunge, style, 'triangle', data.id);
+    }
+
+    /**
+     * Add multiple lineations
+     */
+    public addLineations(data: LineData[], style: DataStyle = {}): void {
+        data.forEach(line => this.addLineation(line, style));
+    }
+
+    /**
+     * Add a generic pole point
+     */
+    public addPole(data: PoleData, style: DataStyle = {}, symbol: string = 'circle'): void {
+        this.drawPoint(data.trend, data.plunge, style, symbol, data.id);
+    }
+
+    /**
+     * Add multiple poles
+     */
+    public addPoles(data: PoleData[], style: DataStyle = {}, symbol: string = 'circle'): void {
+        data.forEach(pole => this.addPole(pole, style, symbol));
+    }
+
+    /**
+     * Clear all data from the stereonet (keeping the base grid)
+     */
+    public clearData(): void {
+        this.svg.selectAll('*:not(.grid):not(.axis):not(.direction)')
+            .filter(function () {
+                const element = d3.select(this);
+                return !element.classed('grid') &&
+                    !element.classed('axis') &&
+                    !element.classed('direction') &&
+                    element.node()?.tagName !== 'circle' ||
+                    (element.node()?.tagName === 'circle' &&
+                        parseFloat(element.attr('r')) !== this.radius);
+            })
+            .remove();
+        // this.svg.selectAll('path:not(.grid)')
+        //     .filter(function () {
+        //         return !d3.select(this).classed('grid');
+        //     })
+        //     .remove();
+        // this.svg.selectAll('circle:not(.grid)')
+        //     .filter(function () {
+        //         return !d3.select(this).classed('grid');
+        //     })
+        //     .remove();
+        // this.svg.selectAll('rect').remove();
+        // this.svg.selectAll('line:not(.grid)')
+        //     .filter(function () {
+        //         return !d3.select(this).classed('grid');
+        //     })
+        //     .remove();
+        // this.svg.selectAll('text:not(.direction)').remove();
+    }
+
+    /**
+     * Update stereonet options
+     */
+    public updateOptions(newOptions: Partial<WulffStereonetOptions>): void {
+        this.options = { ...this.options, ...newOptions };
+        this.container.remove();
+        this.initializeSVG(this.container.node()!.parentElement!.id);
+        this.drawBaseStereonet();
+    }
+
+    /**
+     * Export stereonet as SVG string
+     */
+    public exportSVG(): string {
+        return new XMLSerializer().serializeToString(this.container.node()!);
+    }
+
+    /**
+     * Get the SVG element for further manipulation
+     */
+    public getSVG(): d3.Selection<SVGSVGElement, unknown, null, undefined> {
+        return this.container;
+    }
+
+    // =========================== Private methods ===========================
 
     private initializeSVG(containerId: string): void {
         // Remove any existing SVG
@@ -499,146 +644,4 @@ export class WulffStereonet {
         }
     }
 
-    // Public methods for adding different types of geological data
-
-    /**
-     * Add a striated fault plane
-     */
-    public addStriatedPlane(data: StriatedPlaneData, style: DataStyle = {}): void {
-        // Draw the fault plane as a great circle
-        this.drawGreatCircle(data.strike, data.dip, { ...style, opacity: 0.7 });
-
-        // Draw the striation arrow
-        this.drawStriation(data.strike, data.dip, data.rake, style, data.id);
-    }
-
-    /**
-     * Add multiple striated fault planes
-     */
-    public addStriatedPlanes(data: StriatedPlaneData[], style: DataStyle = {}): void {
-        data.forEach(plane => this.addStriatedPlane(plane, style));
-    }
-
-    /**
-     * Add an extension fracture (great circle)
-     */
-    public addExtensionFracture(data: ExtensionFractureData, style: DataStyle = {}): void {
-        this.drawGreatCircle(data.strike, data.dip, style);
-
-        // Optionally add pole point
-        const pole = this.planeTopole(data.strike, data.dip);
-        this.drawPoint(pole.trend, pole.plunge, {
-            ...style,
-            size: (style.size || 4) / 2,
-            fillColor: 'white',
-            strokeColor: style.color || 'blue'
-        }, 'circle', data.id);
-    }
-
-    /**
-     * Add multiple extension fractures
-     */
-    public addExtensionFractures(data: ExtensionFractureData[], style: DataStyle = {}): void {
-        data.forEach(fracture => this.addExtensionFracture(fracture, style));
-    }
-
-    /**
-     * Add a stylolite pole
-     */
-    public addStylolitePole(data: PoleData, style: DataStyle = {}): void {
-        this.drawPoint(data.trend, data.plunge, style, 'cross', data.id);
-    }
-
-    /**
-     * Add multiple stylolite poles
-     */
-    public addStylolitePoles(data: PoleData[], style: DataStyle = {}): void {
-        data.forEach(pole => this.addStylolitePole(pole, style));
-    }
-
-    /**
-     * Add a lineation
-     */
-    public addLineation(data: LineData, style: DataStyle = {}): void {
-        this.drawPoint(data.trend, data.plunge, style, 'triangle', data.id);
-    }
-
-    /**
-     * Add multiple lineations
-     */
-    public addLineations(data: LineData[], style: DataStyle = {}): void {
-        data.forEach(line => this.addLineation(line, style));
-    }
-
-    /**
-     * Add a generic pole point
-     */
-    public addPole(data: PoleData, style: DataStyle = {}, symbol: string = 'circle'): void {
-        this.drawPoint(data.trend, data.plunge, style, symbol, data.id);
-    }
-
-    /**
-     * Add multiple poles
-     */
-    public addPoles(data: PoleData[], style: DataStyle = {}, symbol: string = 'circle'): void {
-        data.forEach(pole => this.addPole(pole, style, symbol));
-    }
-
-    /**
-     * Clear all data from the stereonet (keeping the base grid)
-     */
-    public clearData(): void {
-        this.svg.selectAll('*:not(.grid):not(.axis):not(.direction)')
-            .filter(function () {
-                const element = d3.select(this);
-                return !element.classed('grid') &&
-                    !element.classed('axis') &&
-                    !element.classed('direction') &&
-                    element.node()?.tagName !== 'circle' ||
-                    (element.node()?.tagName === 'circle' &&
-                        parseFloat(element.attr('r')) !== this.radius);
-            })
-            .remove();
-        // this.svg.selectAll('path:not(.grid)')
-        //     .filter(function () {
-        //         return !d3.select(this).classed('grid');
-        //     })
-        //     .remove();
-        // this.svg.selectAll('circle:not(.grid)')
-        //     .filter(function () {
-        //         return !d3.select(this).classed('grid');
-        //     })
-        //     .remove();
-        // this.svg.selectAll('rect').remove();
-        // this.svg.selectAll('line:not(.grid)')
-        //     .filter(function () {
-        //         return !d3.select(this).classed('grid');
-        //     })
-        //     .remove();
-        // this.svg.selectAll('text:not(.direction)').remove();
-    }
-
-    /**
-     * Update stereonet options
-     */
-    public updateOptions(newOptions: Partial<WulffStereonetOptions>): void {
-        this.options = { ...this.options, ...newOptions };
-        this.container.remove();
-        this.initializeSVG(this.container.node()!.parentElement!.id);
-        this.drawBaseStereonet();
-    }
-
-    /**
-     * Export stereonet as SVG string
-     */
-    public exportSVG(): string {
-        return new XMLSerializer().serializeToString(this.container.node()!);
-    }
-
-    /**
-     * Get the SVG element for further manipulation
-     */
-    public getSVG(): d3.Selection<SVGSVGElement, unknown, null, undefined> {
-        return this.container;
-    }
 }

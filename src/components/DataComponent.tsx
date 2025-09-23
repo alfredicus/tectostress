@@ -1,17 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-    TableContainer, Table, TableHead, TableBody,
-    TableRow, TableCell, Button, Typography
+    Table, TableHead, TableBody,
+    TableRow, TableCell, Button, Typography, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import { Plus, X, GripHorizontal, CheckSquare, Square, Upload, Eye, BarChart3 } from 'lucide-react';
 import GridLayout, { Layout } from 'react-grid-layout';
-import Papa from 'papaparse';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DataFile } from './DataFile';
 import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing';
-import { Visualization, VisualizationState } from './types';
-import { VisualizationComponent } from './VisualizationComponent';
 import {
     useVisualizationManager,
     AddVisualizationDialog,
@@ -20,7 +17,9 @@ import {
 } from './VisualizationManager';
 import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { AddDataDialog } from './AddDataDialog';
-import { add } from 'mathjs';
+import { matelles } from './data/matelles';
+import { synthetic1 } from './data/synthetic1';
+import { synthetic_simple } from './data/synthetic-simple';
 
 interface DataComponentProps {
     files: DataFile[];
@@ -38,6 +37,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [containerWidth, setContainerWidth] = useState<number>(1400);
+    const [selectedModel, setSelectedModel] = useState<string>('');
 
     // Add Data Dialog state
     const [isAddDataDialogOpen, setIsAddDataDialogOpen] = useState(false);
@@ -45,6 +45,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
     // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
+
+    const [isChangingModel, setIsChangingModel] = useState(false);
 
     // Helper function to add messages to console
     const addConsoleMessage = useCallback((
@@ -103,6 +105,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
         };
 
         updateWidth();
+
         const resizeObserver = new ResizeObserver(updateWidth);
         if (containerRef.current) {
             resizeObserver.observe(containerRef.current);
@@ -112,6 +115,26 @@ const DataComponent: React.FC<DataComponentProps> = ({
             resizeObserver.disconnect();
         };
     }, []);
+
+
+    // Clear console when no files remain
+    useEffect(() => {
+        if (files.length === 0 && !isChangingModel) {
+            setSelectedModel('');
+        }
+        if (files.length === 0) {
+            clearConsole();
+            setIsConsoleOpen(false);
+        }
+    }, [files.length, clearConsole, setSelectedModel]);
+
+    // Model definitions with multiple examples each
+    const MODELS = {
+        // ----------------------------------------------------
+        matelles,
+        synthetic1,
+        synthetic_simple
+    }
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileList = event.target.files;
@@ -144,7 +167,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                     };
 
                     onFileLoaded(newFile);
-                    addConsoleMessage('info', `File ${file.name} uploaded successfully.`);
+                    addConsoleMessage('info', `File ${file.name} uploaded successfully with ${retType.data.length} rows.`);
                 } catch (error) {
                     addConsoleMessage('error', `Error processing file ${file.name}`, error instanceof Error ? error.message : String(error));
                 }
@@ -222,103 +245,74 @@ const DataComponent: React.FC<DataComponentProps> = ({
         setSelectAll(false);
     };
 
-    // Example data sets
-    const EXAMPLE_DATASETS = {
-        extensions: {
-            name: "Extension fractures",
-            csv: `id;type;strike;dip;dip direction
-1;Extension Fracture;120;90;NE
-2;Extension Fracture;300;90;SW`
-        },
-        stylolites: {
-            name: "Stylolite interfaces",
-            csv: `type;strike;dip;dip direction
-Stylolite Interface;30;90;NW
-Stylolite Interface;210;90;SE`
-        },
-        crystals: {
-            name: "Crystal fibers in vein",
-            csv: `type;line trend;line plunge
-Crystal fibers in vein;30;0
-Crystal fibers in vein;210;0`
-        },
-        stylolites_teeth: {
-            name: "Stylolite teeth",
-            csv: `type;line trend;line plunge
-Stylolite teeth;120;0
-Stylolite teeth;300;0`
-        },
-        dilation_bands: {
-            name: "Dilation bands",
-            csv: `type; strike; dip; dip direction
-dilation band;120;90;N
-10;dilation band;300;90;S`
-        },
-        striated_planes: {
-            name: "Striated planes",
-            csv: `type; strike; dip; dip direction; rake; strike direction; type of movement
-Striated plane;75;70;S;0;N;right lateral
-Striated plane;165;70;N;0;S;left-lateral
-striated plane;30;30;SE;90;N;Inverse
-Striated plane;75;40;E;0;N;right-lateral
-Striated plane;165;40;W;0;S;left-lateral
-Striated plane;75;30;W;0;N;right-lateral
-Striated plane;165;30;E;0;S;left-lateral`
-        },
-        neoformed: {
-            name: "Neoformed striated planes",
-            csv: `type; strike;dip;dip direction;rake;strike direction;type of movement
-neoformed striated plane;150;90;N;0;N;left-lateral
-neoformed striated plane;90;90;S;0;W;right-lateral`
-        },
-        conjugates: {
-            name: "Conjugate planes",
-            csv: `type; strike; dip; dip direction; type of movement
-conjugate plane 1;80 ;90;S;right-lateral
-conjugate plane 2;160;90;N;left-lateral`
-        }
+    // Clear all existing files (used when switching models)
+    const clearAllFiles = () => {
+        files.forEach(file => onFileRemoved(file.id));
+        setSelectedFiles([]);
+        setSelectAll(false);
+        clearConsole();
     };
 
-    const loadExampleData = () => {
-        const exampleKeys = Object.keys(EXAMPLE_DATASETS);
+    const handleModelChange = (event: any) => {
+        const modelKey = event.target.value;
+        setSelectedModel(modelKey);
+        setIsChangingModel(true);
 
-        exampleKeys.forEach((key, index) => {
-            const dataset = EXAMPLE_DATASETS[key as keyof typeof EXAMPLE_DATASETS];
+        if (!modelKey) return;
 
-            try {
-                const retType: ProcessCSVReturnType = processCSV(dataset.csv);
+        // Clear existing files first
+        clearAllFiles();
 
-                if (!retType || !retType.data || !Array.isArray(retType.data)) {
-                    addConsoleMessage('error', `Invalid data structure from example: ${dataset.name}`);
-                    return;
+        setConsoleMessages([]);
+
+        // Load the selected model's examples
+        const model = MODELS[modelKey as keyof typeof MODELS];
+        if (!model) return;
+
+        const exampleKeys = Object.keys(model.examples);
+
+        // Add a small delay to ensure files are cleared before adding new ones
+        setTimeout(() => {
+            exampleKeys.forEach((exampleKey, index) => {
+                const dataset = model.examples[exampleKey as keyof typeof model.examples];
+
+                try {
+                    const retType: ProcessCSVReturnType = processCSV(dataset.csv);
+
+                    if (!retType || !retType.data || !Array.isArray(retType.data)) {
+                        addConsoleMessage('error', `Invalid data structure from example: ${dataset.name}`);
+                        return;
+                    }
+
+                    // Position examples in a grid
+                    const row = Math.floor(index / 2);
+                    const col = index % 2;
+                    const position = { x: col * 2, y: row * 2 };
+
+                    const newFile: DataFile = {
+                        id: `${modelKey}-${exampleKey}-${Date.now()}`,
+                        name: dataset.name,
+                        headers: retType.headers || [],
+                        content: retType.data || [],
+                        layout: { ...position, w: 4, h: 2 }
+                    };
+
+                    addConsoleMessage('info', `Successfully loaded "${dataset.name}" with ${retType.data.length} data from model "${model.name}".`);
+
+                    onFileLoaded(newFile);
+                } catch (error) {
+                    addConsoleMessage('error', `Error processing example ${dataset.name}`, error instanceof Error ? error.message : String(error));
                 }
+            });
 
-                // Position examples in a grid
-                const row = Math.floor((files.length + index) / 2);
-                const col = (files.length + index) % 2;
-                const position = { x: col * 2, y: row * 2 };
-
-                const newFile: DataFile = {
-                    id: `example-${key}-${Date.now()}`,
-                    name: dataset.name,
-                    headers: retType.headers || [],
-                    content: retType.data || [],
-                    layout: { ...position, w: 4, h: 2 }
-                };
-
-                onFileLoaded(newFile);
-                addConsoleMessage('info', `Example dataset "${dataset.name}" loaded successfully.`);
-            } catch (error) {
-                addConsoleMessage('error', `Error processing example ${dataset.name}`, error instanceof Error ? error.message : String(error));
-            }
-        });
+            setIsChangingModel(false);
+        }, 100);
     };
 
     return (
-        <div ref={containerRef} className="p-6 max-w-6xl mx-auto">
+        <div ref={containerRef} className="p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
-                <Typography variant="h5">Data</Typography>
                 <div className="flex items-center gap-2">
                     <input
                         type="file"
@@ -329,48 +323,59 @@ conjugate plane 2;160;90;N;left-lateral`
                         multiple
                     />
 
-                    {/* Example button */}
-                    <Button
-                        variant="outlined"
-                        startIcon={<Eye size={20} />}
-                        onClick={loadExampleData}
-                        className="mr-2"
-                        color="success"
-                    >
-                        Example
-                    </Button>
-
-                    {/* Add Data button */}
-                    <Button
-                        variant="outlined"
-                        startIcon={<Plus size={20} />}
-                        onClick={() => setIsAddDataDialogOpen(true)}
-                        className="mr-2"
-                    >
-                        Add Data
-                    </Button>
-
                     {/* Upload Files button */}
                     <Button
                         variant="contained"
                         startIcon={<Upload size={20} />}
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        Upload Files
+                        UPLOAD FILES
                     </Button>
 
+                    {/* Create button */}
+                    <Button
+                        disabled
+                        variant="outlined"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setIsAddDataDialogOpen(true)}
+                    >
+                        CREATE...
+                    </Button>
+
+                    {/* Model Selection Dropdown */}
+                    <FormControl variant="outlined" size="small" style={{ minWidth: 120 }}>
+                        <InputLabel id="model-select-label">Examples</InputLabel>
+                        <Select
+                            labelId="model-select-label"
+                            value={selectedModel}
+                            onChange={handleModelChange}
+                            label="Examples"
+                        >
+                            <MenuItem value="">
+                                <em>None</em>
+                            </MenuItem>
+                            {Object.entries(MODELS).map(([key, model]) => (
+                                <MenuItem key={key} value={key}>
+                                    {model.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </div>
+
+                <div className="flex items-center gap-2">
                     {/* Add View button */}
                     {files.length > 0 && (
                         <Button
                             variant="outlined"
                             startIcon={<Eye size={20} />}
                             onClick={() => openAddDialog()}
-                            className="ml-2"
                         >
                             Add View
                         </Button>
                     )}
 
+                    {/* Delete Selected button */}
                     {selectedFiles.length > 0 && (
                         <Button
                             variant="outlined"
@@ -397,11 +402,18 @@ conjugate plane 2;160;90;N;left-lateral`
                         )}
                         <span>{selectAll ? "Deselect All" : "Select All"}</span>
                     </button>
+
                     <div className="text-sm text-gray-500">
                         {selectedFiles.length > 0
-                            ? `${selectedFiles.length} of ${files.length} selected`
-                            : `${files.length} files total`}
+                            ? `${selectedFiles.length} of ${files.length} selected. Model loaded: ${selectedModel ? MODELS[selectedModel as keyof typeof MODELS]?.name : 'None'}`
+                            : `${files.length} files total.`}
                     </div>
+
+                    {selectedModel && (
+                        <div className="text-sm text-blue-600 font-medium">
+                            Current Model: {MODELS[selectedModel as keyof typeof MODELS]?.name}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -423,6 +435,7 @@ conjugate plane 2;160;90;N;left-lateral`
                         width={containerWidth}
                         onLayoutChange={handleLayoutChange}
                         draggableHandle=".drag-handle"
+                        isResizable={false}
                     >
                         {files.map((file) => (
                             <div
@@ -464,8 +477,8 @@ conjugate plane 2;160;90;N;left-lateral`
                                         </button>
                                     </div>
                                 </div>
-                                <div className="p-4 h-[calc(100%-3rem)] overflow-auto">
-                                    <TableContainer>
+                                <div className="p-4 h-[calc(100%-3rem)] flex flex-col overflow-hidden">
+                                    <div className="overflow-auto flex-1">
                                         <Table size="small">
                                             <TableHead>
                                                 <TableRow>
@@ -475,7 +488,10 @@ conjugate plane 2;160;90;N;left-lateral`
                                                             style={{
                                                                 fontWeight: 'bold',
                                                                 whiteSpace: 'nowrap',
-                                                                backgroundColor: '#f5f5f5'
+                                                                backgroundColor: '#f5f5f5',
+                                                                position: 'sticky',
+                                                                top: 0,
+                                                                zIndex: 1
                                                             }}
                                                         >
                                                             {header}
@@ -484,7 +500,7 @@ conjugate plane 2;160;90;N;left-lateral`
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                                {file.content.slice(0, 10).map((row: any, rowIndex: number) => (
+                                                {file.content.map((row: any, rowIndex: number) => (
                                                     <TableRow key={rowIndex} hover>
                                                         {Object.entries(row).map(([name, value]) => (
                                                             <TableCell
@@ -496,23 +512,9 @@ conjugate plane 2;160;90;N;left-lateral`
                                                         ))}
                                                     </TableRow>
                                                 ))}
-                                                {file.content.length > 10 && (
-                                                    <TableRow>
-                                                        <TableCell
-                                                            colSpan={file.headers.length}
-                                                            style={{
-                                                                textAlign: 'center',
-                                                                fontStyle: 'italic',
-                                                                color: '#666'
-                                                            }}
-                                                        >
-                                                            ... and {file.content.length - 10} more rows
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </div>
                                 </div>
                             </div>
                         ))}

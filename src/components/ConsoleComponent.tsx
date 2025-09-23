@@ -137,9 +137,9 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
 
             {/* Console Content */}
             {isOpen && (
-                <div className="border-t border-gray-200">
+                <div className=" border-gray-200">
                     {/* Console Controls */}
-                    <div className="flex justify-between items-center px-6 py-3 bg-gray-50 border-b">
+                    {/* <div className="flex justify-between items-center px-6 py-3 bg-gray-50 border-b">
                         <div className="flex items-center space-x-2">
                             <span className="text-sm text-gray-600">Filter:</span>
                             <select
@@ -171,7 +171,7 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
                             <X className="w-4 h-4" />
                             <span>Clear</span>
                         </button>
-                    </div>
+                    </div> */}
 
                     {/* Messages Area */}
                     <div
@@ -180,15 +180,7 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
                     >
                         {filteredMessages.length === 0 ? (
                             <div className="p-6 text-center text-gray-500">
-                                {messages.length === 0 ? (
-                                    <>
-                                        {/* <Terminal className="w-12 h-12 mx-auto mb-3 opacity-50" /> */}
-                                        <p>No messages to display</p>
-                                        <p className="text-xs mt-1">Console output will appear here</p>
-                                    </>
-                                ) : (
-                                    <p>No {filter} messages to display</p>
-                                )}
+                                
                             </div>
                         ) : (
                             <div className="p-4 space-y-2">
@@ -237,102 +229,3 @@ export const ConsoleComponent: React.FC<ConsoleComponentProps> = ({
         </div>
     );
 };
-
-// Example usage component showing how to integrate with RunComponent
-// const ExampleUsage: React.FC = () => {
-//     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
-//     const [isConsoleOpen, setIsConsoleOpen] = useState(true);
-
-//     // Helper function to add messages to console
-//     const addConsoleMessage = (
-//         type: ConsoleMessage['type'],
-//         message: string,
-//         details?: string
-//     ) => {
-//         const newMessage: ConsoleMessage = {
-//             id: `msg-${Date.now()}-${Math.random()}`,
-//             timestamp: new Date(),
-//             type,
-//             message,
-//             details
-//         };
-
-//         setConsoleMessages(prev => [...prev, newMessage]);
-//     };
-
-//     // Example of how to use in your simulation process
-//     const simulateProcess = () => {
-//         addConsoleMessage('info', 'Starting simulation process...');
-
-//         setTimeout(() => {
-//             addConsoleMessage('info', 'Processing 15 data files...');
-//         }, 1000);
-
-//         setTimeout(() => {
-//             addConsoleMessage('warning', 'Skipped 3 items due to invalid data format',
-//                 'Files: data1.csv (row 5), data2.csv (row 12), data3.csv (row 8)');
-//         }, 2000);
-
-//         setTimeout(() => {
-//             addConsoleMessage('error', 'Failed to process extension fracture data',
-//                 'Error: Invalid strike value (365°) in file "fractures.csv" at row 23');
-//         }, 3000);
-
-//         setTimeout(() => {
-//             addConsoleMessage('success', 'Simulation completed successfully!');
-//             addConsoleMessage('info', 'Results: Stress ratio = 0.75, Fit = 89.3%');
-//         }, 4000);
-//     };
-
-//     const clearConsole = () => {
-//         setConsoleMessages([]);
-//     };
-
-//     return (
-//         <div className="p-6 space-y-6">
-//             <div className="bg-white p-6 rounded-lg border">
-//                 <h2 className="text-xl font-bold mb-4">Console Integration Example</h2>
-
-//                 <div className="space-x-2 mb-4">
-//                     <button
-//                         onClick={simulateProcess}
-//                         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-//                     >
-//                         Run Simulation
-//                     </button>
-
-//                     <button
-//                         onClick={() => addConsoleMessage('info', 'Manual info message')}
-//                         className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-//                     >
-//                         Add Info
-//                     </button>
-
-//                     <button
-//                         onClick={() => addConsoleMessage('warning', 'Manual warning message')}
-//                         className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
-//                     >
-//                         Add Warning
-//                     </button>
-
-//                     <button
-//                         onClick={() => addConsoleMessage('error', 'Manual error message')}
-//                         className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-//                     >
-//                         Add Error
-//                     </button>
-//                 </div>
-//             </div>
-
-//             <ConsoleComponent
-//                 messages={consoleMessages}
-//                 onClear={clearConsole}
-//                 isOpen={isConsoleOpen}
-//                 onToggle={() => setIsConsoleOpen(!isConsoleOpen)}
-//                 maxHeight="400px"
-//             />
-//         </div>
-//     );
-// };
-
-// export default ExampleUsage;

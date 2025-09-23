@@ -1,6 +1,30 @@
 import React, { useState, useRef, useEffect, useCallback, ReactNode } from 'react';
 import { Settings, X, ChevronRight } from 'lucide-react';
 
+/**
+ * StablePlotWithSettings
+ * 
+ * A React component that provides a stable layout for a plot/visualization with an optional settings panel.
+ * The settings panel slides in from the right without affecting the overall dimensions of the parent container.
+ * This ensures that the plot area remains stable and does not cause layout shifts in the parent component.
+ * 
+ * Props:
+ * - children: The main plot/visualization component to be displayed.
+ * - settingsPanel: The content of the settings panel.
+ * - title: Optional title for the plot area.
+ * - className: Additional CSS classes for custom styling.
+ * - settingsPanelWidth: Width of the settings panel when open (default: 320px).
+ * - initialSettingsOpen: Whether the settings panel is open by default (default: false).
+ * - showSettingsButton: Whether to show the button to toggle the settings panel (default: true).
+ * - headerActions: Additional buttons or actions to display in the header.
+ * - onSettingsToggle: Callback when the settings panel is toggled.
+ * - borderStyle, borderColor, borderWidth: Customization for the container border.
+ * - backgroundColor: Background color of the container.
+ * - headerBackgroundColor: Background color of the header.
+ * 
+ * The component uses CSS transitions for smooth animations when toggling the settings panel.
+ * It also listens to resize events to adjust the plot area accordingly without causing parent layout shifts.
+ */
 interface StablePlotWithSettingsProps {
     // Required props
     children: ReactNode; // The main plot/visualization component
@@ -25,6 +49,9 @@ interface StablePlotWithSettingsProps {
     headerBackgroundColor?: string;
 }
 
+/**
+ * @brief StablePlotWithSettings component.
+ */
 const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
     children,
     settingsPanel,

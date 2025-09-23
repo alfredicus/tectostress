@@ -14,7 +14,7 @@ import {
     VisualizationContext,
     VisualizationRegistry
 } from './VisualizationTypeRegistry';
-import { Button } from '@mui/material';
+import { Button, FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 
 // Configuration interfaces (same as before)
 interface ParamConfig {
@@ -74,7 +74,7 @@ const CONFIG_DATA: ConfigData = {
                     {
                         name: "rotAngleHalfInterval",
                         display: "Rotation angle interval",
-                        value: 60,
+                        value: 90,
                         min: 0,
                         max: 90
                     },
@@ -95,7 +95,7 @@ const CONFIG_DATA: ConfigData = {
                     {
                         name: "stressRatioHalfInterval",
                         display: "Stress ratio interval",
-                        value: 0.5,
+                        value: 1,
                         min: 0,
                         max: 1
                     }
@@ -129,17 +129,9 @@ const CONFIG_DATA: ConfigData = {
                 ]
             },
             {
-                name: "Debug Search",
+                name: "Manually",
                 active: false,
-                params: [
-                    {
-                        name: "n",
-                        display: "Number on each axis",
-                        value: 5,
-                        min: 2,
-                        max: 10000
-                    }
-                ]
+                params: []
             }
         ]
     }
@@ -169,7 +161,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [selectedMethod, setSelectedMethod] = useState<string>('');
     const [allParams, setAllParams] = useState<Record<string, Record<string, number>>>({});
     const [selectedFiles, setSelectedFiles] = useState<string[]>(files.map(file => file.id));
-    const [showSettings, setShowSettings] = useState<boolean>(true);
+    const [showSettings, setShowSettings] = useState<boolean>(false);
     const [simulationStatus, setSimulationStatus] = useState<SimulationStatus>({
         status: 'En attente',
         progress: 0
@@ -258,7 +250,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
         setSelectedMethod(initialMethod);
         setSelectedFiles(persistentState?.selectedFiles || []);
-        setShowSettings(persistentState?.showSettings ?? true);
+        // console.log('Persistent state for showSettings:', persistentState);
+        setShowSettings(persistentState?.showSettings ?? false);
     }, [persistentState, initializeParams, getFirstActiveMethod]);
 
     // Debounced state change notification
@@ -821,36 +814,33 @@ const RunComponent: React.FC<RunComponentProps> = ({
     }, [files, solution]);
 
     return (
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-6xl mx-auto">
+        <div >
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl">Run Stress Inversion</h2>
-                <div className="flex items-center">
-                    <div className="mr-4">
-                        <label htmlFor="search-method" className="block text-sm font-medium text-gray-700 mb-1">
-                            {CONFIG_DATA.search.display}
-                        </label>
-                        <select
-                            id="search-method"
+                <div className="flex items-center gap-2">
+
+
+                    <FormControl variant="outlined" size="small" style={{ minWidth: 200 }}>
+                        <InputLabel id="search-method-label">{CONFIG_DATA.search.display}</InputLabel>
+                        <Select
+                            labelId="search-method-label"
                             value={selectedMethod}
-                            onChange={(e) => handleMethodChange(e.target.value)}
-                            className="block w-64 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            onChange={(e) => handleMethodChange(e.target.value as string)}
+                            label={CONFIG_DATA.search.display}
                         >
                             {CONFIG_DATA.search.list.map((method) => (
-                                <option
+                                <MenuItem
                                     key={method.name}
                                     value={method.name}
                                     disabled={!method.active}
-                                    style={{
-                                        color: method.active ? 'inherit' : '#9CA3AF',
-                                        backgroundColor: method.active ? 'inherit' : '#F3F4F6'
-                                    }}
                                 >
-                                    {method.name}{!method.active ? ' (Inactive)' : ''}
-                                </option>
+                                    {method.name}
+                                </MenuItem>
                             ))}
-                        </select>
-                    </div>
+                        </Select>
+                    </FormControl>
+
+                    {/* Settings button aligned with combo */}
                     <button
                         onClick={toggleSettings}
                         className={`p-2 rounded-md transition-colors ${showSettings
@@ -861,17 +851,19 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     >
                         <Settings className="w-5 h-5" />
                     </button>
+
+
                 </div>
             </div>
 
             {/* Parameter settings panel */}
             <div
-                className={`mb-6 p-4 border rounded-md bg-gray-50 transition-all duration-300 ease-in-out ${showSettings
-                    ? 'opacity-100 max-h-[1000px]'
-                    : 'opacity-0 max-h-0 overflow-hidden p-0 m-0 border-0'
+                className={`border rounded-md bg-gray-50 transition-all duration-300 ease-in-out ${showSettings
+                    ? 'opacity-100 max-h-[1000px] mb-6 p-4'
+                    : 'opacity-0 max-h-0 overflow-hidden p-0 m-0 border-0 mb-0'
                     }`}
             >
-                <h3 className="text-lg font-medium mb-3">Paramètres de {selectedMethod}</h3>
+                <h3 className="text-lg font-medium mb-3">{selectedMethod} parameters</h3>
                 <div className="grid grid-cols-2 gap-4">
                     {currentMethodConfig?.params.map(param => (
                         <div key={param.name}>
@@ -974,7 +966,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         {selectedFiles.length === 0 ? (
                             <tr>
                                 <td colSpan={4} className="px-6 py-4 text-sm text-gray-500 text-center italic">
-                                    Sélectionnez des fichiers pour lancer l'analyse
+                                    Choose files to start the analysis
                                 </td>
                             </tr>
                         ) : (

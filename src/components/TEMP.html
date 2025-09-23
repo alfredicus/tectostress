@@ -1,0 +1,74 @@
+<div className="flex items-center justify-between mb-6">
+                <Typography variant="h5">Data</Typography>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        accept=".csv,.col"
+                        multiple
+                    />
+
+                    {/* Model Selection Dropdown */}
+                    <FormControl variant="outlined" size="small" style={{ minWidth: 200, marginRight: 8 }}>
+                        <InputLabel id="model-select-label">Examples</InputLabel>
+                        <Select
+                            labelId="model-select-label"
+                            value={selectedModel}
+                            onChange={handleModelChange}
+                            label="Select Model"
+                        >
+                            <MenuItem value="">
+                                <em>None</em>
+                            </MenuItem>
+                            {Object.entries(MODELS).map(([key, model]) => (
+                                <MenuItem key={key} value={key}>
+                                    {model.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    {/* Add Data button */}
+                    <Button disabled
+                        variant="outlined"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setIsAddDataDialogOpen(true)}
+                        className="mr-2"
+                    >
+                        Create...
+                    </Button>
+
+                    {/* Upload Files button */}
+                    <Button
+                        variant="contained"
+                        startIcon={<Upload size={20} />}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        Upload Files
+                    </Button>
+
+                    {/* Add View button */}
+                    {files.length > 0 && (
+                        <Button
+                            variant="outlined"
+                            startIcon={<Eye size={20} />}
+                            onClick={() => openAddDialog()}
+                            className="ml-2"
+                        >
+                            Add View
+                        </Button>
+                    )}
+
+                    {selectedFiles.length > 0 && (
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            onClick={deleteSelectedFiles}
+                        >
+                            Delete Selected ({selectedFiles.length})
+                        </Button>
+                    )}
+                </div>
+            </div>

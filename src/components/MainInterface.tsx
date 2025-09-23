@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
-import { Play, HelpCircle, Settings } from 'lucide-react';
+import { Play, HelpCircle, Database, Settings } from 'lucide-react';
 import HelpComponent from './HelpComponent';
 import RunComponent from './RunComponent';
 import DataComponent from './DataComponent';
 import { DataFile } from './DataFile';
-import { 
-    VisualizationRegistry, 
+import {
+    VisualizationRegistry,
     VisualizationContext,
-    VisualizationMigrationHelper 
+    VisualizationMigrationHelper
 } from './VisualizationTypeRegistry';
-import { 
-    ThemeProvider, 
-    useTheme, 
-    ThemeToggle, 
+import {
+    ThemeProvider,
+    useTheme,
+    ThemeToggle,
     QuickThemeToggle,
-    useThemeClasses 
+    useThemeClasses
 } from './ThemeContext';
+import { color } from 'd3';
 
 // Define types for run state persistence
 interface SearchMethodParams {
@@ -36,7 +37,7 @@ const MainInterfaceContent = () => {
     const [activeTab, setActiveTab] = useState('data');
     const [loadedFiles, setLoadedFiles] = useState<DataFile[]>([]);
     const [showThemeSettings, setShowThemeSettings] = useState(false);
-    
+
     // Theme integration
     const { theme, isDark, isLight } = useTheme();
 
@@ -45,7 +46,7 @@ const MainInterfaceContent = () => {
         selectedMethod: '',
         allParams: {},
         selectedFiles: [],
-        showSettings: true
+        showSettings: false
     });
 
     // Theme-aware classes
@@ -68,7 +69,7 @@ const MainInterfaceContent = () => {
     });
 
     const tabClasses = useThemeClasses({
-        base: 'border-b transition-colors duration-200',
+        base: 'border-b transition-colors duration-200 rounded-lg shadow-lg ',
         light: 'border-gray-200 bg-white',
         dark: 'border-gray-700 bg-gray-800'
     });
@@ -123,6 +124,7 @@ const MainInterfaceContent = () => {
     };
 
     const doc_name = "documentation";
+    const run_name = "inversion";
 
     return (
         <div className={containerClasses}>
@@ -163,10 +165,10 @@ const MainInterfaceContent = () => {
 
                                 <div>
                                     <h1 className="text-4xl font-bold">
-                                        <a 
-                                            href="https://github.com/alfredicus/tectostress" 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
+                                        <a
+                                            href="https://github.com/alfredicus/tectostress"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                             className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
                                         >
                                             Tectostress
@@ -177,10 +179,10 @@ const MainInterfaceContent = () => {
                                             dark: "text-gray-400"
                                         })}>
                                             v2.0 (
-                                            <a 
-                                                href="https://www.gm.umontpellier.fr/" 
-                                                target="_blank" 
-                                                rel="noopener noreferrer" 
+                                            <a
+                                                href="https://www.gm.umontpellier.fr/"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
                                                 className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors"
                                             >
                                                 Geosciences Montpellier
@@ -195,7 +197,7 @@ const MainInterfaceContent = () => {
                             <div className="flex items-center gap-2">
                                 {/* Quick Theme Toggle */}
                                 <QuickThemeToggle />
-                                
+
                                 {/* Theme Settings Button */}
                                 <button
                                     onClick={() => setShowThemeSettings(!showThemeSettings)}
@@ -237,7 +239,7 @@ const MainInterfaceContent = () => {
                                         Close
                                     </button>
                                 </div>
-                                
+
                                 <div className="flex flex-col items-center gap-4">
                                     <ThemeToggle />
                                     <div className={useThemeClasses({
@@ -250,32 +252,23 @@ const MainInterfaceContent = () => {
                                 </div>
                             </div>
                         )}
-
-                        {/* Subtitle */}
-                        <div className={useThemeClasses({
-                            base: "text-sm mt-2",
-                            light: "text-gray-500",
-                            dark: "text-gray-400"
-                        })}>
-                            Enhanced with integrated visualizations and parameterized analysis workflows
-                        </div>
                     </div>
 
                     {/* Tabs */}
                     <div className={tabClasses}>
                         <nav className="flex -mb-px">
-                            {['data', 'run', doc_name].map((tab) => (
+                            {['data', run_name, doc_name].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`py-2 px-4 font-medium transition-colors duration-200 ${
-                                        activeTab === tab
-                                            ? `border-b-2 border-blue-500 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
-                                            : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
-                                    }`}
+                                    className={`py-2 px-4 font-medium transition-colors duration-200 ${activeTab === tab
+                                        ? `border-b-2 border-blue-500 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
+                                        }`}
                                 >
                                     <div className="flex items-center gap-2">
-                                        {tab === 'run' && <Play className="w-4 h-4" />}
+                                        {tab === 'data' && <Database className="w-4 h-4" />}
+                                        {tab === run_name && <Play className="w-4 h-4" />}
                                         {tab === doc_name && <HelpCircle className="w-4 h-4" />}
                                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
                                     </div>
@@ -284,64 +277,9 @@ const MainInterfaceContent = () => {
                         </nav>
                     </div>
 
-                    {/* Enhanced status indicator */}
-                    <div className="mt-2 mb-4 flex items-center justify-between">
-                        <div className={useThemeClasses({
-                            base: "flex items-center gap-4 text-sm",
-                            light: "text-gray-600",
-                            dark: "text-gray-400"
-                        })}>
-                            <span>Files: {loadedFiles.length}</span>
-                            {activeTab === 'data' && (
-                                <span>Available visualizations: {VisualizationRegistry.getVisualizationTypes(VisualizationContext.DATA_ANALYSIS).length}</span>
-                            )}
-                            {activeTab === 'run' && (
-                                <span>Analysis visualizations: {VisualizationRegistry.getVisualizationTypes(VisualizationContext.STRESS_ANALYSIS).length}</span>
-                            )}
-                            <span className="flex items-center gap-1">
-                                Theme: <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-blue-400' : 'bg-yellow-400'}`}></span> {isDark ? 'Dark' : 'Light'}
-                            </span>
-                        </div>
-                        
-                        {/* Quick info about available contexts */}
-                        <div className={useThemeClasses({
-                            base: "text-xs",
-                            light: "text-gray-400",
-                            dark: "text-gray-500"
-                        })}>
-                            Contexts: {VisualizationRegistry.getAllContexts().length} available
-                        </div>
-                    </div>
-
-                    {/* Content */}
                     <div className={cardClasses}>
                         {activeTab === 'data' && (
                             <div className="p-6">
-                                <div className={useThemeClasses({
-                                    base: "mb-4 p-4 rounded-lg border transition-colors duration-200",
-                                    light: "bg-blue-50 border-blue-200",
-                                    dark: "bg-blue-900/20 border-blue-800/50"
-                                })}>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className={isDark ? 'text-blue-400' : 'text-blue-600'}>📊</span>
-                                        <h3 className={useThemeClasses({
-                                            base: "font-semibold",
-                                            light: "text-blue-800",
-                                            dark: "text-blue-300"
-                                        })}>
-                                            Enhanced Data Analysis
-                                        </h3>
-                                    </div>
-                                    <p className={useThemeClasses({
-                                        base: "text-sm",
-                                        light: "text-blue-700",
-                                        dark: "text-blue-200"
-                                    })}>
-                                        Upload your geological data files and create interactive visualizations directly in this tab. 
-                                        Rose diagrams, histograms, stereonets, and Mohr circles are automatically integrated below your data tables.
-                                    </p>
-                                </div>
-
                                 <DataComponent
                                     files={loadedFiles}
                                     onFileLoaded={handleFileLoaded}
@@ -350,32 +288,9 @@ const MainInterfaceContent = () => {
                             </div>
                         )}
 
-                        {activeTab === 'run' && (
+                        {activeTab === run_name && (
                             <div className="p-6">
-                                <div className={useThemeClasses({
-                                    base: "mb-4 p-4 rounded-lg border transition-colors duration-200",
-                                    light: "bg-purple-50 border-purple-200",
-                                    dark: "bg-purple-900/20 border-purple-800/50"
-                                })}>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className={isDark ? 'text-purple-400' : 'text-purple-600'}>⚡</span>
-                                        <h3 className={useThemeClasses({
-                                            base: "font-semibold",
-                                            light: "text-purple-800",
-                                            dark: "text-purple-300"
-                                        })}>
-                                            Integrated Stress Inversion
-                                        </h3>
-                                    </div>
-                                    <p className={useThemeClasses({
-                                        base: "text-sm",
-                                        light: "text-purple-700",
-                                        dark: "text-purple-200"
-                                    })}>
-                                        Run stress inversion analysis and immediately visualize results with specialized tools. 
-                                        Mohr circles, solution plots, and data stereonets are automatically available after computation.
-                                    </p>
-                                </div>
+                                
 
                                 <RunComponent
                                     files={loadedFiles}
@@ -392,27 +307,15 @@ const MainInterfaceContent = () => {
 
                     {/* Enhanced footer with system information */}
                     <div className={useThemeClasses({
-                        base: "mt-8 pb-6 text-center text-xs border-t pt-4 transition-colors duration-200",
-                        light: "text-gray-400 border-gray-200",
+                        base: "mt-8 pb-6 text-center text-s border-t pt-10 transition-colors duration-200",
+                        light: "text-gray-800 border-gray-200",
                         dark: "text-gray-500 border-gray-700"
                     })}>
                         <div className="flex items-center justify-center gap-6">
-                            <span>Tectostress v2.0 - Enhanced Visualization System</span>
+                            <span>Tectostress v2.0 - Advanced stress inversion analysis</span>
                             <span>•</span>
-                            <span>Parameterized Analysis Workflows</span>
-                            <span>•</span>
-                            <span>Integrated Data Exploration</span>
-                            <span>•</span>
-                            <span>Dark/Light Theme Support</span>
-                        </div>
-                        <div className="mt-2">
-                            <span>Available visualization contexts: </span>
-                            {VisualizationRegistry.getAllContexts().map((context, index) => (
-                                <span key={context} className={isDark ? 'text-blue-400' : 'text-blue-500'}>
-                                    {context}
-                                    {index < VisualizationRegistry.getAllContexts().length - 1 ? ', ' : ''}
-                                </span>
-                            ))}
+                            <a href='https://github.com/alfredicus/tectostress' target="_blank"
+                                rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">GitHub</a>
                         </div>
                     </div>
                 </div>
