@@ -6,7 +6,7 @@ export const synthetic_simple = {
             csv: `id;type;strike;dip;Dip direction
 1;Extension Fracture;0;60;E
 2;Extension Fracture;30;30;NW
-3;Extension Fracture;120;20;S
+3;stylolite;120;20;S
 `
         }
     }

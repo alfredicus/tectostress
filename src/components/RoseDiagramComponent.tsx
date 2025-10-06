@@ -62,8 +62,13 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
         const finalData = data.length > 0 ? data : new Array(100).fill(0).map(() => Math.random() * 180);
 
         // Calculate effective dimensions
-        const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        // const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
+        // const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+
+        const baseWidth = Math.max(currentState.plotDimensions.width - 40, 300);
+        const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        const baseSize = Math.min(baseWidth, baseHeight);
+        const zoomedSize = baseSize * currentState.settings.zoomLevel;
 
         // Clear any existing content
         if (containerRef.current) {
@@ -76,8 +81,8 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
             containerRef.current.appendChild(roseContainer);
 
             const newRose = new RoseDiagram(roseContainer.id, finalData, {
-                width: effectiveWidth,
-                height: effectiveHeight,
+                width: zoomedSize,
+                height: zoomedSize,
                 draw: {
                     labels: currentState.settings.showLabels,
                     circles: currentState.settings.showCircles,
@@ -93,6 +98,7 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
 
             setRose(newRose);
         }
+
 
         return () => {
             // Cleanup if needed
@@ -174,6 +180,37 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
     // Settings panel content
     const settingsContent = (
         <div className="space-y-4">
+            {/* NOUVEAU : Section Zoom */}
+            <div className="pb-4 border-b">
+                <h5 className="font-medium text-gray-800 mb-3">Diagram Size</h5>
+                <div>
+                    <label className="block text-sm font-medium mb-2">
+                        Zoom: {(currentState.settings.zoomLevel * 100).toFixed(0)}%
+                    </label>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.1"
+                        value={currentState.settings.zoomLevel}
+                        onChange={(e) => updateSettings({ zoomLevel: parseFloat(e.target.value) })}
+                        className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>50%</span>
+                        <span>100%</span>
+                        <span>200%</span>
+                    </div>
+                    {currentState.settings.zoomLevel !== 1.0 && (
+                        <button
+                            onClick={() => updateSettings({ zoomLevel: 1.0 })}
+                            className="mt-2 w-full text-xs px-3 py-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                        >
+                            Reset to 100%
+                        </button>
+                    )}
+                </div>
+            </div>
             {/* Bin settings */}
             <div>
                 <h5 className="font-medium text-gray-800 mb-3">Bin Settings</h5>

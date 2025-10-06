@@ -8,6 +8,7 @@ import {
     DefaultSettingsFactory,
     DataExporter
 } from './VisualizationStateSystem';
+import { TypeSynonyms } from '@/utils';
 
 // ============================================================================
 // DATA TYPE CONFIGURATIONS
@@ -31,11 +32,11 @@ interface DataTypeConfig {
 }
 
 const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
-    stylolites: {
-        displayName: 'Stylolites',
+    stylolite: {
+        displayName: 'Stylolite',
         columns: [
             { required: ['trend', 'plunge'] },
-            { required: ['strike', 'dip'] }, // Simplifié - sans dip_direction
+            { required: ['strike', 'dip'] },
             { required: ['dip', 'strike', 'dip_direction'] },
         ],
         representations: [
@@ -53,11 +54,11 @@ const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
             }
         ]
     },
-    joints: {
-        displayName: 'Joints',
+    joint: {
+        displayName: 'Joint',
         columns: [
             { required: ['trend', 'plunge'] },
-            { required: ['strike', 'dip'] }, // Simplifié
+            { required: ['strike', 'dip'] },
             { required: ['dip', 'strike', 'dip_direction'] },
         ],
         representations: [
@@ -75,38 +76,22 @@ const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
             }
         ]
     },
-    fractures: {
-        displayName: 'Fractures',
-        columns: [
-            { required: ['trend', 'plunge'] },
-            { required: ['strike', 'dip'] }, // Simplifié
-            { required: ['dip', 'strike', 'dip_direction'] },
-        ],
-        representations: [
-            {
-                name: 'poles',
-                displayName: 'Fracture Poles',
-                symbol: '○',
-                defaultColor: '#0066ff'
-            },
-            {
-                name: 'planes',
-                displayName: 'Fracture Planes',
-                symbol: '──',
-                defaultColor: '#0044cc'
-            }
-        ]
-    },
-    striated_faults: {
-        displayName: 'Striated Faults',
+    fault: {
+        displayName: 'Fault',
         columns: [
             { required: ['strike', 'dip', 'rake'] },
             { required: ['dip', 'strike', 'dip_direction', 'rake'] },
         ],
         representations: [
             {
+                name: 'poles',
+                displayName: 'Fault Poles',
+                symbol: '●',
+                defaultColor: '#ff0000'
+            },
+            {
                 name: 'striated_planes',
-                displayName: 'Striated Fault Planes',
+                displayName: 'Fault Planes',
                 symbol: '→',
                 defaultColor: '#ff6600'
             }
@@ -119,34 +104,28 @@ const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
 // ============================================================================
 
 interface AvailableRepresentation {
-    key: string; // dataType_representation
+    key: string;
     dataType: string;
     representation: RepresentationConfig;
-    availableInFiles: string[]; // file IDs
+    availableInFiles: string[];
     enabled: boolean;
     color: string;
     opacity: number;
 }
 
 export interface WulffStereonetSettings {
-    // Stereonet display options
     showGrid: boolean;
     showDirections: boolean;
     showLabels: boolean;
     gridInterval: number;
-
-    // Grid styling
     gridColor: string;
     gridWidth: number;
     backgroundColor: string;
     borderColor: string;
     borderWidth: number;
-
-    // Selected files
-    selectedFiles: string[]; // file IDs
-
-    // Available and selected data representations
+    selectedFiles: string[];
     availableRepresentations: AvailableRepresentation[];
+    zoomLevel: number;
 }
 
 export interface WulffStereonetCompState {
@@ -157,13 +136,6 @@ export interface WulffStereonetCompState {
     };
     settings: WulffStereonetSettings;
     open: boolean;
-}
-
-// Default settings factory extension
-declare module './VisualizationStateSystem' {
-    namespace DefaultSettingsFactory {
-        function createWulffStereonetSettings(): WulffStereonetSettings;
-    }
 }
 
 // Extend DefaultSettingsFactory
@@ -178,7 +150,8 @@ declare module './VisualizationStateSystem' {
     borderColor: '#000000',
     borderWidth: 2,
     selectedFiles: [],
-    availableRepresentations: []
+    availableRepresentations: [],
+    zoomLevel: 1.0
 });
 
 // ============================================================================
@@ -189,78 +162,35 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
     const available: AvailableRepresentation[] = [];
 
     Object.entries(DATA_TYPE_CONFIGS).forEach(([dataType, config]) => {
-
-        // Check if at least one column configuration is available
-        const hasValidColumns = config.columns.some(columnConfig => {
-            const filesWithColumns = files.filter(file => {
-                const hasAllColumns = columnConfig.required.every(col => {
-                    const hasColumn = file.headers && file.headers.includes(col);
-                    return hasColumn;
-                });
-                return hasAllColumns;
-            });
-            return filesWithColumns.length > 0;
-        });
-
-        if (hasValidColumns) {
-            // Add each representation
-            config.representations.forEach(repr => {
-                const availableInFiles = files
-                    .filter(file =>
-                        config.columns.some(columnConfig =>
-                            columnConfig.required.every(col =>
-                                file.headers && file.headers.includes(col)
-                            )
+        config.representations.forEach(repr => {
+            const availableInFiles = files
+                .filter(file => {
+                    const hasColumns = config.columns.some(columnConfig =>
+                        columnConfig.required.every(col =>
+                            file.headers && file.headers.includes(col)
                         )
-                    )
-                    .map(file => file.id);
+                    );
 
-                if (availableInFiles.length > 0) {
-                    available.push({
-                        key: `${dataType}_${repr.name}`,
-                        dataType,
-                        representation: repr,
-                        availableInFiles,
-                        enabled: false,
-                        color: repr.defaultColor,
-                        opacity: 1.0
-                    });
-                }
-            });
-        }
+                    const hasMatchingType = file.content.some((row: any) => TypeSynonyms.isSameType(dataType, row.type))
+                    return hasColumns && hasMatchingType;
+                })
+                .map(file => file.id);
+
+            if (availableInFiles.length > 0) {
+                available.push({
+                    key: `${dataType}_${repr.name}`,
+                    dataType,
+                    representation: repr,
+                    availableInFiles,
+                    enabled: false,
+                    color: repr.defaultColor,
+                    opacity: 1.0
+                });
+            }
+        });
     });
 
     return available;
-}
-
-function convertData(row: any, fromColumns: string[], toFormat: 'trend_plunge' | 'strike_dip'): any {
-    console.log('Converting data row:', row, 'fromColumns:', fromColumns, 'toFormat:', toFormat);
-    // Implementation of coordinate conversion
-    if (toFormat === 'trend_plunge') {
-        // Convert strike/dip to trend/plunge
-        const strike = parseFloat(row.strike || row.Strike);
-        const dip = parseFloat(row.dip || row.Dip);
-
-        if (!isNaN(strike) && !isNaN(dip)) {
-            // Pole to plane: trend = strike + 90°, plunge = 90° - dip
-            const trend = (strike + 90) % 360;
-            const plunge = 90 - dip;
-            return { trend, plunge };
-        }
-    } else {
-        // Convert trend/plunge to strike/dip
-        const trend = parseFloat(row.trend || row.Trend);
-        const plunge = parseFloat(row.plunge || row.Plunge);
-
-        if (!isNaN(trend) && !isNaN(plunge)) {
-            // Plane from pole: strike = trend - 90°, dip = 90° - plunge
-            const strike = (trend - 90 + 360) % 360;
-            const dip = 90 - plunge;
-            return { strike, dip };
-        }
-    }
-
-    return null;
 }
 
 // ============================================================================
@@ -276,20 +206,12 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
     onStateChange,
     onDimensionChange
 }) => {
-    // console.log('WulffStereonetComponent rendered with:', {
-    //     filesCount: files?.length || 0,
-    //     files: files,
-    //     width,
-    //     height,
-    //     hasState: !!state
-    // });
-
     const containerRef = useRef<HTMLDivElement>(null);
     const [stereonet, setStereonet] = useState<WulffStereonet | null>(null);
     const [dataStats, setDataStats] = useState<any>(null);
     const [showStylePopup, setShowStylePopup] = useState<string | null>(null);
+    const [showDataPanel, setShowDataPanel] = useState(false);
 
-    // Use the factorized visualization state hook
     const {
         state: currentState,
         availableColumns,
@@ -317,33 +239,37 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         }
 
         const newAvailableRepresentations = getAvailableRepresentations(files);
+        const fileIds = files.map(f => f.id);
 
-        updateSettings({
-            selectedFiles: files.map(f => f.id),
-            availableRepresentations: newAvailableRepresentations
-        });
-    }, [files, updateSettings]); // Ajouter updateSettings en dépendance
+        const representationsChanged = JSON.stringify(newAvailableRepresentations.map(r => r.key)) !==
+            JSON.stringify(currentState.settings.availableRepresentations.map(r => r.key));
+        const filesChanged = JSON.stringify(fileIds) !== JSON.stringify(currentState.settings.selectedFiles);
 
-    // Initialize and update stereonet
+        if (representationsChanged || filesChanged) {
+            updateSettings({
+                selectedFiles: fileIds,
+                availableRepresentations: newAvailableRepresentations
+            });
+        }
+    }, [files]);
+
+    // Initialize stereonet
     useEffect(() => {
         if (!containerRef.current) return;
 
-        // Clear any existing container content
         containerRef.current.innerHTML = '';
-
-        // Create a unique ID for the container
         const containerId = `stereonet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         containerRef.current.id = containerId;
 
-        const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
-
-        // Make it square for better stereonet appearance
-        const size = Math.min(effectiveWidth, effectiveHeight);
+        const baseWidth = Math.max(currentState.plotDimensions.width - 40, 300);
+        const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        const baseSize = Math.min(baseWidth, baseHeight);
+        const zoomedSize = baseSize * currentState.settings.zoomLevel;
+        const labelSize = 14 * currentState.settings.zoomLevel;
 
         const options: WulffStereonetOptions = {
-            width: size,
-            height: size,
+            width: zoomedSize,
+            height: zoomedSize,
             margin: 50,
             gridInterval: currentState.settings.gridInterval,
             showGrid: currentState.settings.showGrid,
@@ -355,29 +281,22 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                 backgroundColor: currentState.settings.backgroundColor,
                 borderColor: currentState.settings.borderColor,
                 borderWidth: currentState.settings.borderWidth,
-                labelColor: '#000000',
-                labelSize: '14px'
+                labelColor: '#989595ff',
+                labelSize: `${labelSize}px`
             }
         };
 
         const newStereonet = new WulffStereonet(containerId, options);
         setStereonet(newStereonet);
+    }, [currentState.plotDimensions, currentState.settings.showGrid, currentState.settings.showDirections, currentState.settings.showLabels, currentState.settings.gridInterval, currentState.settings.gridColor, currentState.settings.backgroundColor, currentState.settings.borderColor, currentState.settings.zoomLevel]);
 
-        return () => {
-            // Cleanup if needed
-        };
-    }, [currentState.plotDimensions, currentState.settings.showGrid, currentState.settings.showDirections, currentState.settings.showLabels, currentState.settings.gridInterval, currentState.settings.gridColor, currentState.settings.backgroundColor, currentState.settings.borderColor]);
-
-    // Update data when stereonet or settings change
+    // Update data
     useEffect(() => {
         if (!stereonet || !files || files.length === 0) return;
 
-        // Clear existing data
         stereonet.clearData();
-
         let totalStats = { total: 0, plotted: 0, errors: 0 };
 
-        // Process each enabled representation
         currentState.settings.availableRepresentations
             .filter(repr => repr.enabled)
             .forEach(repr => {
@@ -391,7 +310,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                     const processedData = processDataForRepresentation(
                         fileData,
                         config,
-                        repr.representation.name,
+                        repr,
                         file.headers
                     );
 
@@ -406,7 +325,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                             size: 4,
                             opacity: repr.opacity,
                             arrowSize: 15,
-                            showLabels: true
+                            showLabels: currentState.settings.showLabels
                         };
 
                         plotDataOnStereonet(stereonet, processedData.data, repr, dataStyle);
@@ -417,11 +336,10 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         setDataStats(totalStats);
     }, [stereonet, currentState.settings.availableRepresentations, files]);
 
-    // Helper function to process data for a specific representation
-    const processDataForRepresentation = (data: any[], config: DataTypeConfig, representationType: string, headers: string[]) => {
+    const processDataForRepresentation = (data: any[], config: DataTypeConfig, repr: AvailableRepresentation, headers: string[]) => {
         const result = { data: [] as any[], stats: { total: data.length, plotted: 0, errors: 0 } };
+        const representationType = repr.representation.name;
 
-        // Find which column configuration works for this file
         const workingColumnConfig = config.columns.find(columnConfig =>
             columnConfig.required.every(col => headers.includes(col))
         );
@@ -432,67 +350,69 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         }
 
         data.forEach((row, index) => {
-            try {
-                let dataPoint: any = null;
+            if (TypeSynonyms.isSameType(repr.dataType, row.type)) {
+                try {
+                    let dataPoint: any = null;
 
-                if (representationType === 'poles') {
-                    // Convert to trend/plunge if needed
-                    if (workingColumnConfig.required.includes('trend')) {
-                        // Direct trend/plunge
-                        const trend = parseFloat(row.trend || row.Trend);
-                        const plunge = parseFloat(row.plunge || row.Plunge);
-                        if (!isNaN(trend) && !isNaN(plunge)) {
-                            dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                    if (representationType === 'poles') {
+                        if (workingColumnConfig.required.includes('trend')) {
+                            const trend = parseFloat(row.trend);
+                            const plunge = parseFloat(row.plunge);
+                            if (!isNaN(trend) && !isNaN(plunge)) {
+                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                            }
                         }
-                    } else {
-                        // Convert from strike/dip
-                        const converted = convertData(row, workingColumnConfig.required, 'trend_plunge');
-                        if (converted) {
-                            dataPoint = { ...converted, id: index + 1 } as PoleData;
-                        }
-                    }
-                } else if (representationType === 'planes') {
-                    // Convert to strike/dip if needed
-                    if (workingColumnConfig.required.includes('strike')) {
-                        // Direct strike/dip
-                        const strike = parseFloat(row.strike || row.Strike);
-                        const dip = parseFloat(row.dip || row.Dip);
-                        if (!isNaN(strike) && !isNaN(dip)) {
-                            dataPoint = { strike, dip, id: index + 1 } as ExtensionFractureData;
-                        }
-                    } else {
-                        // Convert from trend/plunge
-                        const converted = convertData(row, workingColumnConfig.required, 'strike_dip');
-                        if (converted) {
-                            dataPoint = { ...converted, id: index + 1 } as ExtensionFractureData;
+                        else if (workingColumnConfig.required.includes('strike')) {
+                            const dip = parseFloat(row.dip);
+                            const strike = parseFloat(row.strike);
+                            if (!isNaN(strike) && !isNaN(dip)) {
+                                const trend = (strike + 90) % 360;
+                                const plunge = 90 - dip;
+                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                            }
                         }
                     }
-                } else if (representationType === 'striated_planes') {
-                    // Striated fault planes need strike, dip, rake
-                    const strike = parseFloat(row.strike || row.Strike);
-                    const dip = parseFloat(row.dip || row.Dip);
-                    const rake = parseFloat(row.rake || row.Rake);
-                    if (!isNaN(strike) && !isNaN(dip) && !isNaN(rake)) {
-                        dataPoint = { strike, dip, rake, id: index + 1 } as StriatedPlaneData;
+                    else if (representationType === 'planes') {
+                        if (workingColumnConfig.required.includes('trend')) {
+                            const trend = parseFloat(row.trend);
+                            const plunge = parseFloat(row.plunge);
+                            if (!isNaN(trend) && !isNaN(plunge)) {
+                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                            }
+                        }
+                        else if (workingColumnConfig.required.includes('strike')) {
+                            const dip = parseFloat(row.dip);
+                            const strike = parseFloat(row.strike);
+                            if (!isNaN(strike) && !isNaN(dip)) {
+                                dataPoint = { strike, dip, id: index + 1 } as ExtensionFractureData;
+                            }
+                        }
                     }
-                }
+                    else if (representationType === 'striated_planes') {
+                        const strike = parseFloat(row.strike);
+                        const dip = parseFloat(row.dip);
+                        const rake = parseFloat(row.rake);
+                        if (!isNaN(strike) && !isNaN(dip) && !isNaN(rake)) {
+                            dataPoint = { strike, dip, rake, id: index + 1 } as StriatedPlaneData;
+                        }
+                    }
 
-                if (dataPoint) {
-                    result.data.push(dataPoint);
-                    result.stats.plotted++;
-                } else {
+                    if (dataPoint) {
+                        result.data.push(dataPoint);
+                        result.stats.plotted++;
+                    } else {
+                        result.stats.errors++;
+                    }
+                } catch (error) {
+                    console.error('Error processing row:', error);
                     result.stats.errors++;
                 }
-            } catch (error) {
-                console.error('Error processing row:', error);
-                result.stats.errors++;
             }
         });
 
         return result;
     };
 
-    // Helper function to plot data on stereonet
     const plotDataOnStereonet = (
         stereonet: WulffStereonet,
         data: any[],
@@ -516,7 +436,6 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         }
     };
 
-    // Export functionality
     const exportSVG = () => {
         if (!stereonet) return;
         const svgString = stereonet.exportSVG();
@@ -529,33 +448,28 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         URL.revokeObjectURL(url);
     };
 
-    const exportState = () => {
-        DataExporter.exportState(currentState, 'stereonet_state.json');
-    };
-
-    // Handle file selection
     const toggleFileSelection = (fileId: string) => {
         const newSelectedFiles = currentState.settings.selectedFiles.includes(fileId)
             ? currentState.settings.selectedFiles.filter(id => id !== fileId)
             : [...currentState.settings.selectedFiles, fileId];
 
-        updateSettings({ selectedFiles: newSelectedFiles });
-
-        // Recalculate available representations
         const selectedFiles = files.filter(f => newSelectedFiles.includes(f.id));
         const newAvailableRepresentations = getAvailableRepresentations(selectedFiles);
-        updateSettings({ availableRepresentations: newAvailableRepresentations });
+
+        updateSettings({
+            selectedFiles: newSelectedFiles,
+            availableRepresentations: newAvailableRepresentations
+        });
     };
 
-    // Handle representation toggle
     const toggleRepresentation = (key: string) => {
         const updatedRepresentations = currentState.settings.availableRepresentations.map(repr =>
             repr.key === key ? { ...repr, enabled: !repr.enabled } : repr
         );
+
         updateSettings({ availableRepresentations: updatedRepresentations });
     };
 
-    // Handle style change
     const updateRepresentationStyle = (key: string, updates: Partial<AvailableRepresentation>) => {
         const updatedRepresentations = currentState.settings.availableRepresentations.map(repr =>
             repr.key === key ? { ...repr, ...updates } : repr
@@ -563,64 +477,78 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         updateSettings({ availableRepresentations: updatedRepresentations });
     };
 
-    // Style popup component
-    const StylePopup = ({ representation }: { representation: AvailableRepresentation }) => (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-lg w-80">
-                <h3 className="text-lg font-semibold mb-4">{representation.representation.displayName}</h3>
+    const StylePopup = ({ representation }: { representation: AvailableRepresentation }) => {
+        const [localColor, setLocalColor] = React.useState(representation.color);
+        const [localOpacity, setLocalOpacity] = React.useState(representation.opacity);
 
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Color</label>
-                        <input
-                            type="color"
-                            value={representation.color}
-                            onChange={(e) => updateRepresentationStyle(representation.key, { color: e.target.value })}
-                            className="w-full h-10 rounded border"
-                        />
+        const handleApply = () => {
+            updateRepresentationStyle(representation.key, {
+                color: localColor,
+                opacity: localOpacity
+            });
+            setShowStylePopup(null);
+        };
+
+        const handleCancel = () => {
+            setShowStylePopup(null);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCancel}>
+                <div className="bg-white p-6 rounded-lg shadow-lg w-80" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-lg font-semibold mb-4">{representation.representation.displayName}</h3>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Color</label>
+                            <input
+                                type="color"
+                                value={localColor}
+                                onChange={(e) => setLocalColor(e.target.value)}
+                                className="w-full h-10 rounded border"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-1">
+                                Opacity: {localOpacity.toFixed(1)}
+                            </label>
+                            <input
+                                type="range"
+                                min="0.1"
+                                max="1"
+                                step="0.1"
+                                value={localOpacity}
+                                onChange={(e) => setLocalOpacity(parseFloat(e.target.value))}
+                                className="w-full"
+                            />
+                        </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium mb-1">
-                            Opacity: {representation.opacity.toFixed(1)}
-                        </label>
-                        <input
-                            type="range"
-                            min="0.1"
-                            max="1"
-                            step="0.1"
-                            value={representation.opacity}
-                            onChange={(e) => updateRepresentationStyle(representation.key, { opacity: parseFloat(e.target.value) })}
-                            className="w-full"
-                        />
+                    <div className="flex gap-2 mt-6">
+                        <button
+                            onClick={handleCancel}
+                            className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleApply}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                            Apply
+                        </button>
                     </div>
-                </div>
-
-                <div className="flex gap-2 mt-6">
-                    <button
-                        onClick={() => setShowStylePopup(null)}
-                        className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={() => setShowStylePopup(null)}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                        Apply
-                    </button>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
-    // Main plot content
-    const plotContent = (
-        <div className="flex flex-col h-full">
-            {/* Files to Plot */}
-            <div className="mb-4">
+    const dataSelectionPanel = (
+        <div className="space-y-4">
+            <div>
                 <h4 className="font-medium text-gray-800 mb-2">Files to Plot</h4>
-                <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
                     {files && files.map(file => (
                         <label key={file.id} className="flex items-center justify-between py-1">
                             <div className="flex items-center">
@@ -639,10 +567,9 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                 </div>
             </div>
 
-            {/* Data Types to Plot */}
-            <div className="mb-4">
+            <div>
                 <h4 className="font-medium text-gray-800 mb-2">Data Types to Plot</h4>
-                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                <div className="border rounded-lg p-3 max-h-64 overflow-y-auto">
                     {currentState.settings.availableRepresentations.map(repr => (
                         <div key={repr.key} className="flex items-center justify-between py-2">
                             <div className="flex items-center">
@@ -674,8 +601,11 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                     )}
                 </div>
             </div>
+        </div>
+    );
 
-            {/* Stereonet container */}
+    const plotContent = (
+        <div className="flex flex-col h-full relative">
             <div className="flex-1 min-h-0 mb-4">
                 <div
                     ref={containerRef}
@@ -683,7 +613,6 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                 />
             </div>
 
-            {/* Data statistics */}
             {dataStats && (
                 <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2 mb-3">
@@ -704,7 +633,6 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                 </div>
             )}
 
-            {/* Style Popup */}
             {showStylePopup && (
                 <StylePopup
                     representation={currentState.settings.availableRepresentations.find(r => r.key === showStylePopup)!}
@@ -713,10 +641,39 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         </div>
     );
 
-    // Settings panel content
     const settingsContent = (
         <div className="space-y-4">
-            {/* Stereonet display settings */}
+            <div className="pb-4 border-b">
+                <h5 className="font-medium text-gray-800 mb-3">Diagram Size</h5>
+                <div>
+                    <label className="block text-sm font-medium mb-2">  
+                        Zoom: {(currentState.settings.zoomLevel * 100).toFixed(0)}%
+                    </label>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="3.0"
+                        step="0.1"
+                        value={currentState.settings.zoomLevel}
+                        onChange={(e) => updateSettings({ zoomLevel: parseFloat(e.target.value) })}
+                        className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>50%</span>
+                        <span>100%</span>
+                        <span>200%</span>
+                    </div>
+                    {currentState.settings.zoomLevel !== 1.0 && (
+                        <button
+                            onClick={() => updateSettings({ zoomLevel: 1.0 })}
+                            className="mt-2 w-full text-xs px-3 py-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                        >
+                            Reset to 100%
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div>
                 <h5 className="font-medium text-gray-800 mb-3">Stereonet Display</h5>
                 <div className="space-y-3">
@@ -767,7 +724,6 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                 </div>
             </div>
 
-            {/* Grid styling */}
             <div>
                 <h5 className="font-medium text-gray-800 mb-3">Grid Styling</h5>
                 <div className="space-y-3">
@@ -820,36 +776,45 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         </div>
     );
 
-    // Header actions
     const headerActions = (
         <>
-            <button
+            {/* <button
                 onClick={resetToDefaults}
                 className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
                 title="Reset to Defaults"
             >
                 <RotateCcw size={16} />
-            </button>
-            <button
+            </button> */}
+
+            {/* <button
                 onClick={exportSVG}
                 disabled={!stereonet}
                 className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                 title="Export as SVG"
             >
                 <Download size={16} />
-            </button>
+            </button> */}
         </>
     );
 
     return (
         <StablePlotWithSettings
             title={title}
+            leftPanel={dataSelectionPanel}
             settingsPanel={settingsContent}
             headerActions={headerActions}
             borderColor="#d1d5db"
             borderWidth={1}
             settingsPanelWidth={320}
+            leftPanelWidth={320}
+            enableZoom={true}
             initialSettingsOpen={currentState.open}
+            initialLeftPanelOpen={showDataPanel}
+            showLeftPanelButton={true}
+            leftPanelButtonIcon={<Layers size={16} />}
+            onLeftPanelToggle={(isOpen) => {
+                setShowDataPanel(isOpen);
+            }}
             onSettingsToggle={(isOpen) => {
                 toggleSettingsPanel();
 
@@ -860,7 +825,6 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
                         const availableWidth = containerWidth - settingsPanelWidth - 40;
                         const availableHeight = containerRef.current?.clientHeight || height || 600;
 
-                        // Make it square for better stereonet appearance
                         const size = Math.min(availableWidth, availableHeight - 100);
 
                         const newDimensions = {

@@ -154,13 +154,13 @@ export class WulffStereonet {
         this.drawGreatCircle(data.strike, data.dip, style);
 
         // Optionally add pole point
-        const pole = this.planeTopole(data.strike, data.dip);
-        this.drawPoint(pole.trend, pole.plunge, {
-            ...style,
-            size: (style.size || 4) / 2,
-            fillColor: 'white',
-            strokeColor: style.color || 'blue'
-        }, 'circle', data.id);
+        // const pole = this.planeTopole(data.strike, data.dip);
+        // this.drawPoint(pole.trend, pole.plunge, {
+        //     ...style,
+        //     size: (style.size || 4) / 2,
+        //     fillColor: 'white',
+        //     strokeColor: style.color || 'blue'
+        // }, 'circle', data.id);
     }
 
     /**
@@ -573,6 +573,7 @@ export class WulffStereonet {
      */
     private drawPoint(trend: number, plunge: number, style: DataStyle = {}, symbol: string = 'circle', label?: string | number): void {
         const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+        const innerStyle = this.options.stereonetStyle!;
         const [x, y] = this.projectPoint(trend, plunge);
 
         let element: d3.Selection<any, unknown, null, undefined>;
@@ -633,14 +634,17 @@ export class WulffStereonet {
 
         element.attr('opacity', defaultStyle.opacity);
 
+        const fontSize = parseFloat(innerStyle.labelSize as string) * 0.8;
+
         // Add label if provided
+        // console.log(defaultStyle);
         if (label !== undefined && defaultStyle.showLabels) {
             this.svg.append('text')
                 .attr('x', x + defaultStyle.size! + 5)
                 .attr('y', y + 3)
                 .text(label.toString())
                 .attr('fill', defaultStyle.color)
-                .attr('font-size', '10px');
+                .attr('font-size', `${fontSize}px`);
         }
     }
 

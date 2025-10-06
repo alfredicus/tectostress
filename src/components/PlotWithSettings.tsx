@@ -1,108 +1,109 @@
 import React, { useState, useRef, useEffect, useCallback, ReactNode } from 'react';
-import { Settings, X, ChevronRight } from 'lucide-react';
+import { Settings, X, ChevronRight, ChevronLeft, ZoomIn, ZoomOut } from 'lucide-react';
 
-/**
- * StablePlotWithSettings
- * 
- * A React component that provides a stable layout for a plot/visualization with an optional settings panel.
- * The settings panel slides in from the right without affecting the overall dimensions of the parent container.
- * This ensures that the plot area remains stable and does not cause layout shifts in the parent component.
- * 
- * Props:
- * - children: The main plot/visualization component to be displayed.
- * - settingsPanel: The content of the settings panel.
- * - title: Optional title for the plot area.
- * - className: Additional CSS classes for custom styling.
- * - settingsPanelWidth: Width of the settings panel when open (default: 320px).
- * - initialSettingsOpen: Whether the settings panel is open by default (default: false).
- * - showSettingsButton: Whether to show the button to toggle the settings panel (default: true).
- * - headerActions: Additional buttons or actions to display in the header.
- * - onSettingsToggle: Callback when the settings panel is toggled.
- * - borderStyle, borderColor, borderWidth: Customization for the container border.
- * - backgroundColor: Background color of the container.
- * - headerBackgroundColor: Background color of the header.
- * 
- * The component uses CSS transitions for smooth animations when toggling the settings panel.
- * It also listens to resize events to adjust the plot area accordingly without causing parent layout shifts.
- */
 interface StablePlotWithSettingsProps {
-    // Required props
-    children: ReactNode; // The main plot/visualization component
-    settingsPanel: ReactNode; // The settings panel content
-
-    // Optional customization
+    children: ReactNode;
+    settingsPanel?: ReactNode;
+    leftPanel?: ReactNode;
     title?: string;
     className?: string;
     settingsPanelWidth?: number;
+    leftPanelWidth?: number;
     initialSettingsOpen?: boolean;
+    initialLeftPanelOpen?: boolean;
     showSettingsButton?: boolean;
-    headerActions?: ReactNode; // Additional buttons in header
-
-    // Callbacks - NO dimension change callback to prevent parent growth
+    showLeftPanelButton?: boolean;
+    leftPanelButtonIcon?: ReactNode;
+    headerActions?: ReactNode;
     onSettingsToggle?: (isOpen: boolean) => void;
-
-    // Styling options
+    onLeftPanelToggle?: (isOpen: boolean) => void;
     borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none';
     borderColor?: string;
     borderWidth?: number;
     backgroundColor?: string;
     headerBackgroundColor?: string;
+    enableZoom?: boolean;
+    minZoom?: number;
+    maxZoom?: number;
+    defaultZoom?: number;
+    onZoomChange?: (zoom: number) => void;
 }
 
-/**
- * @brief StablePlotWithSettings component.
- */
 const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
     children,
     settingsPanel,
+    leftPanel,
     title = "Plot",
     className = "",
     settingsPanelWidth = 320,
+    leftPanelWidth = 320,
     initialSettingsOpen = false,
+    initialLeftPanelOpen = false,
     showSettingsButton = true,
+    showLeftPanelButton = false,
+    leftPanelButtonIcon,
     headerActions,
     onSettingsToggle,
+    onLeftPanelToggle,
     borderStyle = 'solid',
     borderColor = '#d1d5db',
     borderWidth = 1,
     backgroundColor = '#ffffff',
-    headerBackgroundColor = '#f9fafb'
+    headerBackgroundColor = '#f9fafb',
+    enableZoom = false,
+    minZoom = 0.5,
+    maxZoom = 2.0,
+    defaultZoom = 1.0,
+    onZoomChange
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const plotAreaRef = useRef<HTMLDivElement>(null);
     const [showSettings, setShowSettings] = useState(initialSettingsOpen);
+    const [showLeftPanel, setShowLeftPanel] = useState(initialLeftPanelOpen);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [zoom, setZoom] = useState(defaultZoom);
 
-    // Handle settings panel toggle with animation
     const toggleSettings = useCallback(async () => {
         setIsAnimating(true);
         const newState = !showSettings;
         setShowSettings(newState);
-
-        // Notify parent of settings toggle
         onSettingsToggle?.(newState);
-
-        // Wait for CSS transition to complete
         await new Promise(resolve => setTimeout(resolve, 300));
         setIsAnimating(false);
     }, [showSettings, onSettingsToggle]);
 
-    // Handle container resize to adjust plot area
+    const toggleLeftPanel = useCallback(async () => {
+        setIsAnimating(true);
+        const newState = !showLeftPanel;
+        setShowLeftPanel(newState);
+        onLeftPanelToggle?.(newState);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setIsAnimating(false);
+    }, [showLeftPanel, onLeftPanelToggle]);
+
+    const handleZoomChange = (newZoom: number) => {
+        const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+        setZoom(clampedZoom);
+        onZoomChange?.(clampedZoom);
+    };
+
+    const zoomIn = () => handleZoomChange(zoom + 0.1);
+    const zoomOut = () => handleZoomChange(zoom - 0.1);
+    const resetZoom = () => handleZoomChange(1.0);
+
     useEffect(() => {
         const handleResize = () => {
             if (plotAreaRef.current && containerRef.current) {
                 const containerWidth = containerRef.current.clientWidth;
-                const availableWidth = showSettings ? containerWidth - settingsPanelWidth : containerWidth;
-                
-                // Update plot area width
+                const leftOffset = showLeftPanel ? leftPanelWidth : 0;
+                const rightOffset = showSettings ? settingsPanelWidth : 0;
+                const availableWidth = containerWidth - leftOffset - rightOffset;
                 plotAreaRef.current.style.width = `${Math.max(availableWidth, 250)}px`;
+                plotAreaRef.current.style.left = `${leftOffset}px`;
             }
         };
 
-        // Initial resize
         handleResize();
-
-        // Listen for container resize
         const resizeObserver = new ResizeObserver(handleResize);
         if (containerRef.current) {
             resizeObserver.observe(containerRef.current);
@@ -111,7 +112,7 @@ const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
         return () => {
             resizeObserver.disconnect();
         };
-    }, [showSettings, settingsPanelWidth]);
+    }, [showSettings, showLeftPanel, settingsPanelWidth, leftPanelWidth]);
 
     const containerStyle = {
         border: borderStyle !== 'none' ? `${borderWidth}px ${borderStyle} ${borderColor}` : 'none',
@@ -132,7 +133,7 @@ const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
             style={containerStyle}
         >
             {/* Header */}
-            {(title || headerActions || showSettingsButton) && (
+            {(title || headerActions || showSettingsButton || showLeftPanelButton || enableZoom) && (
                 <div
                     className="flex items-center justify-between px-4 py-3 relative z-10"
                     style={headerStyle}
@@ -146,15 +147,63 @@ const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Zoom Controls */}
+                        {enableZoom && (
+                            <div className="flex items-center gap-1 mr-2">
+                                {/* <button
+                                    onClick={zoomOut}
+                                    disabled={zoom <= minZoom}
+                                    className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Zoom Out"
+                                >
+                                    <ZoomOut size={14} />
+                                </button>
+                                <span className="text-xs font-medium text-gray-600 min-w-[45px] text-center">
+                                    {(zoom * 100).toFixed(0)}%
+                                </span>
+                                <button
+                                    onClick={zoomIn}
+                                    disabled={zoom >= maxZoom}
+                                    className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Zoom In"
+                                >
+                                    <ZoomIn size={14} />
+                                </button>
+                                {zoom !== 1.0 && (
+                                    <button
+                                        onClick={resetZoom}
+                                        className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+                                        title="Reset Zoom"
+                                    >
+                                        Reset
+                                    </button>
+                                )} */}
+                            </div>
+                        )}
+
                         {headerActions}
 
-                        {showSettingsButton && (
+                        {showLeftPanelButton && leftPanel && (
+                            <button
+                                onClick={toggleLeftPanel}
+                                disabled={isAnimating}
+                                className={`p-2 rounded-lg border transition-colors ${showLeftPanel
+                                    ? 'bg-green-100 text-green-600 border-green-200'
+                                    : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                                    } ${isAnimating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={showLeftPanel ? "Hide Left Panel" : "Show Left Panel"}
+                            >
+                                {leftPanelButtonIcon || (showLeftPanel ? <ChevronLeft size={16} /> : <ChevronRight size={16} />)}
+                            </button>
+                        )}
+
+                        {showSettingsButton && settingsPanel && (
                             <button
                                 onClick={toggleSettings}
                                 disabled={isAnimating}
                                 className={`p-2 rounded-lg border transition-colors ${showSettings
-                                        ? 'bg-blue-100 text-blue-600 border-blue-200'
-                                        : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                                    ? 'bg-blue-100 text-blue-600 border-blue-200'
+                                    : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
                                     } ${isAnimating ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title={showSettings ? "Hide Settings" : "Show Settings"}
                             >
@@ -167,56 +216,96 @@ const StablePlotWithSettings: React.FC<StablePlotWithSettingsProps> = ({
 
             {/* Main content area */}
             <div className="flex-1 relative overflow-hidden">
-                {/* Plot area - dynamically sized based on settings panel state */}
-                <div 
+                {/* Left Panel */}
+                {leftPanel && (
+                    <div
+                        className={`absolute top-0 left-0 h-full bg-white border-r shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-20 ${showLeftPanel ? 'translate-x-0' : '-translate-x-full'
+                            }`}
+                        style={{
+                            width: `${leftPanelWidth}px`,
+                            borderRightColor: borderColor
+                        }}
+                    >
+                        <div className="p-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-lg font-semibold text-gray-800">Data Selection</h4>
+                                <button
+                                    onClick={toggleLeftPanel}
+                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    title="Close Panel"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {leftPanel}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Plot area with zoom transform */}
+                <div
                     ref={plotAreaRef}
-                    className={`absolute top-0 left-0 h-full p-4 transition-all duration-300 ease-in-out ${
-                        showSettings ? '' : 'w-full'
-                    }`}
+                    className={`absolute top-0 h-full p-4 transition-all duration-300 ease-in-out`}
                     style={{
-                        width: showSettings ? `calc(100% - ${settingsPanelWidth}px)` : '100%'
+                        width: showSettings || showLeftPanel
+                            ? `calc(100% - ${(showLeftPanel ? leftPanelWidth : 0) + (showSettings ? settingsPanelWidth : 0)}px)`
+                            : '100%',
+                        left: showLeftPanel ? `${leftPanelWidth}px` : '0'
                     }}
                 >
-                    <div className="w-full h-full">
+                    <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{
+                            transform: enableZoom ? `scale(${zoom})` : 'none',
+                            transformOrigin: 'center center',
+                            transition: 'transform 0.2s ease-out'
+                        }}
+                    >
                         {children}
                     </div>
                 </div>
 
-                {/* Settings panel - overlay from right */}
-                <div
-                    className={`absolute top-0 right-0 h-full bg-white border-l shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-20 ${
-                        showSettings ? 'translate-x-0' : 'translate-x-full'
-                    }`}
-                    style={{
-                        width: `${settingsPanelWidth}px`,
-                        borderLeftColor: borderColor
-                    }}
-                >
-                    <div className="p-4">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-lg font-semibold text-gray-800">Settings</h4>
-                            <button
-                                onClick={toggleSettings}
-                                className="p-1 hover:bg-gray-100 rounded transition-colors"
-                                title="Close Settings"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
+                {/* Settings panel (Right) */}
+                {settingsPanel && (
+                    <div
+                        className={`absolute top-0 right-0 h-full bg-white border-l shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-20 ${showSettings ? 'translate-x-0' : 'translate-x-full'
+                            }`}
+                        style={{
+                            width: `${settingsPanelWidth}px`,
+                            borderLeftColor: borderColor
+                        }}
+                    >
+                        <div className="p-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-lg font-semibold text-gray-800">Settings</h4>
+                                <button
+                                    onClick={toggleSettings}
+                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    title="Close Settings"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
 
-                        {/* Settings content */}
-                        <div className="space-y-4">
-                            {settingsPanel}
+                            <div className="space-y-4">
+                                {settingsPanel}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Optional overlay backdrop for mobile */}
-            {showSettings && (
+            {/* Overlay backdrop for mobile */}
+            {(showSettings || showLeftPanel) && (
                 <div
                     className="absolute inset-0 bg-black bg-opacity-20 md:hidden z-10"
-                    onClick={toggleSettings}
+                    onClick={() => {
+                        if (showSettings) toggleSettings();
+                        if (showLeftPanel) toggleLeftPanel();
+                    }}
                 />
             )}
         </div>

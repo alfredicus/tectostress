@@ -44,6 +44,7 @@ export interface RoseSettings {
     showCardinals: boolean;
     showCircles: boolean;
     innerRadius: number;
+    zoomLevel: number;
 }
 
 export interface HistogramSettings {
@@ -55,6 +56,7 @@ export interface HistogramSettings {
     showLabels: boolean;
     xAxisLabel: string;
     yAxisLabel: string;
+    zoomLevel: number;
 }
 
 export interface WulffSettings {
@@ -64,6 +66,7 @@ export interface WulffSettings {
     gridSpacing: number;
     pointSize: number;
     pointColor: string;
+    zoomLevel: number;
 }
 
 export interface MohrSettings {
@@ -83,6 +86,7 @@ export interface MohrSettings {
     areaColor: string;
     stressPointColor: string;
     strokeWidth: number;
+    zoomLevel: number;
 }
 
 // ============================================================================
@@ -446,6 +450,7 @@ export class DefaultSettingsFactory {
             showCardinals: true,
             showCircles: true,
             innerRadius: 5,
+             zoomLevel: 1.0 
         };
     }
 
@@ -459,6 +464,7 @@ export class DefaultSettingsFactory {
             showLabels: true,
             xAxisLabel: 'Value',
             yAxisLabel: 'Frequency',
+        zoomLevel: 1.0 
         };
     }
 
@@ -470,6 +476,7 @@ export class DefaultSettingsFactory {
             gridSpacing: 10,
             pointSize: 3,
             pointColor: '#3498db',
+             zoomLevel: 1.0 
         };
     }
 
@@ -505,7 +512,8 @@ export class DefaultSettingsFactory {
             circle3Color: '#28a745',
             areaColor: 'rgba(200, 200, 200, 0.3)',
             stressPointColor: '#8e44ad',
-            strokeWidth: 2
+            strokeWidth: 2,
+             zoomLevel: 1.0 
         };
     }
 }
