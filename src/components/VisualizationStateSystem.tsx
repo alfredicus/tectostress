@@ -33,87 +33,6 @@ export interface DataColumnInfo {
 }
 
 // ============================================================================
-// SPECIFIC SETTINGS INTERFACES
-// ============================================================================
-
-export interface RoseSettings {
-    binAngle: number;
-    binColor: string;
-    lineColor: string;
-    showLines: boolean;
-    is360: boolean;
-    showLabels: boolean;
-    showCardinals: boolean;
-    showCircles: boolean;
-    innerRadius: number;
-    zoomLevel: number;
-}
-
-export interface HistogramSettings {
-    bins: number;
-    fillColor: string;
-    strokeColor: string;
-    showGrid: boolean;
-    showDensity: boolean;
-    showLabels: boolean;
-    xAxisLabel: string;
-    yAxisLabel: string;
-    zoomLevel: number;
-}
-
-export interface WulffSettings {
-    projection: 'stereonet' | 'equal-area';
-    hemisphere: 'upper' | 'lower';
-    showGrid: boolean;
-    gridSpacing: number;
-    pointSize: number;
-    pointColor: string;
-    zoomLevel: number;
-}
-
-export interface MohrSettings {
-    sigma1: number;
-    sigma2: number;
-    sigma3: number;
-    n1: number;
-    n2: number;
-    n3: number;
-    showGrid: boolean;
-    showLabels: boolean;
-    showColoredArea: boolean;
-    showStressPoint: boolean;
-    circle1Color: string;
-    circle2Color: string;
-    circle3Color: string;
-    areaColor: string;
-    stressPointColor: string;
-    strokeWidth: number;
-    zoomLevel: number;
-}
-
-// ============================================================================
-// COMPONENT STATE TYPES
-// ============================================================================
-
-export interface RoseCompState extends TCompState<RoseSettings> {
-    type: 'rose';
-}
-
-export interface HistogramCompState extends TCompState<HistogramSettings> {
-    type: 'histogram';
-}
-
-export interface WulffCompState extends TCompState<WulffSettings> {
-    type: 'wulff';
-}
-
-export interface MohrCompState extends TCompState<MohrSettings> {
-    type: 'mohr';
-}
-
-export type VisualizationCompState = RoseCompState | HistogramCompState | WulffCompState | MohrCompState | FractureMap2DCompState;
-
-// ============================================================================
 // BASE VISUALIZATION COMPONENT INTERFACE
 // ============================================================================
 
@@ -440,85 +359,46 @@ export function useVisualizationState<T extends TCompState>(
 // DEFAULT SETTINGS FACTORY
 // ============================================================================
 
-export class DefaultSettingsFactory {
-    static createRoseSettings(): RoseSettings {
-        return {
-            binAngle: 10,
-            binColor: '#FF0000',
-            lineColor: '#000000',
-            showLines: true,
-            is360: false,
-            showLabels: false,
-            showCardinals: true,
-            showCircles: true,
-            innerRadius: 5,
-            zoomLevel: 1.0
-        };
-    }
+// export class DefaultSettingsFactory {
 
-    static createHistogramSettings(): HistogramSettings {
-        return {
-            bins: 20,
-            fillColor: '#3498db',
-            strokeColor: '#2c3e50',
-            showGrid: true,
-            showDensity: false,
-            showLabels: true,
-            xAxisLabel: 'Value',
-            yAxisLabel: 'Frequency',
-            zoomLevel: 1.0
-        };
-    }
 
-    static createWulffSettings(): WulffSettings {
-        return {
-            projection: 'stereonet',
-            hemisphere: 'upper',
-            showGrid: true,
-            gridSpacing: 10,
-            pointSize: 3,
-            pointColor: '#3498db',
-            zoomLevel: 1.0
-        };
-    }
+//     static createDefaultState<T extends TCompState>(
+//         type: string,
+//         settings: T['settings'],
+//         width: number = 400,
+//         height: number = 400
+//     ): T {
+//         return {
+//             type,
+//             open: false,
+//             settings,
+//             selectedColumn: '',
+//             plotDimensions: { width, height }
+//         } as T;
+//     }
 
-    static createDefaultState<T extends TCompState>(
-        type: string,
-        settings: T['settings'],
-        width: number = 400,
-        height: number = 400
-    ): T {
-        return {
-            type,
-            open: false,
-            settings,
-            selectedColumn: '',
-            plotDimensions: { width, height }
-        } as T;
-    }
-
-    static createMohrSettings(): MohrSettings {
-        return {
-            sigma1: 100,
-            sigma2: 60,
-            sigma3: 20,
-            n1: 1 / Math.sqrt(3),
-            n2: 1 / Math.sqrt(3),
-            n3: 1 / Math.sqrt(3),
-            showGrid: true,
-            showLabels: true,
-            showColoredArea: true,
-            showStressPoint: true,
-            circle1Color: '#0066cc',
-            circle2Color: '#ff6b35',
-            circle3Color: '#28a745',
-            areaColor: 'rgba(200, 200, 200, 0.3)',
-            stressPointColor: '#8e44ad',
-            strokeWidth: 2,
-            zoomLevel: 1.0
-        };
-    }
-}
+//     static createMohrSettings(): MohrSettings {
+//         return {
+//             sigma1: 100,
+//             sigma2: 60,
+//             sigma3: 20,
+//             n1: 1 / Math.sqrt(3),
+//             n2: 1 / Math.sqrt(3),
+//             n3: 1 / Math.sqrt(3),
+//             showGrid: true,
+//             showLabels: true,
+//             showColoredArea: true,
+//             showStressPoint: true,
+//             circle1Color: '#0066cc',
+//             circle2Color: '#ff6b35',
+//             circle3Color: '#28a745',
+//             areaColor: 'rgba(200, 200, 200, 0.3)',
+//             stressPointColor: '#8e44ad',
+//             strokeWidth: 2,
+//             zoomLevel: 1.0
+//         };
+//     }
+// }
 
 // ============================================================================
 // EXPORT DATA UTILITIES

@@ -1,19 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { RoseDiagram } from './views/RoseDiagram';
+import { RoseDiagram } from './RoseDiagram';
 import { Download, RotateCcw, Navigation } from 'lucide-react';
-import StablePlotWithSettings from './PlotWithSettings';
+import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
-    RoseCompState,
-    RoseSettings,
     useVisualizationState,
-    DefaultSettingsFactory,
     DataExporter,
     ColumnSelector,
     ColorInput,
     NumberInput,
     ColumnInfo
-} from './VisualizationStateSystem';
+} from '../VisualizationStateSystem';
+import { createRoseSettings, RoseCompState } from './RoseParameters';
 
 // ============================================================================
 // ROSE DIAGRAM COMPONENT
@@ -44,7 +42,7 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
         getSelectedColumnInfo
     } = useVisualizationState<RoseCompState>(
         'rose-diagram',
-        DefaultSettingsFactory.createRoseSettings(),
+        createRoseSettings(),
         files,
         width,
         height,

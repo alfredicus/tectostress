@@ -1,19 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { Histogram, HistogramParameters } from './views/Histogram';
+import { Histogram, HistogramParameters } from './Histogram';
 import { Download, RotateCcw, BarChart3, TrendingUp } from 'lucide-react';
-import StablePlotWithSettings from './PlotWithSettings';
+import StablePlotWithSettings from '../PlotWithSettings';
+
 import {
     BaseVisualizationProps,
-    HistogramCompState,
-    HistogramSettings,
     useVisualizationState,
-    DefaultSettingsFactory,
     DataExporter,
     ColumnSelector,
     ColorInput,
     NumberInput,
     ColumnInfo
-} from './VisualizationStateSystem';
+} from '../VisualizationStateSystem';
+import { createHistogramSettings, HistogramCompState } from './HistogramParameters';
 
 // ============================================================================
 // HISTOGRAM COMPONENT
@@ -45,7 +44,7 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
         getSelectedColumnInfo
     } = useVisualizationState<HistogramCompState>(
         'histogram',
-        DefaultSettingsFactory.createHistogramSettings(),
+        createHistogramSettings(),
         files,
         width,
         height,

@@ -1,158 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { WulffStereonet, WulffStereonetOptions, StriatedPlaneData, ExtensionFractureData, PoleData, LineData, DataStyle } from './views/WulffStereonet';
-import { Download, RotateCcw, Navigation, Layers, Settings } from 'lucide-react';
-import StablePlotWithSettings from './PlotWithSettings';
+import { WulffStereonet, WulffStereonetOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle } from './WulffStereonet';
+import { Layers } from 'lucide-react';
+import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
-    useVisualizationState,
-    DefaultSettingsFactory,
-    DataExporter
-} from './VisualizationStateSystem';
+    useVisualizationState
+} from '../VisualizationStateSystem';
 import { TypeSynonyms } from '@/utils';
-
-// ============================================================================
-// DATA TYPE CONFIGURATIONS
-// ============================================================================
-
-interface ColumnConfig {
-    required: string[];
-}
-
-interface RepresentationConfig {
-    name: string;
-    displayName: string;
-    symbol: string;
-    defaultColor: string;
-}
-
-interface DataTypeConfig {
-    displayName: string;
-    columns: ColumnConfig[];
-    representations: RepresentationConfig[];
-}
-
-const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
-    stylolite: {
-        displayName: 'Stylolite',
-        columns: [
-            { required: ['trend', 'plunge'] },
-            { required: ['strike', 'dip'] },
-            { required: ['dip', 'strike', 'dip_direction'] },
-        ],
-        representations: [
-            {
-                name: 'poles',
-                displayName: 'Stylolite Poles',
-                symbol: '✕',
-                defaultColor: '#00ff00'
-            },
-            {
-                name: 'planes',
-                displayName: 'Stylolite Planes',
-                symbol: '──',
-                defaultColor: '#008800'
-            }
-        ]
-    },
-    joint: {
-        displayName: 'Joint',
-        columns: [
-            { required: ['trend', 'plunge'] },
-            { required: ['strike', 'dip'] },
-            { required: ['dip', 'strike', 'dip_direction'] },
-        ],
-        representations: [
-            {
-                name: 'poles',
-                displayName: 'Joint Poles',
-                symbol: '●',
-                defaultColor: '#ff0000'
-            },
-            {
-                name: 'planes',
-                displayName: 'Joint Planes',
-                symbol: '──',
-                defaultColor: '#cc0000'
-            }
-        ]
-    },
-    fault: {
-        displayName: 'Fault',
-        columns: [
-            { required: ['strike', 'dip', 'rake'] },
-            { required: ['dip', 'strike', 'dip_direction', 'rake'] },
-        ],
-        representations: [
-            {
-                name: 'poles',
-                displayName: 'Fault Poles',
-                symbol: '●',
-                defaultColor: '#ff0000'
-            },
-            {
-                name: 'striated_planes',
-                displayName: 'Fault Planes',
-                symbol: '→',
-                defaultColor: '#ff6600'
-            }
-        ]
-    }
-};
-
-// ============================================================================
-// COMPONENT STATE AND SETTINGS
-// ============================================================================
-
-interface AvailableRepresentation {
-    key: string;
-    dataType: string;
-    representation: RepresentationConfig;
-    availableInFiles: string[];
-    enabled: boolean;
-    color: string;
-    opacity: number;
-}
-
-export interface WulffStereonetSettings {
-    showGrid: boolean;
-    showDirections: boolean;
-    showLabels: boolean;
-    gridInterval: number;
-    gridColor: string;
-    gridWidth: number;
-    backgroundColor: string;
-    borderColor: string;
-    borderWidth: number;
-    selectedFiles: string[];
-    availableRepresentations: AvailableRepresentation[];
-    zoomLevel: number;
-}
-
-export interface WulffStereonetCompState {
-    selectedColumn: string | null;
-    plotDimensions: {
-        width: number;
-        height: number;
-    };
-    settings: WulffStereonetSettings;
-    open: boolean;
-}
-
-// Extend DefaultSettingsFactory
-(DefaultSettingsFactory as any).createWulffStereonetSettings = (): WulffStereonetSettings => ({
-    showGrid: true,
-    showDirections: true,
-    showLabels: true,
-    gridInterval: 10,
-    gridColor: '#cccccc',
-    gridWidth: 1,
-    backgroundColor: '#ffffff',
-    borderColor: '#000000',
-    borderWidth: 2,
-    selectedFiles: [],
-    availableRepresentations: [],
-    zoomLevel: 1.0
-});
+import {
+    WulffStereonetSettings,
+    WulffStereonetCompState,
+    DATA_TYPE_CONFIGS,
+    AvailableRepresentation,
+    createWulffStereonetSettings
+} from './WulffParameters';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -212,6 +73,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
     const [showStylePopup, setShowStylePopup] = useState<string | null>(null);
     const [showDataPanel, setShowDataPanel] = useState(false);
 
+    // ========== UTILISATION DU HOOK useVisualizationState ==========
     const {
         state: currentState,
         availableColumns,
@@ -223,8 +85,8 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         getSelectedColumnData,
         getSelectedColumnInfo
     } = useVisualizationState<WulffStereonetCompState>(
-        'wulffStereonet',
-        (DefaultSettingsFactory as any).createWulffStereonetSettings(),
+        'wulff',
+        createWulffStereonetSettings(), // ← Utilisation de la factory du WulffParameters
         files,
         width,
         height,
@@ -288,7 +150,17 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
 
         const newStereonet = new WulffStereonet(containerId, options);
         setStereonet(newStereonet);
-    }, [currentState.plotDimensions, currentState.settings.showGrid, currentState.settings.showDirections, currentState.settings.showLabels, currentState.settings.gridInterval, currentState.settings.gridColor, currentState.settings.backgroundColor, currentState.settings.borderColor, currentState.settings.zoomLevel]);
+    }, [
+        currentState.plotDimensions,
+        currentState.settings.showGrid,
+        currentState.settings.showDirections,
+        currentState.settings.showLabels,
+        currentState.settings.gridInterval,
+        currentState.settings.gridColor,
+        currentState.settings.backgroundColor,
+        currentState.settings.borderColor,
+        currentState.settings.zoomLevel
+    ]);
 
     // Update data
     useEffect(() => {
@@ -336,12 +208,17 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         setDataStats(totalStats);
     }, [stereonet, currentState.settings.availableRepresentations, files]);
 
-    const processDataForRepresentation = (data: any[], config: DataTypeConfig, repr: AvailableRepresentation, headers: string[]) => {
+    const processDataForRepresentation = (
+        data: any[],
+        config: any,
+        repr: AvailableRepresentation,
+        headers: string[]
+    ) => {
         const result = { data: [] as any[], stats: { total: data.length, plotted: 0, errors: 0 } };
         const representationType = repr.representation.name;
 
-        const workingColumnConfig = config.columns.find(columnConfig =>
-            columnConfig.required.every(col => headers.includes(col))
+        const workingColumnConfig = config.columns.find((columnConfig: any) =>
+            columnConfig.required.every((col: string) => headers.includes(col))
         );
 
         if (!workingColumnConfig) {
@@ -646,7 +523,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
             <div className="pb-4 border-b">
                 <h5 className="font-medium text-gray-800 mb-3">Diagram Size</h5>
                 <div>
-                    <label className="block text-sm font-medium mb-2">  
+                    <label className="block text-sm font-medium mb-2">
                         Zoom: {(currentState.settings.zoomLevel * 100).toFixed(0)}%
                     </label>
                     <input
@@ -776,26 +653,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         </div>
     );
 
-    const headerActions = (
-        <>
-            {/* <button
-                onClick={resetToDefaults}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                title="Reset to Defaults"
-            >
-                <RotateCcw size={16} />
-            </button> */}
-
-            {/* <button
-                onClick={exportSVG}
-                disabled={!stereonet}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                title="Export as SVG"
-            >
-                <Download size={16} />
-            </button> */}
-        </>
-    );
+    const headerActions = <></>;
 
     return (
         <StablePlotWithSettings

@@ -1,23 +1,23 @@
+// App.tsx
+// Point d'entrée de l'application
+// C'EST ICI qu'on enregistre toutes les visualisations au démarrage
+
+import React, { useEffect } from 'react';
+import { registerAllVisualizations } from './components/registerAllVisualizations';
 import MainInterface from './components/MainInterface';
-import { DataFactory } from '@alfredo-taboada/stress';
+// ... autres imports
 
-const App = () => {
-
-    if (false) {
-        DataFactory.names().forEach(name => {
-            const fields = DataFactory.fields(name)
-            console.log(`Data Type: ${name}:`)
-            console.log(`  Mandatory Fields: ${fields.mandatory.join(', ')}`)
-            console.log(`  Optional Fields : ${fields.optional ? fields.optional.join(', ') : 'None'}`)
-            console.log('-----------------------------------')
-        });
-    }
+function App() {
+    // Enregistrer toutes les visualisations au montage de l'app
+    useEffect(() => {
+        registerAllVisualizations();
+    }, []);
 
     return (
-        <div className="min-h-screen bg-gray-100 p-4">
+        <div className="App">
             <MainInterface />
         </div>
     );
-};
+}
 
 export default App;
