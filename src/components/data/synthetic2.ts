@@ -8,11 +8,17 @@ export const synthetic1 = {
 2;Extension Fracture;300;90;SW;;;;;;;;;;;;;;;;;;;
 3;Stylolite Interface;30;90;NW;;;;;;;;;;;;;;;;;;;
 4;Stylolite Interface;210;90;SE;;;;;;;;;;;;;;;;;;;
+5;Crystal fibers in vein;;;;;;;;30;0;;;;;;;;;;;;;
+6;Crystal fibers in vein;;;;;;;;210;0;;;;;;;;;;;;;
+7;Stylolite teeth;;;;;;;;120;0;;;;;;;;;;;;;
+8;Stylolite teeth;;;;;;;;300;0;;;;;;;;;;;;;
 9;dilation band;120;90;N;;;;;;;;;;;;;;;;;;;
 10;dilation band;300;90;S;;;;;;;;;;;;;;;;;;;
 11;Striated plane;75;70;S;0;N;;right lateral;;;;;;;;;;;;;;;
 12;Striated plane;165;70;N;0;S;;left-lateral;;;;;;;;;;;;;;;
 13;striated plane;30;30;SE;90;N;;Inverse;;;;;;;;;;;;;;;
+14;neoformed striated plane;150;90;N;0;N;;left-lateral;;;;;;;;;;;;;;;
+15;neoformed striated plane;90;90;S;0;W;;right-lateral;;;;;;;;;;;;;;;
 18;Striated plane;75;40;E;0;N;;right-lateral;;;;;;;;;;;;;;;
 19;Striated plane;165;40;W;0;S;;left-lateral;;;;;;;;;;;;;;;
 20;Striated plane;75;30;W;0;N;;right-lateral;;;;;;;;;;;;;;;

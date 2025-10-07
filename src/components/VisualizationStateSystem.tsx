@@ -1,3 +1,5 @@
+import FractureMap2DComponent, { FractureMap2DCompState } from './FractureMap2DComponent';
+
 // ============================================================================
 // BASE STATE INTERFACES
 // ============================================================================
@@ -109,7 +111,7 @@ export interface MohrCompState extends TCompState<MohrSettings> {
     type: 'mohr';
 }
 
-export type VisualizationCompState = RoseCompState | HistogramCompState | WulffCompState | MohrCompState;
+export type VisualizationCompState = RoseCompState | HistogramCompState | WulffCompState | MohrCompState | FractureMap2DCompState;
 
 // ============================================================================
 // BASE VISUALIZATION COMPONENT INTERFACE
@@ -450,7 +452,7 @@ export class DefaultSettingsFactory {
             showCardinals: true,
             showCircles: true,
             innerRadius: 5,
-             zoomLevel: 1.0 
+            zoomLevel: 1.0
         };
     }
 
@@ -464,7 +466,7 @@ export class DefaultSettingsFactory {
             showLabels: true,
             xAxisLabel: 'Value',
             yAxisLabel: 'Frequency',
-        zoomLevel: 1.0 
+            zoomLevel: 1.0
         };
     }
 
@@ -476,7 +478,7 @@ export class DefaultSettingsFactory {
             gridSpacing: 10,
             pointSize: 3,
             pointColor: '#3498db',
-             zoomLevel: 1.0 
+            zoomLevel: 1.0
         };
     }
 
@@ -513,7 +515,7 @@ export class DefaultSettingsFactory {
             areaColor: 'rgba(200, 200, 200, 0.3)',
             stressPointColor: '#8e44ad',
             strokeWidth: 2,
-             zoomLevel: 1.0 
+            zoomLevel: 1.0
         };
     }
 }

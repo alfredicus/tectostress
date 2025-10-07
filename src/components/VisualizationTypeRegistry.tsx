@@ -105,6 +105,39 @@ const TableIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24,
     </svg>
 );
 
+const FractureMapIcon: React.FC<{ size?: number; className?: string }> = ({ 
+    size = 24, 
+    className = "" 
+}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+        {/* Grille de fond */}
+        <rect x="2" y="2" width="20" height="20" 
+              stroke="currentColor" strokeWidth="1" 
+              fill="none" opacity="0.3" />
+        
+        {/* Points de mesure */}
+        <circle cx="6" cy="6" r="1.5" fill="currentColor" opacity="0.8" />
+        <circle cx="12" cy="8" r="1.5" fill="currentColor" opacity="0.8" />
+        <circle cx="18" cy="7" r="1.5" fill="currentColor" opacity="0.8" />
+        <circle cx="8" cy="14" r="1.5" fill="currentColor" opacity="0.8" />
+        <circle cx="16" cy="16" r="1.5" fill="currentColor" opacity="0.8" />
+        
+        {/* Traits d'orientation (solides) */}
+        <line x1="4" y1="6" x2="8" y2="6" 
+              stroke="#ff0000" strokeWidth="2" opacity="0.9" />
+        <line x1="10" y1="8" x2="14" y2="8" 
+              stroke="#ff0000" strokeWidth="2" opacity="0.9" />
+        
+        {/* Traits d'orientation (pointillés - prédiction) */}
+        <line x1="16" y1="7" x2="20" y2="7" 
+              stroke="#0066cc" strokeWidth="2" 
+              strokeDasharray="2,2" opacity="0.9" />
+        <line x1="6" y1="14" x2="10" y2="14" 
+              stroke="#0066cc" strokeWidth="2" 
+              strokeDasharray="2,2" opacity="0.9" />
+    </svg>
+);
+
 const ChartIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
         <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" />
@@ -158,6 +191,12 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Mohr Circle',
         icon: MohrIcon,
         defaultLayout: { w: 6, h: 4 }
+    },
+    {
+        id: 'fractureMap2D',
+        title: 'Fracture Map 2D',
+        icon: FractureMapIcon,
+        defaultLayout: { w: 8, h: 6 }
     }
 ];
 
@@ -193,6 +232,13 @@ export const STRESS_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         id: 'rose',
         title: 'Strike Distribution',
         icon: RoseIcon,
+        defaultLayout: { w: 4, h: 4 }
+    },
+    ,
+    {
+        id: 'fractureMap2D',
+        title: 'Fracture Map 2D',
+        icon: FractureMapIcon,
         defaultLayout: { w: 4, h: 4 }
     }
 ];

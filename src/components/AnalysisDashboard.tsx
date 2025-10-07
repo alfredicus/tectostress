@@ -143,6 +143,7 @@ const visualizationTypes = [
     { id: 'wulff', title: 'Wulff Stereonet', icon: Target },
     { id: 'histogram', title: 'Histo', icon: HistogramIcon },
     { id: 'mohr', title: 'Mohr Circle', icon: MohrIcon },
+    { id: 'fractureMap2D', title: 'Fracture Map', icon: FractureMapIcon },
     // { id: 'sphere', title: 'Sphere', icon: Dribbble },
     // { id: 'line', title: 'Graphique en ligne', icon: LineChart },
     // { id: 'three', title: 'Test 3D', icon: PieChart },

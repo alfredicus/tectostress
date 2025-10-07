@@ -8,8 +8,11 @@ import {
     RoseCompState,
     HistogramCompState,
     WulffCompState,
-    DataFiles
+    DataFiles,
+    FractureMap2DCompState
 } from './VisualizationStateSystem';
+
+import FractureMap2DComponent from './FractureMap2DComponent';
 
 import MohrCircleComponent from './MohrCircleComponent';
 import { MohrCompState } from './VisualizationStateSystem';
@@ -57,6 +60,18 @@ export const VisualizationComponent: React.FC<EnhancedVisualizationProps> = ({
     };
 
     switch (type) {
+        case 'fractureMap2D':
+            return (
+                <FractureMap2DComponent
+                    files={files}
+                    width={width}
+                    height={height}
+                    state={castState<FractureMap2DCompState>('fractureMap2D')}
+                    onStateChange={handleStateChange}
+                    onDimensionChange={onDimensionChange}
+                />
+            );
+
         case 'rose':
             return (
                 <RoseDiagramComponent
