@@ -2,9 +2,10 @@
 // Smart hook that automatically provides visualization types based on context
 // This is the RECOMMENDED way to use the visualization system
 
-import { useVisualizationManager, UseVisualizationManagerProps } from './VisualizationManager';
+import { useVisualizationManager, UseVisualizationManagerProps, VisualizationType } from './VisualizationManager';
 import { getVisualizationTypesForContext } from './VisualizationTypeRegistry';
 import { VisualizationContext } from './VisualizationDescriptor';
+import { getVisualizationRegistry } from './VisualizationRegistry';
 
 // ============================================================================
 // SMART CONTEXT-AWARE HOOK
@@ -42,6 +43,28 @@ export const useVisualizationManagerWithContext = ({
     });
 };
 
+/**
+ * Convert VisualizationDescriptor to VisualizationType format
+ * This bridges the new descriptor system with the old manager interface
+ */
+function convertDescriptorToType(descriptor: any): VisualizationType {
+    return {
+        id: descriptor.id,
+        title: descriptor.title,
+        icon: descriptor.icon,
+        defaultLayout: descriptor.defaultLayout
+    };
+}
+
+/**
+ * Get visualization types dynamically from the registry
+ */
+export const getVisualizationTypesForContext = (context: VisualizationContext):  VisualizationType[] => {
+    const registry = getVisualizationRegistry();
+    const descriptors = registry.getByContext(context);
+    return descriptors.map(convertDescriptorToType);
+};
+
 // ============================================================================
 // CONVENIENCE HOOKS FOR SPECIFIC CONTEXTS
 // ============================================================================
@@ -64,7 +87,7 @@ export const useDataVisualizationManager = (
  * Use this in RunComponent
  */
 export const useRunVisualizationManager = (
-    props: Omit<UseVisualizationManagerProps, 'availableTypes'>
+    props: Omit<UseVisualizationManagerProps, 'availableTypes'> 
 ) => {
     return useVisualizationManagerWithContext({
         ...props,
