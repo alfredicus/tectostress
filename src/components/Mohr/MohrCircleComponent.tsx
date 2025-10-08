@@ -1,91 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { MohrCircle, MohrParameters } from './views/MohrCircle';
-import { Download, RotateCcw, Circle, Gauge } from 'lucide-react';
-import StablePlotWithSettings from './PlotWithSettings';
+import { MohrCircle, MohrParameters } from './MohrCircle';
+import { Download, RotateCcw, Gauge } from 'lucide-react';
+import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
-    TCompState,
     useVisualizationState,
     DataExporter,
-    ColorInput,
-    NumberInput
-} from './VisualizationStateSystem';
-
-// Add Mohr settings to the main VisualizationStateSystem if needed
-declare module './VisualizationStateSystem' {
-    interface MohrSettings {
-        sigma1: number;
-        sigma2: number;
-        sigma3: number;
-        n1: number;
-        n2: number;
-        n3: number;
-        showGrid: boolean;
-        showLabels: boolean;
-        showColoredArea: boolean;
-        showStressPoint: boolean;
-        circle1Color: string;
-        circle2Color: string;
-        circle3Color: string;
-        areaColor: string;
-        stressPointColor: string;
-        strokeWidth: number;
-    }
-
-    interface MohrCompState extends TCompState<MohrSettings> {
-        type: 'mohr';
-    }
-}
-
-// ============================================================================
-// MOHR CIRCLE SETTINGS
-// ============================================================================
-
-export interface MohrSettings {
-    sigma1: number;
-    sigma2: number;
-    sigma3: number;
-    n1: number;
-    n2: number;
-    n3: number;
-    showGrid: boolean;
-    showLabels: boolean;
-    showColoredArea: boolean;
-    showStressPoint: boolean;
-    circle1Color: string;
-    circle2Color: string;
-    circle3Color: string;
-    areaColor: string;
-    stressPointColor: string;
-    strokeWidth: number;
-}
-
-export interface MohrCompState extends TCompState<MohrSettings> {
-    type: 'mohr';
-}
-
-// ============================================================================
-// DEFAULT SETTINGS FACTORY
-// ============================================================================
-
-const createDefaultMohrSettings = (): MohrSettings => ({
-    sigma1: 100,
-    sigma2: 60,
-    sigma3: 20,
-    n1: 1 / Math.sqrt(3),
-    n2: 1 / Math.sqrt(3),
-    n3: 1 / Math.sqrt(3),
-    showGrid: true,
-    showLabels: true,
-    showColoredArea: true,
-    showStressPoint: true,
-    circle1Color: '#0066cc',
-    circle2Color: '#ff6b35',
-    circle3Color: '#28a745',
-    areaColor: 'rgba(200, 200, 200, 0.3)',
-    stressPointColor: '#8e44ad',
-    strokeWidth: 2
-});
+    ColorInput
+} from '../VisualizationStateSystem';
+import { createMohrSettings, MohrCompState } from './MohrCircleParameters';
 
 // ============================================================================
 // MOHR CIRCLE COMPONENT
@@ -117,7 +40,7 @@ const MohrCircleComponent: React.FC<BaseVisualizationProps<MohrCompState>> = ({
         getSelectedColumnInfo
     } = useVisualizationState<MohrCompState>(
         'mohr-circle',
-        createDefaultMohrSettings(),
+        createMohrSettings(),
         files,
         width,
         height,

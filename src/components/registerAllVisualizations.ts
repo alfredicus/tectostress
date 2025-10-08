@@ -7,21 +7,28 @@ import { getVisualizationRegistry } from './VisualizationRegistry';
 
 
 // Import des descripteurs
-import { RoseCompState, RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
-import { WulffCompState, WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
-import { HistogramCompState, HistogramDescriptor } from './Histo/HistogramDescriptor';
-
-// import { MohrCircleDescriptor } from './MohrCircleDescriptor';
-// import { FractureMap2DDescriptor } from './FractureMap2DDescriptor';
-// ... autres imports
-
-
-export type VisualizationCompState = RoseCompState | WulffCompState | HistogramCompState
+import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
+import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { HistogramDescriptor } from './Histo/HistogramDescriptor';
+import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
+import { RoseCompState } from './Rose/RoseParameters';
+import { WulffCompState } from './Wulff/WulffParameters';
+import { HistogramCompState } from './Histo/HistogramParameters';
+import { MohrCompState } from './Mohr/MohrCircleParameters';
+import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
+import { FractureMap2DCompState } from './Map2D/FractureMap2DParameters';
 
 /**
  * Enregistrer toutes les visualisations de l'application
  * 
- * ⚠️ IMPORTANT : C'est le SEUL endroit où on enregistre les visualisations
+ * ⚠️ IMPORTANT
+ */
+export type VisualizationCompState = RoseCompState | WulffCompState | HistogramCompState | MohrCompState | FractureMap2DCompState;
+
+/**
+ * Enregistrer toutes les visualisations de l'application
+ * 
+ * ⚠️ IMPORTANT
  * 
  * Pour ajouter une nouvelle visualisation :
  * 1. Créer son descripteur (ex: MyNewVisuDescriptor.ts)
@@ -38,13 +45,13 @@ export function registerAllVisualizations(): void {
     // ========== VISUALISATIONS STRUCTURALES ==========
     registry.register(RoseDiagramDescriptor);
     registry.register(WulffStereonetDescriptor);
-    // registry.register(FractureMap2DDescriptor);
+    registry.register(FractureMap2DDescriptor);
     
     // ========== VISUALISATIONS STATISTIQUES ==========
     registry.register(HistogramDescriptor);
     
     // ========== VISUALISATIONS DE CONTRAINTES ==========
-    // registry.register(MohrCircleDescriptor);
+    registry.register(MohrCircleDescriptor);
     
     // ========== NOUVELLES VISUALISATIONS ==========
     // Pour ajouter une nouvelle visualisation, décommenter et adapter :

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { WulffStereonet, WulffStereonetOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle } from './WulffStereonet';
+import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle } from './Wulff';
 import { Layers } from 'lucide-react';
 import StablePlotWithSettings from '../PlotWithSettings';
 import {
@@ -8,11 +8,11 @@ import {
 } from '../VisualizationStateSystem';
 import { TypeSynonyms } from '@/utils';
 import {
-    WulffStereonetSettings,
-    WulffStereonetCompState,
+    WulffSettings,
+    WulffCompState,
     DATA_TYPE_CONFIGS,
     AvailableRepresentation,
-    createWulffStereonetSettings
+    createWulffSettings
 } from './WulffParameters';
 
 // ============================================================================
@@ -58,7 +58,7 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
 // WULFF STEREONET COMPONENT
 // ============================================================================
 
-const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCompState>> = ({
+const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
     files,
     width = 600,
     height = 600,
@@ -68,7 +68,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
     onDimensionChange
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [stereonet, setStereonet] = useState<WulffStereonet | null>(null);
+    const [stereonet, setStereonet] = useState<Wulff | null>(null);
     const [dataStats, setDataStats] = useState<any>(null);
     const [showStylePopup, setShowStylePopup] = useState<string | null>(null);
     const [showDataPanel, setShowDataPanel] = useState(false);
@@ -84,9 +84,9 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         resetToDefaults,
         getSelectedColumnData,
         getSelectedColumnInfo
-    } = useVisualizationState<WulffStereonetCompState>(
+    } = useVisualizationState<WulffCompState>(
         'wulff',
-        createWulffStereonetSettings(), // ← Utilisation de la factory du WulffParameters
+        createWulffSettings(), // ← Utilisation de la factory du WulffParameters
         files,
         width,
         height,
@@ -129,7 +129,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
         const zoomedSize = baseSize * currentState.settings.zoomLevel;
         const labelSize = 14 * currentState.settings.zoomLevel;
 
-        const options: WulffStereonetOptions = {
+        const options: WulffOptions = {
             width: zoomedSize,
             height: zoomedSize,
             margin: 50,
@@ -148,7 +148,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
             }
         };
 
-        const newStereonet = new WulffStereonet(containerId, options);
+        const newStereonet = new Wulff(containerId, options);
         setStereonet(newStereonet);
     }, [
         currentState.plotDimensions,
@@ -291,7 +291,7 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
     };
 
     const plotDataOnStereonet = (
-        stereonet: WulffStereonet,
+        stereonet: Wulff,
         data: any[],
         repr: AvailableRepresentation,
         style: DataStyle
@@ -700,4 +700,4 @@ const WulffStereonetComponent: React.FC<BaseVisualizationProps<WulffStereonetCom
     );
 };
 
-export default WulffStereonetComponent;
+export default WulffComponent;

@@ -37,7 +37,7 @@ export interface LineData {
 }
 
 // Styling options
-export interface StereonetStyle {
+export interface WulffStyle {
     gridColor?: string;
     gridWidth?: number;
     gridDashArray?: string;
@@ -60,7 +60,7 @@ export interface DataStyle {
 }
 
 // Configuration options
-export interface WulffStereonetOptions {
+export interface WulffOptions {
     width?: number;
     height?: number;
     margin?: number;
@@ -68,7 +68,7 @@ export interface WulffStereonetOptions {
     showGrid?: boolean;
     showDirections?: boolean;
     showLabels?: boolean;
-    stereonetStyle?: StereonetStyle;
+    stereonetStyle?: WulffStyle;
     defaultDataStyle?: DataStyle;
 }
 
@@ -76,7 +76,7 @@ export interface WulffStereonetOptions {
  * WulffStereonet class for plotting geological data on a stereographic projection
  * Supports striated fault planes, poles, extension fractures, and other geological structures
  */
-export class WulffStereonet {
+export class Wulff {
     private svg: d3.Selection<SVGGElement, unknown, null, undefined>;
     private container: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     private width: number;
@@ -84,9 +84,9 @@ export class WulffStereonet {
     private radius: number;
     private centerX: number;
     private centerY: number;
-    private options: WulffStereonetOptions;
+    private options: WulffOptions;
 
-    constructor(containerId: string, options: WulffStereonetOptions = {}) {
+    constructor(containerId: string, options: WulffOptions = {}) {
         // Set default options
         this.options = {
             width: 400,
@@ -249,7 +249,7 @@ export class WulffStereonet {
     /**
      * Update stereonet options
      */
-    public updateOptions(newOptions: Partial<WulffStereonetOptions>): void {
+    public updateOptions(newOptions: Partial<WulffOptions>): void {
         this.options = { ...this.options, ...newOptions };
         this.container.remove();
         this.initializeSVG(this.container.node()!.parentElement!.id);
