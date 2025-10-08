@@ -36,9 +36,7 @@ The new parameterized visualization system provides a flexible, reusable framewo
 ```typescript
 enum VisualizationContext {
     DATA_ANALYSIS = 'data_analysis',      // Rose diagrams, histograms, stereonets
-    STRESS_ANALYSIS = 'stress_analysis',   // Mohr circles, results, solutions
-    GENERAL = 'general',                   // Basic charts, tables
-    COMPREHENSIVE = 'comprehensive',       // All available types
+    RUN_ANALYSIS = 'run_analysis',   // Mohr circles, results, solutions
     CUSTOM = 'custom'                      // User-defined contexts
 }
 ```
@@ -81,7 +79,7 @@ const CustomAnalysisComponent = ({ files }) => {
         // ... other methods
     } = useParameterizedVisualizationManager({
         files,
-        context: VisualizationContext.STRESS_ANALYSIS
+        context: VisualizationContext.RUN_ANALYSIS
     });
 
     return (
@@ -118,7 +116,7 @@ VisualizationRegistry.registerCustomContext('my_workflow', myCustomTypes);
 // Method 2: Combine existing contexts
 VisualizationMigrationHelper.createCombinedContext(
     'comprehensive_geology',
-    [VisualizationContext.DATA_ANALYSIS, VisualizationContext.STRESS_ANALYSIS]
+    [VisualizationContext.DATA_ANALYSIS, VisualizationContext.RUN_ANALYSIS]
 );
 
 // Method 3: Extend existing contexts
@@ -144,7 +142,7 @@ The `RunComponent` now includes:
 - Stress inversion execution
 - Automatic results visualization integration
 - Enhanced files with solution data
-- Context-aware visualizations (STRESS_ANALYSIS)
+- Context-aware visualizations (RUN_ANALYSIS)
 
 ### MainInterface Simplification
 
@@ -219,9 +217,9 @@ const getContextForWorkflow = (workflowType: string) => {
         case 'structural_analysis':
             return VisualizationContext.DATA_ANALYSIS;
         case 'stress_inversion':
-            return VisualizationContext.STRESS_ANALYSIS;
+            return VisualizationContext.RUN_ANALYSIS;
         default:
-            return VisualizationContext.GENERAL;
+            return VisualizationContext.DATA_ANALYSIS;
     }
 };
 ```

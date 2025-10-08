@@ -12,7 +12,7 @@ import { HistogramCompState, HistogramSettings } from './HistogramParameters';
 /**
  * Icône de l'Histogram
  */
-const HistogramIcon: React.FC<{ size?: number; className?: string }> = ({
+export const HistogramIcon: React.FC<{ size?: number; className?: string }> = ({
     size = 24,
     className = ""
 }) => (

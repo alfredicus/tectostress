@@ -9,9 +9,7 @@ import { DataFiles } from './VisualizationStateSystem';
  */
 export enum VisualizationContext {
     DATA_ANALYSIS = 'data_analysis',
-    STRESS_ANALYSIS = 'stress_analysis',
-    GENERAL = 'general',
-    SHOW_ANALYSIS = 'show_analysis'
+    RUN_ANALYSIS = 'stress_analysis'
 }
 
 /**

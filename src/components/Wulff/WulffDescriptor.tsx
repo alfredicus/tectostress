@@ -8,7 +8,7 @@ import {
     VisualizationContext 
 } from '../VisualizationDescriptor';
 import WulffStereonetComponent from './WulffStereonetComponent';
-import { WulffCompState, WulffSettings } from './WulffParameters';
+import { WulffCompState, WulffIcon, WulffSettings } from './WulffParameters';
 
 /**
  * Descripteur du Wulff Stereonet
@@ -22,11 +22,11 @@ export const WulffStereonetDescriptor: VisualizationDescriptor<WulffSettings, Wu
     // ========== CONTEXTES ==========
     contexts: [
         VisualizationContext.DATA_ANALYSIS,
-        VisualizationContext.STRESS_ANALYSIS
+        VisualizationContext.RUN_ANALYSIS
     ],
     
     // ========== UI ==========
-    icon: Target, // Utilisation d'une icône Lucide existante
+    icon: WulffIcon, // Utilisation d'une icône Lucide existante
     defaultLayout: { w: 6, h: 4 },
     
     // ========== STATE & SETTINGS ==========

@@ -4,52 +4,57 @@
 
 import { getVisualizationRegistry } from './VisualizationRegistry';
 
-
-
 // Import des descripteurs
-import { RoseCompState, RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
-import { WulffCompState, WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
-import { HistogramCompState, HistogramDescriptor } from './Histo/HistogramDescriptor';
+import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
+import { RoseCompState } from './Rose/RoseParameters';
 
-// import { MohrCircleDescriptor } from './MohrCircleDescriptor';
-// import { FractureMap2DDescriptor } from './FractureMap2DDescriptor';
-// ... autres imports
+import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { WulffStereonetCompState } from './Wulff/WulffParameters';
 
+import { HistogramDescriptor } from './Histo/HistogramDescriptor';
+import { HistogramCompState } from './Histo/HistogramParameters';
 
-export type VisualizationCompState = RoseCompState | WulffCompState | HistogramCompState
+import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
+import { MohrCompState } from './Mohr/MohrCircleParameters';
 
-/**
+import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
+import { FractureMap2DCompState } from './Map2D/FractureMap2DParameters';
+
+/*
  * Enregistrer toutes les visualisations de l'application
- * 
- * ⚠️ IMPORTANT : C'est le SEUL endroit où on enregistre les visualisations
+ * ⚠️ IMPORTANT
  * 
  * Pour ajouter une nouvelle visualisation :
  * 1. Créer son descripteur (ex: MyNewVisuDescriptor.ts)
- * 2. L'importer ici
- * 3. L'enregistrer dans la fonction ci-dessous
+ * 2. L'importer ici avec son CompState (ex: dans MyNewVisuParameters.ts)
+ * 3. Ajouter son état de composant au type VisualizationCompState
+ * 4. L'enregistrer dans la fonction ci-dessous (registerAllVisualizations)
  * 
  * NE PAS modifier d'autres fichiers !
  */
+
+export type VisualizationCompState = RoseCompState | WulffStereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState
+
 export function registerAllVisualizations(): void {
     const registry = getVisualizationRegistry();
-    
+
     console.log('📊 Registering visualizations...');
-    
+
     // ========== VISUALISATIONS STRUCTURALES ==========
     registry.register(RoseDiagramDescriptor);
     registry.register(WulffStereonetDescriptor);
-    // registry.register(FractureMap2DDescriptor);
-    
+    registry.register(FractureMap2DDescriptor);
+
     // ========== VISUALISATIONS STATISTIQUES ==========
     registry.register(HistogramDescriptor);
-    
+
     // ========== VISUALISATIONS DE CONTRAINTES ==========
-    // registry.register(MohrCircleDescriptor);
-    
+    registry.register(MohrCircleDescriptor);
+
     // ========== NOUVELLES VISUALISATIONS ==========
     // Pour ajouter une nouvelle visualisation, décommenter et adapter :
     // registry.register(MyNewVisualizationDescriptor);
-    
+
     // Afficher les stats
     const stats = registry.getStats();
     console.log(`✓ ${stats.total} visualizations registered`);
@@ -66,7 +71,7 @@ export async function registerVisualizationLazy(
 ): Promise<void> {
     const module = await descriptorLoader();
     const descriptor = module.default;
-    
+
     const registry = getVisualizationRegistry();
     registry.register(descriptor);
 }

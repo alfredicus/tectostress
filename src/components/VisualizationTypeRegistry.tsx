@@ -7,11 +7,17 @@ import { DataFile } from './DataFile';
 import { Visualization, VisualizationState } from './types';
 import { AddVisualizationDialog, VisualizationGrid } from './VisualizationManager';
 import { Eye } from 'lucide-react'; // Example icon, replace with actual icons as needed
+import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
+import { HistogramDescriptor } from './Histo/HistogramDescriptor';
+import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
+import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
 
 // ============================================================================
 // ICON COMPONENTS
 // ============================================================================
 
+/*
 const RoseIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
         <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.6" />
@@ -71,6 +77,7 @@ const MohrIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, 
         <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="0.5" />
     </svg>
 );
+*/
 
 const ResultsIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
@@ -105,38 +112,38 @@ const TableIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24,
     </svg>
 );
 
-const FractureMapIcon: React.FC<{ size?: number; className?: string }> = ({ 
-    size = 24, 
-    className = "" 
-}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
-        {/* Grille de fond */}
-        <rect x="2" y="2" width="20" height="20" 
-              stroke="currentColor" strokeWidth="1" 
-              fill="none" opacity="0.3" />
+// const FractureMapIcon: React.FC<{ size?: number; className?: string }> = ({ 
+//     size = 24, 
+//     className = "" 
+// }) => (
+//     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+//         {/* Grille de fond */}
+//         <rect x="2" y="2" width="20" height="20" 
+//               stroke="currentColor" strokeWidth="1" 
+//               fill="none" opacity="0.3" />
         
-        {/* Points de mesure */}
-        <circle cx="6" cy="6" r="1.5" fill="currentColor" opacity="0.8" />
-        <circle cx="12" cy="8" r="1.5" fill="currentColor" opacity="0.8" />
-        <circle cx="18" cy="7" r="1.5" fill="currentColor" opacity="0.8" />
-        <circle cx="8" cy="14" r="1.5" fill="currentColor" opacity="0.8" />
-        <circle cx="16" cy="16" r="1.5" fill="currentColor" opacity="0.8" />
+//         {/* Points de mesure */}
+//         <circle cx="6" cy="6" r="1.5" fill="currentColor" opacity="0.8" />
+//         <circle cx="12" cy="8" r="1.5" fill="currentColor" opacity="0.8" />
+//         <circle cx="18" cy="7" r="1.5" fill="currentColor" opacity="0.8" />
+//         <circle cx="8" cy="14" r="1.5" fill="currentColor" opacity="0.8" />
+//         <circle cx="16" cy="16" r="1.5" fill="currentColor" opacity="0.8" />
         
-        {/* Traits d'orientation (solides) */}
-        <line x1="4" y1="6" x2="8" y2="6" 
-              stroke="#ff0000" strokeWidth="2" opacity="0.9" />
-        <line x1="10" y1="8" x2="14" y2="8" 
-              stroke="#ff0000" strokeWidth="2" opacity="0.9" />
+//         {/* Traits d'orientation (solides) */}
+//         <line x1="4" y1="6" x2="8" y2="6" 
+//               stroke="#ff0000" strokeWidth="2" opacity="0.9" />
+//         <line x1="10" y1="8" x2="14" y2="8" 
+//               stroke="#ff0000" strokeWidth="2" opacity="0.9" />
         
-        {/* Traits d'orientation (pointillés - prédiction) */}
-        <line x1="16" y1="7" x2="20" y2="7" 
-              stroke="#0066cc" strokeWidth="2" 
-              strokeDasharray="2,2" opacity="0.9" />
-        <line x1="6" y1="14" x2="10" y2="14" 
-              stroke="#0066cc" strokeWidth="2" 
-              strokeDasharray="2,2" opacity="0.9" />
-    </svg>
-);
+//         {/* Traits d'orientation (pointillés - prédiction) */}
+//         <line x1="16" y1="7" x2="20" y2="7" 
+//               stroke="#0066cc" strokeWidth="2" 
+//               strokeDasharray="2,2" opacity="0.9" />
+//         <line x1="6" y1="14" x2="10" y2="14" 
+//               stroke="#0066cc" strokeWidth="2" 
+//               strokeDasharray="2,2" opacity="0.9" />
+//     </svg>
+// );
 
 const ChartIcon: React.FC<{ size?: number; className?: string }> = ({ size = 24, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
@@ -171,31 +178,31 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
     {
         id: 'rose',
         title: 'Rose Diagram',
-        icon: RoseIcon,
+        icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
     },
     {
         id: 'histogram',
         title: 'Histogram',
-        icon: HistogramIcon,
+        icon: HistogramDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'wulff',
         title: 'Wulff Stereonet',
-        icon: WulffIcon,
+        icon: WulffStereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'mohr',
         title: 'Mohr Circle',
-        icon: MohrIcon,
+        icon: MohrCircleDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'fractureMap2D',
         title: 'Fracture Map 2D',
-        icon: FractureMapIcon,
+        icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 8, h: 6 }
     }
 ];
@@ -203,7 +210,13 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
 /**
  * Context for stress inversion analysis and results
  */
-export const STRESS_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
+export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
+    {
+        id: 'histogram',
+        title: 'Histogram',
+        icon: HistogramDescriptor.icon,
+        defaultLayout: { w: 6, h: 4 }
+    },
     {
         id: 'results',
         title: 'Results Summary',
@@ -219,66 +232,29 @@ export const STRESS_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
     {
         id: 'mohr',
         title: 'Stress State (Mohr)',
-        icon: MohrIcon,
+        icon: MohrCircleDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'wulff',
         title: 'Data Plot (Stereonet)',
-        icon: WulffIcon,
+        icon: WulffStereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'rose',
         title: 'Strike Distribution',
-        icon: RoseIcon,
+        icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
     },
-    ,
     {
         id: 'fractureMap2D',
         title: 'Fracture Map 2D',
-        icon: FractureMapIcon,
+        icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
     }
 ];
 
-/**
- * Context for general data visualization and exploration
- */
-export const GENERAL_VISUALIZATIONS: VisualizationType[] = [
-    {
-        id: 'table',
-        title: 'Data Table',
-        icon: TableIcon,
-        defaultLayout: { w: 12, h: 3 }
-    },
-    {
-        id: 'histogram',
-        title: 'Histogram',
-        icon: HistogramIcon,
-        defaultLayout: { w: 6, h: 4 }
-    },
-    {
-        id: 'chart',
-        title: 'Line Chart',
-        icon: ChartIcon,
-        defaultLayout: { w: 8, h: 4 }
-    }
-];
-
-/**
- * Context for comprehensive analysis (combines multiple contexts)
- */
-export const COMPREHENSIVE_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
-    ...DATA_ANALYSIS_VISUALIZATIONS,
-    {
-        id: 'analysis',
-        title: 'Analysis Summary',
-        icon: AnalysisIcon,
-        defaultLayout: { w: 10, h: 6 }
-    }
-];
 
 // ============================================================================
 // VISUALIZATION CONTEXT MANAGER
@@ -286,18 +262,13 @@ export const COMPREHENSIVE_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
 
 export enum VisualizationContext {
     DATA_ANALYSIS = 'data_analysis',
-    STRESS_ANALYSIS = 'stress_analysis',
-    GENERAL = 'general',
-    COMPREHENSIVE = 'comprehensive',
-    CUSTOM = 'custom'
+    RUN_ANALYSIS = 'stress_analysis'
 }
 
 export class VisualizationRegistry {
     private static contexts: Map<VisualizationContext, VisualizationType[]> = new Map([
         [VisualizationContext.DATA_ANALYSIS, DATA_ANALYSIS_VISUALIZATIONS],
-        [VisualizationContext.STRESS_ANALYSIS, STRESS_ANALYSIS_VISUALIZATIONS],
-        [VisualizationContext.GENERAL, GENERAL_VISUALIZATIONS],
-        [VisualizationContext.COMPREHENSIVE, COMPREHENSIVE_ANALYSIS_VISUALIZATIONS]
+        [VisualizationContext.RUN_ANALYSIS, RUN_ANALYSIS_VISUALIZATIONS]
     ]);
 
     private static customContexts: Map<string, VisualizationType[]> = new Map();
@@ -431,17 +402,7 @@ export const useDataVisualizationManager = (props: Omit<UseVisualizationManagerP
 export const useStressVisualizationManager = (props: Omit<UseVisualizationManagerProps, 'availableTypes'>) => {
     return useBaseVisualizationManager({
         ...props,
-        availableTypes: STRESS_ANALYSIS_VISUALIZATIONS
-    });
-};
-
-/**
- * Hook for general-purpose visualizations
- */
-export const useGeneralVisualizationManager = (props: Omit<UseVisualizationManagerProps, 'availableTypes'>) => {
-    return useBaseVisualizationManager({
-        ...props,
-        availableTypes: GENERAL_VISUALIZATIONS
+        availableTypes: RUN_ANALYSIS_VISUALIZATIONS
     });
 };
 
@@ -591,21 +552,9 @@ export const DataAnalysisComponent: React.FC<Omit<VisualizationEnabledComponentP
 export const StressAnalysisComponent: React.FC<Omit<VisualizationEnabledComponentProps, 'visualizationContext'>> = (props) => (
     <VisualizationEnabledComponent
         {...props}
-        visualizationContext={VisualizationContext.STRESS_ANALYSIS}
+        visualizationContext={VisualizationContext.RUN_ANALYSIS}
         dialogTitle="Add Stress Analysis Visualization"
         addButtonText="Add Analysis View"
-    />
-);
-
-/**
- * General Purpose Component with integrated visualizations
- */
-export const GeneralVisualizationComponent: React.FC<Omit<VisualizationEnabledComponentProps, 'visualizationContext'>> = (props) => (
-    <VisualizationEnabledComponent
-        {...props}
-        visualizationContext={VisualizationContext.GENERAL}
-        dialogTitle="Add Visualization"
-        addButtonText="Add View"
     />
 );
 
@@ -657,14 +606,4 @@ export class VisualizationMigrationHelper {
 
 // Export commonly used visualization sets for backward compatibility
 export const DATA_VISUALIZATIONS = DATA_ANALYSIS_VISUALIZATIONS;
-export const RUN_VISUALIZATIONS = STRESS_ANALYSIS_VISUALIZATIONS;
-
-// Export the main registry and hooks
-// export {
-//     VisualizationRegistry,
-//     VisualizationContext,
-//     useParameterizedVisualizationManager,
-//     useDataVisualizationManager,
-//     useStressVisualizationManager,
-//     useGeneralVisualizationManager
-// };
+export const RUN_VISUALIZATIONS = RUN_ANALYSIS_VISUALIZATIONS;

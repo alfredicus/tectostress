@@ -79,7 +79,7 @@ const MainInterfaceContent = () => {
         // Example: Create a custom context for advanced geological analysis
         VisualizationMigrationHelper.createCombinedContext(
             'geological_analysis',
-            [VisualizationContext.DATA_ANALYSIS, VisualizationContext.STRESS_ANALYSIS]
+            [VisualizationContext.DATA_ANALYSIS, VisualizationContext.RUN_ANALYSIS]
         );
 
         // Example: Register a custom context for specific workflow

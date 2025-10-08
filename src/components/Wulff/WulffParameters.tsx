@@ -7,6 +7,26 @@ import { TCompState } from "../VisualizationStateSystem";
 // CONFIGURATION DES TYPES DE DONNÉES GÉOLOGIQUES
 // ============================================================================
 
+/**
+ * State complet pour le Wulff Stereonet
+ */
+export interface WulffStereonetCompState extends TCompState<WulffStereonetSettings> {
+    type: 'wulff';
+}
+
+export const WulffIcon: React.FC<{ size?: number; className?: string }> = ({
+    size = 24,
+    className = ""
+}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5" />
+        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.3" />
+        <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="0.5" />
+        <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="0.5" />
+    </svg>
+);
+
 export interface ColumnConfig {
     required: string[];
 }
@@ -127,13 +147,6 @@ export interface WulffStereonetSettings {
     selectedFiles: string[];
     availableRepresentations: AvailableRepresentation[];
     zoomLevel: number;
-}
-
-/**
- * State complet pour le Wulff Stereonet
- */
-export interface WulffStereonetCompState extends TCompState<WulffStereonetSettings> {
-    type: 'wulff';
 }
 
 // ============================================================================

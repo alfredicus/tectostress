@@ -8,6 +8,11 @@ import { VisualizationComponent } from './VisualizationComponent';
 import { DataFile } from './DataFile';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+import { RoseIcon } from './Rose/RoseParameters';
+import { HistogramDescriptor, HistogramIcon } from './Histo/HistogramDescriptor';
+import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
+import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 
 // ============================================================================
 // VISUALIZATION TYPE DEFINITIONS
@@ -19,79 +24,6 @@ export interface VisualizationType {
     icon: React.ComponentType<{ size?: number; className?: string }>;
     defaultLayout: { w: number; h: number };
 }
-
-// Icon components
-const RoseIcon: React.FC<{ size?: number; className?: string }> = ({
-    size = 24,
-    className = ""
-}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
-        <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.6" />
-        <g fill="currentColor" opacity="0.95">
-            <path d="M 12 12 L 11.5 1 A 10.5 10.5 0 0 1 12.5 1 L 12 12 Z" />
-            <path d="M 12 12 L 18.3 3.5 A 7 7 0 0 1 19 4.5 L 12 12 Z" />
-            <path d="M 12 12 L 20.5 8 A 4 4 0 0 1 20.8 9 L 12 12 Z" />
-            <path d="M 12 12 L 22.5 11.5 A 6 6 0 0 1 22.5 12.5 L 12 12 Z" />
-            <path d="M 12 12 L 20.5 16 A 3.5 3.5 0 0 1 20 16.8 L 12 12 Z" />
-            <path d="M 12 12 L 18.3 20.5 A 3 3 0 0 1 17.7 20.8 L 12 12 Z" />
-            <path d="M 12 12 L 12.5 23 A 10 10 0 0 1 11.5 23 L 12 12 Z" />
-            <path d="M 12 12 L 5.7 20.5 A 8 8 0 0 1 5 19.5 L 12 12 Z" />
-            <path d="M 12 12 L 3.5 16 A 6 6 0 0 1 3.2 15 L 12 12 Z" />
-            <path d="M 12 12 L 1.5 12.5 A 8.5 8.5 0 0 1 1.5 11.5 L 12 12 Z" />
-            <path d="M 12 12 L 3.5 8 A 6.5 6.5 0 0 1 4.2 7 L 12 12 Z" />
-            <path d="M 12 12 L 5.7 3.5 A 7.5 7.5 0 0 1 6.5 3 L 12 12 Z" />
-        </g>
-        <circle cx="12" cy="12" r="0.5" fill="currentColor" />
-    </svg>
-);
-
-const HistogramIcon: React.FC<{ size?: number; className?: string }> = ({
-    size = 24,
-    className = ""
-}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
-        <rect x="3" y="3" width="18" height="16" fill="none" stroke="currentColor" strokeWidth="0.3" opacity="0.2" />
-        <g fill="currentColor" opacity="0.8">
-            <rect x="4" y="16" width="2.5" height="3" />
-            <rect x="6.5" y="15" width="2.5" height="4" />
-            <rect x="9" y="11" width="2.5" height="8" />
-            <rect x="11.5" y="9" width="2.5" height="10" />
-            <rect x="14" y="13" width="2.5" height="6" />
-            <rect x="16.5" y="17" width="2.5" height="2" />
-        </g>
-    </svg>
-);
-
-const WulffIcon: React.FC<{ size?: number; className?: string }> = ({
-    size = 24,
-    className = ""
-}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5" />
-        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.3" />
-        <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="0.5" />
-        <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="0.5" />
-    </svg>
-);
-
-const MohrIcon: React.FC<{ size?: number; className?: string }> = ({
-    size = 24,
-    className = ""
-}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        <circle cx="8" cy="12" r="3" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
-        <circle cx="14" cy="12" r="2" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
-        <circle cx="11" cy="12" r="1.5" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.7" />
-        <circle cx="6" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="16" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="10" cy="8" r="1" fill="purple" />
-        <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="0.5" />
-        <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="0.5" />
-    </svg>
-);
 
 const ResultsIcon: React.FC<{ size?: number; className?: string }> = ({
     size = 24,
@@ -130,25 +62,25 @@ export const DATA_VISUALIZATIONS: VisualizationType[] = [
     {
         id: 'rose',
         title: 'Rose Diagram',
-        icon: RoseIcon,
+        icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
     },
     {
         id: 'histogram',
         title: 'Histogram',
-        icon: HistogramIcon,
+        icon: HistogramDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'wulff',
         title: 'Wulff Stereonet',
-        icon: WulffIcon,
+        icon: WulffStereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'mohr',
         title: 'Mohr Circle',
-        icon: MohrIcon,
+        icon: MohrCircleDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     }
 ];
@@ -169,13 +101,13 @@ export const RUN_VISUALIZATIONS: VisualizationType[] = [
     {
         id: 'mohr',
         title: 'Stress State (Mohr)',
-        icon: MohrIcon,
+        icon: MohrCircleDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'wulff',
         title: 'Data Plot (Stereonet)',
-        icon: WulffIcon,
+        icon: WulffStereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     }
 ];
