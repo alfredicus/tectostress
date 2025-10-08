@@ -7,7 +7,7 @@ import {
     VisualizationContext
 } from '../VisualizationDescriptor';
 import HistogramComponent from './HistogramComponent';
-import { HistogramCompState, HistogramSettings } from './HistogramParameters';
+import { createHistogramSettings, HistogramCompState, HistogramSettings } from './HistogramParameters';
 
 /**
  * Icône de l'Histogram
@@ -57,32 +57,12 @@ export const HistogramDescriptor: VisualizationDescriptor<HistogramSettings, His
     // ========== STATE & SETTINGS ==========
     stateType: 'histogram',
 
-    defaultSettings: {
-        bins: 20,
-        fillColor: '#3498db',
-        strokeColor: '#2c3e50',
-        showGrid: true,
-        showDensity: false,
-        showLabels: true,
-        xAxisLabel: 'Value',
-        yAxisLabel: 'Frequency',
-        zoomLevel: 1.0
-    },
+    defaultSettings: createHistogramSettings(),
 
     createInitialState: (width = 400, height = 400): HistogramCompState => ({
         type: 'histogram',
         open: false,
-        settings: {
-            bins: 20,
-            fillColor: '#3498db',
-            strokeColor: '#2c3e50',
-            showGrid: true,
-            showDensity: false,
-            showLabels: true,
-            xAxisLabel: 'Value',
-            yAxisLabel: 'Frequency',
-            zoomLevel: 1.0
-        },
+        settings: createHistogramSettings(),
         selectedColumn: '',
         plotDimensions: { width, height }
     }),

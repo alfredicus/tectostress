@@ -10,7 +10,7 @@ import { TCompState } from "../VisualizationStateSystem";
 /**
  * State complet pour le Wulff Stereonet
  */
-export interface WulffStereonetCompState extends TCompState<WulffStereonetSettings> {
+export interface WulffCompState extends TCompState<WulffSettings> {
     type: 'wulff';
 }
 
@@ -131,10 +131,10 @@ export interface AvailableRepresentation {
 // ============================================================================
 
 /**
- * Settings complets pour le Wulff Stereonet
+ * Settings complets pour le Wulff 
  * C'est la version RÉELLE utilisée par le composant
  */
-export interface WulffStereonetSettings {
+export interface WulffSettings {
     showGrid: boolean;
     showDirections: boolean;
     showLabels: boolean;
@@ -156,7 +156,7 @@ export interface WulffStereonetSettings {
 /**
  * Créer les settings par défaut pour le Wulff Stereonet
  */
-export function createWulffStereonetSettings(): WulffStereonetSettings {
+export function createWulffSettings(): WulffSettings {
     return {
         showGrid: true,
         showDirections: true,

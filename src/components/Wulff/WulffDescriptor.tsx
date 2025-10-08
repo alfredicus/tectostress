@@ -2,13 +2,12 @@
 // Descripteur pour le Wulff Stereonet
 
 import React from 'react';
-import { Target } from 'lucide-react';
 import { 
     VisualizationDescriptor, 
     VisualizationContext 
 } from '../VisualizationDescriptor';
-import WulffStereonetComponent from './WulffStereonetComponent';
-import { WulffCompState, WulffIcon, WulffSettings } from './WulffParameters';
+import WulffComponent from './WulffComponent';
+import { createWulffSettings, WulffCompState, WulffIcon, WulffSettings } from './WulffParameters';
 
 /**
  * Descripteur du Wulff Stereonet
@@ -32,34 +31,18 @@ export const WulffStereonetDescriptor: VisualizationDescriptor<WulffSettings, Wu
     // ========== STATE & SETTINGS ==========
     stateType: 'wulff',
     
-    defaultSettings: {
-        projection: 'stereonet',
-        hemisphere: 'upper',
-        showGrid: true,
-        gridSpacing: 10,
-        pointSize: 3,
-        pointColor: '#3498db',
-        zoomLevel: 1.0
-    },
+    defaultSettings: createWulffSettings(),
     
     createInitialState: (width = 400, height = 400): WulffCompState => ({
         type: 'wulff',
         open: false,
-        settings: {
-            projection: 'stereonet',
-            hemisphere: 'upper',
-            showGrid: true,
-            gridSpacing: 10,
-            pointSize: 3,
-            pointColor: '#3498db',
-            zoomLevel: 1.0
-        },
+        settings: createWulffSettings(),
         selectedColumn: '',
         plotDimensions: { width, height }
     }),
     
     // ========== COMPOSANT ==========
-    component: WulffStereonetComponent,
+    component: WulffComponent,
     
     // ========== METADATA ==========
     version: '1.0.0',

@@ -39,18 +39,7 @@ export const RoseDiagramDescriptor: VisualizationDescriptor<RoseSettings, RoseCo
     createInitialState: (width = 400, height = 400): RoseCompState => ({
         type: 'rose',
         open: false,
-        settings: {
-            binAngle: 10,
-            binColor: '#FF0000',
-            lineColor: '#000000',
-            showLines: true,
-            is360: false,
-            showLabels: false,
-            showCardinals: true,
-            showCircles: true,
-            innerRadius: 5,
-            zoomLevel: 1.0
-        },
+        settings: createRoseSettings(),
         selectedColumn: '',
         plotDimensions: { width, height }
     }),

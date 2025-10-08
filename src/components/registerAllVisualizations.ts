@@ -44,13 +44,11 @@ export function registerAllVisualizations(): void {
     registry.register(RoseDiagramDescriptor);
     registry.register(WulffStereonetDescriptor);
     registry.register(FractureMap2DDescriptor);
-
     // ========== VISUALISATIONS STATISTIQUES ==========
     registry.register(HistogramDescriptor);
 
     // ========== VISUALISATIONS DE CONTRAINTES ==========
     registry.register(MohrCircleDescriptor);
-
     // ========== NOUVELLES VISUALISATIONS ==========
     // Pour ajouter une nouvelle visualisation, décommenter et adapter :
     // registry.register(MyNewVisualizationDescriptor);
