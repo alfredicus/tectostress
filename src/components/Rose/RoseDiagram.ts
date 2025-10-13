@@ -58,17 +58,15 @@ export const DefaultRoseDiagramParameters: RoseDiagramParameters = {
  * @category Rose diagram
  */
 export class RoseDiagram {
-    private element_: HTMLElement = undefined
+    private element_: string = undefined
     private data_: number[] = []
     params: RoseDiagramParameters = DefaultRoseDiagramParameters
 
-    constructor(element: HTMLElement, data: number[], params: RoseDiagramParameters = DefaultRoseDiagramParameters) {
+    constructor(element: string, data: number[], params: RoseDiagramParameters = DefaultRoseDiagramParameters) {
         this.element_ = element
         this.data_ = data
         Object.assign(this.params, params)
-        if (data && data.length > 0) {
-            this.update()
-        }
+        this.update()
     }
 
     set width(w: number) {
@@ -136,7 +134,10 @@ export class RoseDiagram {
     }
 
     update() {
-        const data = this.data_.map(d => {
+        const hasData = this.data_ && this.data_.length > 0;
+
+        // Normalize data if available
+        const data = hasData ? this.data_.map(d => {
             while (d < 0) {
                 d += 360
             }
@@ -144,20 +145,23 @@ export class RoseDiagram {
                 d -= 360
             }
             return d
-        })
+        }) : [];
 
         // Check if the data are in [0,180] or [0,360]
         let isBetween0and360 = this.params.is360
-        let min = Number.POSITIVE_INFINITY
-        let max = Number.NEGATIVE_INFINITY
-        data.forEach(d => {
-            if (d > max) max = d
-            if (d < min) min = d
-        })
 
-        // Force
-        if (max > 180) {
-            isBetween0and360 = true
+        if (hasData) {
+            let min = Number.POSITIVE_INFINITY
+            let max = Number.NEGATIVE_INFINITY
+            data.forEach(d => {
+                if (d > max) max = d
+                if (d < min) min = d
+            })
+
+            // Force 360 mode if data exceeds 180
+            if (max > 180) {
+                isBetween0and360 = true
+            }
         }
 
         let width = this.params.width
@@ -186,51 +190,181 @@ export class RoseDiagram {
             .range([0, 2 * Math.PI])
 
         let radius = d3.scaleLinear().range([this.params.innerR, outerR])
-        let y = d3.scaleLinear().range([this.params.innerR, outerR])
 
-        // Binning...
-        let dataRose: Item[] = binSerieFromAngle(data, this.params.deltaAngle, isBetween0and360)
+        // Only process and display data if available
+        if (hasData) {
+            // Binning...
+            let dataRose: Item[] = binSerieFromAngle(data, this.params.deltaAngle, isBetween0and360)
 
-        let children: Item[] = undefined
-        if (isBetween0and360 === false) {
-            let dataRoseSym = dataRose.map((d, i) => {
-                return {
-                    startAngle: d.startAngle + Math.PI,
-                    endAngle: d.endAngle + Math.PI,
-                    freq: d.freq,
+            let children: Item[] = undefined
+            if (isBetween0and360 === false) {
+                let dataRoseSym = dataRose.map((d, i) => {
+                    return {
+                        startAngle: d.startAngle + Math.PI,
+                        endAngle: d.endAngle + Math.PI,
+                        freq: d.freq,
+                    }
+                })
+                children = dataRose.concat(dataRoseSym)
+            }
+            else {
+                children = dataRose
+            }
+
+            // Range and domain of the frequence for rose diagram
+            let freq = d3
+                .scaleLinear()
+                .domain([0, d3.max(dataRose, (d: Item) => d.freq)])
+                .range([this.params.innerR, outerR])
+
+            radius.domain([0, d3.max(dataRose, (d: Item) => undefined),])
+
+            // Plot the arc for each datum 0-360 degrees
+            const gg = g.append('g')
+                .selectAll('path')
+                .data(children)
+                .join('path')
+                .attr('d', d3.arc<Item>()
+                    .innerRadius((d) => freq((d as Item).freq))
+                    .outerRadius(this.params.innerR)
+                    .padAngle(0.01)
+                    .padRadius(20)
+                )
+
+            if (this.params.draw.binBorder) {
+                gg.attr('stroke', this.params.lineColor)
+            }
+
+            gg.style('fill', this.params.fillColor).join('path')
+
+            // Add radius line (only with data)
+            g.selectAll('.axis')
+                .data(d3.range(angle.domain()[1]))
+                .enter()
+                .append('g')
+                .attr('class', 'axis')
+                .attr('stroke-width', 0.5)
+                .attr('transform', (d) => {
+                    return 'rotate(' + (angle(d) * 180) / Math.PI + ')'
+                })
+                .style('opacity', 1)
+                .call(
+                    d3.axisLeft(freq).tickSizeOuter(0).scale(radius.copy().range([-this.params.innerR, -outerR])),
+                )
+
+            // Add circular tick with frequency values (only with data)
+            if (this.params.draw.circles || this.params.draw.labels) {
+                let yAxis = g.append('g').attr('text-anchor', 'middle')
+
+                var yTick = yAxis
+                    .selectAll('g')
+                    .data(freq.ticks(this.params.gradTickSpacing).slice(1))
+                    .enter()
+                    .append('g')
+
+                if (this.params.draw.circles) {
+                    yTick
+                        .append('circle')
+                        .attr('fill', 'none')
+                        .attr('stroke', 'gray')
+                        .style('opacity', 0.2)
+                        .attr('r', freq)
                 }
-            })
-            children = dataRose.concat(dataRoseSym)
+
+                if (this.params.draw.labels) {
+                    yTick
+                        .append('text')
+                        .attr('y', (d) => -freq(d))
+                        .attr('dy', '-0.25em')
+                        .attr('x', function () {
+                            return -15
+                        })
+                        .text(freq.tickFormat(5, 's'))
+                        .style('font-size', 12)
+                }
+            }
         }
         else {
-            children = dataRose
+            // Binning...
+            const data = [30, 120]
+            let dataRose: Item[] = binSerieFromAngle(data, this.params.deltaAngle, isBetween0and360)
+
+            let children: Item[] = undefined
+            if (isBetween0and360 === false) {
+                let dataRoseSym = dataRose.map((d, i) => {
+                    return {
+                        startAngle: d.startAngle + Math.PI,
+                        endAngle: d.endAngle + Math.PI,
+                        freq: d.freq,
+                    }
+                })
+                children = dataRose.concat(dataRoseSym)
+            }
+            else {
+                children = dataRose
+            }
+
+            // Range and domain of the frequence for rose diagram
+            let freq = d3
+                .scaleLinear()
+                .domain([0, d3.max(dataRose, (d: Item) => d.freq)])
+                .range([this.params.innerR, outerR])
+
+            radius.domain([0, d3.max(dataRose, (d: Item) => undefined),])
+
+            // if (this.params.draw.binBorder) {
+            //     gg.attr('stroke', this.params.lineColor)
+            // }
+
+            // gg.style('fill', this.params.fillColor).join('path')
+
+            // Add radius line (only with data)
+            g.selectAll('.axis')
+                .data(d3.range(angle.domain()[1]))
+                .enter()
+                .append('g')
+                .attr('class', 'axis')
+                .attr('stroke-width', 0.5)
+                .attr('transform', (d) => {
+                    return 'rotate(' + (angle(d) * 180) / Math.PI + ')'
+                })
+                .style('opacity', 1)
+                .call(
+                    d3.axisLeft(freq).tickSizeOuter(0).scale(radius.copy().range([-this.params.innerR, -outerR])),
+                )
+
+            // Add circular tick with frequency values (only with data)
+            if (this.params.draw.circles || this.params.draw.labels) {
+                let yAxis = g.append('g').attr('text-anchor', 'middle')
+
+                var yTick = yAxis
+                    .selectAll('g')
+                    .data(freq.ticks(this.params.gradTickSpacing).slice(1))
+                    .enter()
+                    .append('g')
+
+                if (this.params.draw.circles) {
+                    yTick
+                        .append('circle')
+                        .attr('fill', 'none')
+                        .attr('stroke', 'gray')
+                        .style('opacity', 0.2)
+                        .attr('r', freq)
+                }
+
+                if (this.params.draw.labels) {
+                    yTick
+                        .append('text')
+                        .attr('y', (d) => -freq(d))
+                        .attr('dy', '-0.25em')
+                        .attr('x', function () {
+                            return -15
+                        })
+                        .text(freq.tickFormat(5, 's'))
+                        .style('font-size', 12)
+                }
+            }
         }
-
-        // Range and domain of the frequence for rose diagram
-        let freq = d3
-            .scaleLinear()
-            .domain([0, d3.max(dataRose, (d: Item) => d.freq)])
-            .range([this.params.innerR, outerR])
-
-        radius.domain([0, d3.max(dataRose, (d: Item) => undefined),])
-
-        // Plot the arc for each datum 0-360 degrees
-        const gg = g.append('g')
-            .selectAll('path')
-            .data(children)
-            .join('path')
-            .attr('d', d3.arc<Item>()
-                .innerRadius((d) => freq((d as Item).freq))
-                .outerRadius(this.params.innerR)
-                .padAngle(0.01)
-                .padRadius(20)
-            )
-
-        if (this.params.draw.binBorder) {
-            gg.attr('stroke', this.params.lineColor)
-        }
-
-        gg.style('fill', this.params.fillColor).join('path')
 
         // Add outer black circle
         g.append('circle')
@@ -248,8 +382,7 @@ export class RoseDiagram {
             .attr('stroke', 'black')
             .style('fill', 'none')
 
-        // ------------------------------------------------------------
-
+        // Cardinal points (displayed based on option)
         if (this.params.draw.cardinals) {
             // scale of 4 cardinal points
             let labelHead = ['N', 'E', 'S', 'W']
@@ -276,7 +409,7 @@ export class RoseDiagram {
                         ',0)'
                     )
                 })
-                .attr('font-family', 'Aldrich') //Aldrich
+                .attr('font-family', 'Aldrich')
 
             // put upright cardinal points
             label
@@ -289,53 +422,6 @@ export class RoseDiagram {
                 .text((d) => d)
                 .attr("font-weight", 700)
                 .style('font-size', 14)
-        }
-
-        // ------------------------------------------------------------
-
-        // Add radius line
-        g.selectAll('.axis')
-            .data(d3.range(angle.domain()[1]))
-            .enter()
-            .append('g')
-            .attr('class', 'axis')
-            .attr('stroke-width', 0.5)
-            .attr('transform', (d) => {
-                return 'rotate(' + (angle(d) * 180) / Math.PI + ')'
-            })
-            .style('opacity', 1)
-            .call(
-                d3.axisLeft(freq).tickSizeOuter(0).scale(radius.copy().range([-this.params.innerR, -outerR])),
-            )
-
-        // Add circular tick with frequency values
-        let yAxis = g.append('g').attr('text-anchor', 'middle')
-
-        var yTick = yAxis
-            .selectAll('g')
-            .data(freq.ticks(this.params.gradTickSpacing).slice(1))
-            .enter()
-            .append('g')
-
-        if (this.params.draw.circles) {
-            yTick
-                .append('circle')
-                .attr('fill', 'none')
-                .attr('stroke', 'gray')
-                .style('opacity', 0.2)
-                .attr('r', freq)
-        }
-
-        if (this.params.draw.labels) {
-            yTick
-                .append('text')
-                .attr('y', (d) => -freq(d))
-                .attr('dy', '-0.25em')
-                .attr('x', function () {
-                    return -15
-                })
-                .text(freq.tickFormat(5, 's'))
-                .style('font-size', 12)
         }
     }
 }

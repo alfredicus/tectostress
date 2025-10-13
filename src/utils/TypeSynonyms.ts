@@ -3,9 +3,18 @@
  */
 export class TypeSynonyms {
     private static table_: Map<string, string[]> = new Map([
+        // Data types and their synonyms
         ['joint', ['extension fracture', 'tension fracture', 'tensile fracture', 'open fracture', 'vein', 'tension gash', 'joint', 'dike', 'dyke']],
         ['fault', ['shear fracture', 'fault', 'brittle shear fracture', 'brittle fault', 'striated fault plane', 'striated plane']],
-        ['stylolite', ['stylolite', 'pressure solution seam', 'pressure solution surface', 'stylolite plane', 'stylolite interface']]
+        ['stylolite', ['stylolite', 'pressure solution seam', 'pressure solution surface', 'stylolite plane', 'stylolite interface']],
+
+        // Comumn names
+        ['dip', ['dip', 'dip angle', 'slope', 'slope angle']],
+        ['strike', ['strike', 'azimuth']],
+        ['rake', ['rake']],
+        ['dip direction', ['dip direction']],
+        ['strike direction', ['strike direction']],
+        ['type of movement', ['type of movement', 'type of mouvement', 'sens of movement']]
     ]);
 
     // Private constructor prevents instantiation
@@ -49,6 +58,9 @@ export class TypeSynonyms {
     }
 }
 
-function beautifyName(name: string): string {
-    return name.toLowerCase().replace('_', ' ').trim();
+// - to lower case
+// - replace underscores and hyphens with spaces
+// - trim leading and trailing whitespace
+export function beautifyName(name: string): string {
+    return name.toLowerCase().replace('_', ' ').replace('-', ' ').trim();
 }

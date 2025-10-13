@@ -1,17 +1,70 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RoseDiagram } from './RoseDiagram';
-import { Download, RotateCcw, Navigation } from 'lucide-react';
+import { Navigation } from 'lucide-react';
 import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
-    useVisualizationState,
-    DataExporter,
-    ColumnSelector,
-    ColorInput,
-    NumberInput,
-    ColumnInfo
+    useVisualizationState
 } from '../VisualizationStateSystem';
 import { createRoseSettings, RoseCompState } from './RoseParameters';
+import { beautifyName } from '@/utils';
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+interface AvailableDataType {
+    key: string;
+    dataType: string;
+    availableInFiles: string[];
+    enabled: boolean;
+}
+
+function getAvailableDataTypes(files: any[]): AvailableDataType[] {
+    const available: AvailableDataType[] = [];
+    const dataTypeMap = new Map<string, string[]>();
+
+    files.forEach(file => {
+        const fileData = file.data || file.content;
+        if (!fileData || fileData.length === 0) return;
+
+        fileData.forEach((row: any) => {
+            if (row.type) {
+                const type = row.type;
+                if (!dataTypeMap.has(type)) {
+                    dataTypeMap.set(type, []);
+                }
+                if (!dataTypeMap.get(type)!.includes(file.id)) {
+                    dataTypeMap.get(type)!.push(file.id);
+                }
+            }
+        });
+    });
+
+    dataTypeMap.forEach((fileIds, dataType) => {
+        available.push({
+            key: dataType,
+            dataType: dataType,
+            availableInFiles: fileIds,
+            enabled: false
+        });
+    });
+
+    return available;
+}
+
+function getAvailableColumns(files: any[], selectedFiles: string[]): string[] {
+    const columns = new Set<string>();
+
+    files
+        .filter(file => selectedFiles.includes(file.id))
+        .forEach(file => {
+            const headers = file.headers?.map((h: string) => beautifyName(h)) || [];
+            headers.forEach(header => columns.add(header));
+        });
+
+    return Array.from(columns);
+}
 
 // ============================================================================
 // ROSE DIAGRAM COMPONENT
@@ -27,19 +80,19 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
     onDimensionChange
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [rose, setRose] = React.useState<RoseDiagram | null>(null);
+    const [rose, setRose] = useState<RoseDiagram | null>(null);
+    const [dataStats, setDataStats] = useState<any>(null);
+    const [showDataPanel, setShowDataPanel] = useState(false);
+    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    const [availableDataTypes, setAvailableDataTypes] = useState<AvailableDataType[]>([]);
+    const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+    const [selectedColumn, setSelectedColumn] = useState<string>('');
 
-    // Use the factorized visualization state hook
     const {
         state: currentState,
-        availableColumns,
         updateSettings,
-        updateSelectedColumn,
         updatePlotDimensions,
         toggleSettingsPanel,
-        resetToDefaults,
-        getSelectedColumnData,
-        getSelectedColumnInfo
     } = useVisualizationState<RoseCompState>(
         'rose-diagram',
         createRoseSettings(),
@@ -50,18 +103,47 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
         onStateChange
     );
 
-    // Initialize and update rose diagram
+    // Initialize selected files when files change
+    useEffect(() => {
+        if (!files || files.length === 0) {
+            setSelectedFiles([]);
+            setAvailableDataTypes([]);
+            setAvailableColumns([]);
+            setSelectedColumn('');
+            return;
+        }
+
+        // Select all files by default
+        const fileIds = files.map(f => f.id);
+        setSelectedFiles(fileIds);
+
+        // Update available data types
+        const dataTypes = getAvailableDataTypes(files);
+        setAvailableDataTypes(dataTypes);
+    }, [files]);
+
+    // Update available columns when files or data types change
+    useEffect(() => {
+        if (!files || files.length === 0) {
+            setAvailableColumns([]);
+            setSelectedColumn('');
+            return;
+        }
+
+        const columns = getAvailableColumns(files, selectedFiles);
+        setAvailableColumns(columns);
+
+        // Auto-select first column if none selected or current selection is invalid
+        if (columns.length > 0 && (!selectedColumn || !columns.includes(selectedColumn))) {
+            setSelectedColumn(columns[0]);
+        } else if (columns.length === 0) {
+            setSelectedColumn('');
+        }
+    }, [files, selectedFiles]);
+
+    // Initialize rose diagram container
     useEffect(() => {
         if (!containerRef.current) return;
-
-        const data = getSelectedColumnData();
-
-        // Use sample data if no data is available
-        const finalData = data.length > 0 ? data : new Array(100).fill(0).map(() => Math.random() * 180);
-
-        // Calculate effective dimensions
-        // const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        // const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
 
         const baseWidth = Math.max(currentState.plotDimensions.width - 40, 300);
         const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
@@ -69,80 +151,210 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
         const zoomedSize = baseSize * currentState.settings.zoomLevel;
 
         // Clear any existing content
-        if (containerRef.current) {
-            containerRef.current.innerHTML = '';
-            // Create a unique container ID for the rose diagram
-            const roseContainer = document.createElement('div');
-            roseContainer.id = `rose-container-${Date.now()}`;
-            roseContainer.style.width = '100%';
-            roseContainer.style.height = '100%';
-            containerRef.current.appendChild(roseContainer);
+        containerRef.current.innerHTML = '';
+        const roseContainer = document.createElement('div');
+        roseContainer.id = `rose-container-${Date.now()}`;
+        roseContainer.style.width = '100%';
+        roseContainer.style.height = '100%';
+        containerRef.current.appendChild(roseContainer);
 
-            const newRose = new RoseDiagram(roseContainer.id, finalData, {
-                width: zoomedSize,
-                height: zoomedSize,
-                draw: {
-                    labels: currentState.settings.showLabels,
-                    circles: currentState.settings.showCircles,
-                    binBorder: currentState.settings.showLines,
-                    cardinals: currentState.settings.showCardinals
-                },
-                is360: currentState.settings.is360,
-                innerR: currentState.settings.innerRadius,
-                deltaAngle: currentState.settings.binAngle,
-                fillColor: currentState.settings.binColor,
-                lineColor: currentState.settings.lineColor,
+        // Initialize with empty data
+        const newRose = new RoseDiagram(roseContainer.id, [], {
+            width: zoomedSize,
+            height: zoomedSize,
+            draw: {
+                labels: currentState.settings.showLabels,
+                circles: currentState.settings.showCircles,
+                binBorder: currentState.settings.showLines,
+                cardinals: currentState.settings.showCardinals
+            },
+            is360: currentState.settings.is360,
+            innerR: currentState.settings.innerRadius,
+            deltaAngle: currentState.settings.binAngle,
+            fillColor: currentState.settings.binColor,
+            lineColor: currentState.settings.lineColor,
+        });
+
+        setRose(newRose);
+    }, [
+        currentState.plotDimensions,
+        currentState.settings.zoomLevel,
+        currentState.settings.showLabels,
+        currentState.settings.showCircles,
+        currentState.settings.showLines,
+        currentState.settings.showCardinals,
+        currentState.settings.is360,
+        currentState.settings.innerRadius,
+        currentState.settings.binAngle,
+        currentState.settings.binColor,
+        currentState.settings.lineColor
+    ]);
+
+    // Update data (similar to Wulff component)
+    useEffect(() => {
+        if (!rose || !files || files.length === 0 || !selectedColumn) {
+            if (rose) rose.data = [];
+            return;
+        }
+
+        let totalStats = { total: 0, plotted: 0, errors: 0 };
+        const allData: number[] = [];
+
+        const enabledDataTypes = availableDataTypes
+            .filter(dt => dt.enabled)
+            .map(dt => dt.dataType);
+
+        // Get relevant files (those that are selected)
+        const relevantFiles = files.filter(f => selectedFiles.includes(f.id));
+
+        relevantFiles.forEach(file => {
+            const fileData = file.data || file.content;
+            if (!fileData || fileData.length === 0) return;
+
+            fileData.forEach((row: any) => {
+                totalStats.total++;
+
+                // Filter by data type if any are enabled
+                if (enabledDataTypes.length !== 0) {
+                    const passesTypeFilter = enabledDataTypes.length === 0 ||
+                        enabledDataTypes.includes(row.type);
+
+                    if (passesTypeFilter) {
+                        const value = parseFloat(row[selectedColumn]);
+                        if (!isNaN(value)) {
+                            allData.push(value);
+                            totalStats.plotted++;
+                        } else {
+                            totalStats.errors++;
+                        }
+                    } else {
+                        totalStats.errors++;
+                    }
+                }
+
             });
+        });
 
-            setRose(newRose);
+        // Update rose diagram with data
+        if (allData.length > 0) {
+            rose.data = allData;
+
+            // Update stats
+            setDataStats({
+                total: totalStats.total,
+                plotted: totalStats.plotted,
+                errors: totalStats.errors,
+                min: Math.min(...allData),
+                max: Math.max(...allData),
+                avg: allData.reduce((a, b) => a + b, 0) / allData.length
+            });
+        } else {
+            // No data available
+            rose.data = [];
+            setDataStats({
+                total: totalStats.total,
+                plotted: 0,
+                errors: totalStats.errors,
+                min: 0,
+                max: 0,
+                avg: 0
+            });
         }
+    }, [rose, files, selectedFiles, availableDataTypes, selectedColumn]);
 
-
-        return () => {
-            // Cleanup if needed
-        };
-    }, [currentState, getSelectedColumnData]);
-
-    // Export functionality
-    const exportData = () => {
-        const data = getSelectedColumnData();
-        if (data.length === 0) return;
-        DataExporter.exportCSV(data, 'rose_diagram_data.csv');
+    const toggleFileSelection = (fileId: string) => {
+        setSelectedFiles(prev =>
+            prev.includes(fileId)
+                ? prev.filter(id => id !== fileId)
+                : [...prev, fileId]
+        );
     };
 
-    const exportState = () => {
-        DataExporter.exportState(currentState, 'rose_diagram_state.json');
+    const toggleDataType = (key: string) => {
+        setAvailableDataTypes(prev =>
+            prev.map(dt =>
+                dt.key === key ? { ...dt, enabled: !dt.enabled } : dt
+            )
+        );
     };
 
-    // Data summary calculation
-    const getDataSummary = () => {
-        const data = getSelectedColumnData();
-        if (data.length === 0) {
-            return { count: 0, min: 0, max: 0, filename: 'None' };
-        }
+    // Data selection panel (left panel)
+    const dataSelectionPanel = (
+        <div className="space-y-4">
+            {/* Files to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Files to Plot</h4>
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    {files && files.map(file => (
+                        <label key={file.id} className="flex items-center justify-between py-1">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedFiles.includes(file.id)}
+                                    onChange={() => toggleFileSelection(file.id)}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm">
+                                    {file.name} ({(file.data || file.content)?.length || 0} rows)
+                                </span>
+                            </div>
+                        </label>
+                    ))}
+                </div>
+            </div>
 
-        const selectedColumnInfo = getSelectedColumnInfo();
-        return {
-            count: data.length,
-            min: Math.min(...data),
-            max: Math.max(...data),
-            filename: selectedColumnInfo?.fileName || 'Unknown'
-        };
-    };
+            {/* Data Types to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Data Types to Plot</h4>
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    {availableDataTypes.map(dataType => (
+                        <label key={dataType.key} className="flex items-center justify-between py-1">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={dataType.enabled}
+                                    onChange={() => toggleDataType(dataType.key)}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm">{dataType.dataType}</span>
+                            </div>
+                        </label>
+                    ))}
+                    {availableDataTypes.length === 0 && (
+                        <p className="text-sm text-gray-500 italic">
+                            No data types found in selected files
+                        </p>
+                    )}
+                </div>
+            </div>
 
-    const dataSummary = getDataSummary();
+            {/* Column to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Column to Plot</h4>
+                <div className="border rounded-lg p-3">
+                    {availableColumns.length > 0 ? (
+                        <select
+                            value={selectedColumn}
+                            onChange={(e) => setSelectedColumn(e.target.value)}
+                            className="w-full p-2 border rounded text-sm"
+                        >
+                            {availableColumns.map(col => (
+                                <option key={col} value={col}>{col}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <p className="text-sm text-gray-500 italic">
+                            No columns available in selected files
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 
     // Main plot content
     const plotContent = (
         <div className="flex flex-col h-full">
-            {/* Column selector */}
-            <ColumnSelector
-                availableColumns={availableColumns}
-                selectedColumn={currentState.selectedColumn}
-                onColumnChange={updateSelectedColumn}
-                label="Select Data Column (Angles)"
-            />
-
             {/* Rose diagram container */}
             <div className="flex-1 min-h-0 mb-4">
                 <div
@@ -152,33 +364,45 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
             </div>
 
             {/* Data info panel */}
-            <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                    <Navigation className="w-5 h-5 text-blue-600" />
-                    <h4 className="font-semibold">Data Summary</h4>
+            {dataStats && (
+                <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Navigation className="w-5 h-5 text-blue-600" />
+                        <h4 className="font-semibold">Data Summary</h4>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <span className="font-medium">Total:</span> {dataStats.total}
+                        </div>
+                        <div>
+                            <span className="font-medium">Plotted:</span> {dataStats.plotted}
+                        </div>
+                        <div>
+                            <span className="font-medium">Errors:</span> {dataStats.errors}
+                        </div>
+                    </div>
+                    {dataStats.plotted > 0 && (
+                        <div className="grid grid-cols-3 gap-4 text-sm mt-2 pt-2 border-t">
+                            <div>
+                                <span className="font-medium">Min:</span> {dataStats.min.toFixed(1)}°
+                            </div>
+                            <div>
+                                <span className="font-medium">Max:</span> {dataStats.max.toFixed(1)}°
+                            </div>
+                            <div>
+                                <span className="font-medium">Avg:</span> {dataStats.avg.toFixed(1)}°
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <span className="font-medium">File:</span> {dataSummary.filename}
-                    </div>
-                    <div>
-                        <span className="font-medium">Count:</span> {dataSummary.count}
-                    </div>
-                    <div>
-                        <span className="font-medium">Min:</span> {dataSummary.min.toFixed(2)}°
-                    </div>
-                    <div>
-                        <span className="font-medium">Max:</span> {dataSummary.max.toFixed(2)}°
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 
-    // Settings panel content
+    // Settings panel content (right panel)
     const settingsContent = (
         <div className="space-y-4">
-            {/* NOUVEAU : Section Zoom */}
+            {/* Zoom section */}
             <div className="pb-4 border-b">
                 <h5 className="font-medium text-gray-800 mb-3">Diagram Size</h5>
                 <div>
@@ -209,11 +433,11 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                     )}
                 </div>
             </div>
+
             {/* Bin settings */}
             <div>
                 <h5 className="font-medium text-gray-800 mb-3">Bin Settings</h5>
                 <div className="space-y-3">
-                    {/* Bin angle */}
                     <div>
                         <label className="block text-sm font-medium mb-1">Bin Angle</label>
                         <select
@@ -227,12 +451,15 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                         </select>
                     </div>
 
-                    {/* Bin color */}
-                    <ColorInput
-                        value={currentState.settings.binColor}
-                        onChange={(value) => updateSettings({ binColor: value })}
-                        label="Bin Color"
-                    />
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Bin Color</label>
+                        <input
+                            type="color"
+                            value={currentState.settings.binColor}
+                            onChange={(e) => updateSettings({ binColor: e.target.value })}
+                            className="w-full h-8 rounded border"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -318,57 +545,44 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                     />
                 </div>
             </div>
-
-            {/* Column info */}
-            <ColumnInfo columnInfo={getSelectedColumnInfo()} />
         </div>
     );
 
-    // Header actions
-    const headerActions = (
-        <>
-            <button
-                onClick={resetToDefaults}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                title="Reset to Defaults"
-            >
-                <RotateCcw size={16} />
-            </button>
-            <button
-                onClick={exportData}
-                disabled={!rose}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                title="Export Data"
-            >
-                <Download size={16} />
-            </button>
-        </>
-    );
+    const headerActions = <></>;
 
     return (
         <StablePlotWithSettings
             title={title}
+            leftPanel={dataSelectionPanel}
             settingsPanel={settingsContent}
             headerActions={headerActions}
             borderColor="#d1d5db"
             borderWidth={1}
-            settingsPanelWidth={300}
+            settingsPanelWidth={320}
+            leftPanelWidth={320}
+            enableZoom={true}
             initialSettingsOpen={currentState.open}
+            initialLeftPanelOpen={showDataPanel}
+            showLeftPanelButton={true}
+            leftPanelButtonIcon={<Navigation size={16} />}
+            onLeftPanelToggle={(isOpen) => {
+                setShowDataPanel(isOpen);
+            }}
             onSettingsToggle={(isOpen) => {
-                // Handle settings panel toggle
                 toggleSettingsPanel();
 
-                // When settings panel opens/closes, adjust the plot dimensions
                 setTimeout(() => {
                     if (containerRef.current) {
-                        // Calculate available width for the plot
                         const containerWidth = containerRef.current.parentElement?.clientWidth || width || 400;
-                        const settingsPanelWidth = isOpen ? 300 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40; // 40px for padding
+                        const settingsPanelWidth = isOpen ? 320 : 0;
+                        const availableWidth = containerWidth - settingsPanelWidth - 40;
+                        const availableHeight = containerRef.current?.clientHeight || height || 400;
+
+                        const size = Math.min(availableWidth, availableHeight - 100);
 
                         const newDimensions = {
-                            width: Math.max(availableWidth, 300), // Minimum width for plot
-                            height: containerRef.current?.clientHeight || height || 400
+                            width: Math.max(size, 300),
+                            height: Math.max(size, 300)
                         };
 
                         updatePlotDimensions(newDimensions);

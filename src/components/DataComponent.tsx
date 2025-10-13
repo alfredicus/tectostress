@@ -19,6 +19,7 @@ import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { AddDataDialog } from './AddDataDialog';
 import { matelles } from './data/matelles';
 import { synthetic1 } from './data/synthetic1';
+import { faults_synthetic } from './data/faults';
 import { synthetic_simple } from './data/synthetic-simple';
 
 interface DataComponentProps {
@@ -133,7 +134,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
         // ----------------------------------------------------
         matelles,
         synthetic1,
-        synthetic_simple
+        synthetic_simple,
+        faults_synthetic
     }
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

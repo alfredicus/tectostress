@@ -6,7 +6,7 @@ import {
     BaseVisualizationProps,
     useVisualizationState
 } from '../VisualizationStateSystem';
-import { TypeSynonyms } from '@/utils';
+import { beautifyName, TypeSynonyms } from '@/utils';
 import {
     WulffSettings,
     WulffCompState,
@@ -26,11 +26,14 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
         config.representations.forEach(repr => {
             const availableInFiles = files
                 .filter(file => {
-                    const hasColumns = config.columns.some(columnConfig =>
-                        columnConfig.required.every(col =>
-                            file.headers && file.headers.includes(col)
-                        )
-                    );
+                    // Transform dataType and column names to a standard format for comparison
+                    file.headers = file.headers.map((h: string) => beautifyName(h));
+                    const hasColumns = config.columns.some(columnConfig => {
+                        return columnConfig.required.every(col => {
+                            return file.headers && file.headers.includes(col)
+                        })
+                    }
+                    )
 
                     const hasMatchingType = file.content.some((row: any) => TypeSynonyms.isSameType(dataType, row.type))
                     return hasColumns && hasMatchingType;
