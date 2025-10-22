@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RoseDiagram } from './RoseDiagram';
-import { Navigation } from 'lucide-react';
+//import { Navigation } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
@@ -367,7 +368,7 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
             {dataStats && (
                 <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2 mb-3">
-                        <Navigation className="w-5 h-5 text-blue-600" />
+                        <Layers className="w-5 h-5 text-blue-600" />
                         <h4 className="font-semibold">Data Summary</h4>
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-sm">
@@ -564,7 +565,7 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
             initialSettingsOpen={currentState.open}
             initialLeftPanelOpen={showDataPanel}
             showLeftPanelButton={true}
-            leftPanelButtonIcon={<Navigation size={16} />}
+            leftPanelButtonIcon={<Layers size={16} />}
             onLeftPanelToggle={(isOpen) => {
                 setShowDataPanel(isOpen);
             }}

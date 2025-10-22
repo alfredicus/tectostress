@@ -6,6 +6,17 @@
             "file": "whatis.md"
         },
         {
+            "id": "input-file-format",
+            "title": "Input File Formats",
+            "children": [
+                {
+                    "id": "csv",
+                    "title": "CSV",
+                    "file": "file-formats/csv.md"
+                }
+            ]
+        },
+        {
             "id": "theory",
             "title": "Theory",
             "children": [
@@ -124,9 +135,7 @@
         }
     ],
     "defaultExpanded": [
-        "theory",
-        "data",
-        "methods"
+        "input-file-format"
     ],
     "defaultDocument": "whatis.md"
 }

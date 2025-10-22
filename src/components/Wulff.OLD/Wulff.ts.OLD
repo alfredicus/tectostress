@@ -1,0 +1,1306 @@
+import * as d3 from 'd3';
+import { fromAnglesToNormal } from '../../io/fromAnglesToNormal';
+import { spherical2unitVectorCartesian } from '../../math/math';
+import { calculatePlaneVectors, generateGreatCirclePoints } from '../../math/math';
+import { Direction } from '../../io/fault/types';
+
+// Types for geological data
+export interface Point3D {
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface PlaneData {
+    strike: number;
+    dip: number;
+    dipDirection?: string;
+}
+
+export interface StriatedPlaneData extends PlaneData {
+    rake: number;
+    strikeDirection?: string;
+    typeOfMovement?: string;
+    id?: number | string;
+}
+
+export interface PoleData {
+    trend: number;
+    plunge: number;
+    id?: number | string;
+}
+
+export interface ExtensionFractureData extends PlaneData {
+    //id?: number | string;
+}
+
+export interface LineData {
+    trend: number;
+    plunge: number;
+    id?: number | string;
+}
+
+// Styling options
+export interface WulffStyle {
+    gridColor?: string;
+    gridWidth?: number;
+    gridDashArray?: string;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
+    labelColor?: string;
+    labelSize?: string;
+}
+
+export interface DataStyle {
+    color?: string;
+    width?: number;
+    size?: number;
+    opacity?: number;
+    fillColor?: string;
+    strokeColor?: string;
+    arrowSize?: number;
+    showLabels?: boolean;
+}
+
+// Configuration options
+export interface WulffOptions {
+    width?: number;
+    height?: number;
+    margin?: number;
+    gridInterval?: number;
+    showGrid?: boolean;
+    showDirections?: boolean;
+    showLabels?: boolean;
+    stereonetStyle?: WulffStyle;
+    defaultDataStyle?: DataStyle;
+}
+
+/**
+ * WulffStereonet class for plotting geological data on a stereographic projection
+ * Supports striated fault planes, poles, extension fractures, and other geological structures
+ */
+export class Wulff {
+    private svg: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private container: d3.Selection<SVGSVGElement, unknown, null, undefined>;
+    private width: number;
+    private height: number;
+    private radius: number;
+    private centerX: number;
+    private centerY: number;
+    private options: WulffOptions;
+
+    constructor(containerId: string, options: WulffOptions = {}) {
+        // Set default options
+        this.options = {
+            width: 400,
+            height: 400,
+            margin: 50,
+            gridInterval: 10,
+            showGrid: true,
+            showDirections: true,
+            showLabels: true,
+            stereonetStyle: {
+                gridColor: 'gray',
+                gridWidth: 1,
+                gridDashArray: '2,2',
+                backgroundColor: 'white',
+                borderColor: 'black',
+                borderWidth: 2,
+                labelColor: 'black',
+                labelSize: '14px'
+            },
+            defaultDataStyle: {
+                color: 'blue',
+                width: 2,
+                size: 4,
+                opacity: 1,
+                arrowSize: 15,
+                showLabels: true
+            },
+            ...options
+        };
+
+        this.width = this.options.width!;
+        this.height = this.options.height!;
+        this.radius = (Math.min(this.width, this.height) - 2 * this.options.margin!) / 2;
+        this.centerX = this.width / 2;
+        this.centerY = this.height / 2;
+
+        this.initializeSVG(containerId);
+        this.drawBaseStereonet();
+    }
+
+    /**
+     * ============================================================================
+     * NEW PUBLIC METHODS - Using Correct Plane Geometry
+     * These methods consider dip direction and use validated geometry
+     * ============================================================================
+     */
+
+    /**
+     * Add an extension fracture with correct geometry (considers dip direction)
+     * @param data - Plane data including strike, dip, and dipDirection
+     * @param style - Visual style options
+     */
+    public addExtensionFractureWithDipDirection(
+        data: { 
+            strike: number; 
+            dip: number; 
+            dipDirection: string; 
+            id?: number | string;
+            _planeVectors?: {  // ← CHANGE TO ARRAYS
+                n_plane: number[];
+                n_strike: number[];
+                n_dip: number[];
+            };
+        },
+        style: DataStyle = {}
+    ): void {
+        const result = this.drawGreatCircleWithDipDirection(
+            data.strike, 
+            data.dip, 
+            data.dipDirection, 
+            style,
+            undefined,
+            data._planeVectors
+        );
+        
+        if (!result) {
+            console.warn(`Failed to plot extension fracture id=${data.id || 'unknown'}: Invalid geometry`);
+        }
+    }
+
+    /**
+     * Add multiple extension fractures with correct geometry
+     * @param data - Array of plane data
+     * @param style - Visual style options
+     */
+    public addExtensionFracturesWithDipDirection(
+        data: Array<{ strike: number; dip: number; dipDirection: string; id?: number | string }>,
+        style: DataStyle = {}
+    ): void {
+        let successCount = 0;
+        let failCount = 0;
+
+        data.forEach(fracture => {
+            const result = this.drawGreatCircleWithDipDirection(
+                fracture.strike,
+                fracture.dip,
+                fracture.dipDirection,
+                style
+            );
+
+            if (result) {
+                successCount++;
+            } else {
+                failCount++;
+                console.warn(`Failed to plot fracture id=${fracture.id || 'unknown'}`);
+            }
+        });
+
+        if (failCount > 0) {
+            console.warn(`Plotted ${successCount} fractures, ${failCount} failed due to invalid geometry`);
+        }
+    }
+
+    /**
+     * Add a pole (normal to plane) with correct geometry
+     * @param data - Plane data including strike, dip, and dipDirection
+     * @param style - Visual style options
+     * @param symbol - Symbol type ('circle', 'cross', 'triangle')
+     * NOTE: Poles are plotted in lower hemisphere, so we use -n_plane (downward normal)
+     */
+    public addPoleWithDipDirection(
+        data: { 
+            strike: number; 
+            dip: number; 
+            dipDirection: string; 
+            id?: number | string;
+            _planeVectors?: {
+                n_plane: number[];      // ← ARRAY
+                n_strike: number[];
+                n_dip: number[];
+            };
+        },
+        style: DataStyle = {},
+        symbol: string = 'circle'
+    ): void {
+        try {
+            let n_plane: number[];
+            
+            if (data._planeVectors?.n_plane && 
+                Array.isArray(data._planeVectors.n_plane) &&
+                data._planeVectors.n_plane.length === 3 &&
+                !isNaN(data._planeVectors.n_plane[0])) {
+                
+                n_plane = data._planeVectors.n_plane;
+                console.log('✅ Using pre-calculated');
+            } else {
+                console.log('⚠️ Calculating on-the-fly');
+                const direction = this.parseDipDirection(data.dipDirection);
+                if (direction === null) {
+                    console.warn(`Invalid dip direction for pole id=${data.id}`);
+                    return;
+                }
+                n_plane = fromAnglesToNormal({ 
+                    strike: data.strike, 
+                    dip: data.dip, 
+                    dipDirection: direction 
+                });
+            }
+
+            // Flip for lower hemisphere - USE ARRAY INDICES
+            const n_down = { 
+                x: -n_plane[0],   // ← ARRAY
+                y: -n_plane[1], 
+                z: -n_plane[2] 
+            };
+
+            console.log('🔍 POLE:', { n_plane, n_down });
+
+            const projected = this.projectCartesianToStereonet(n_down);
+            
+            if (!projected) {
+                console.warn(`Pole outside lower hemisphere for id=${data.id}`);
+                return;
+            }
+
+            const [px, py] = projected;
+            console.log('📍 Coords:', { px, py });
+            
+            const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+
+            if (symbol === 'circle') {
+                this.svg.append('circle')
+                    .attr('cx', px)
+                    .attr('cy', py)
+                    .attr('r', defaultStyle.size || 4)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color)
+                    .attr('stroke', defaultStyle.strokeColor || defaultStyle.color)
+                    .attr('stroke-width', 1)
+                    .attr('opacity', defaultStyle.opacity || 1);
+            }
+            // ... autres symbols ...
+
+        } catch (error) {
+            console.error(`Error plotting pole id=${data.id}:`, error);
+        }
+    }
+
+    /**
+     * Add multiple poles with correct geometry
+     * @param data - Array of plane data
+     * @param style - Visual style options
+     * @param symbol - Symbol type
+     */
+    public addPolesWithDipDirection(
+        data: Array<{ strike: number; dip: number; dipDirection: string; id?: number | string }>,
+        style: DataStyle = {},
+        symbol: string = 'circle'
+    ): void {
+        let successCount = 0;
+        let failCount = 0;
+
+        data.forEach(plane => {
+            try {
+                this.addPoleWithDipDirection(plane, style, symbol);
+                successCount++;
+            } catch (error) {
+                failCount++;
+                console.warn(`Failed to plot pole id=${plane.id || 'unknown'}`);
+            }
+        });
+
+        if (failCount > 0) {
+            console.warn(`Plotted ${successCount} poles, ${failCount} failed due to invalid geometry`);
+        }
+    }
+
+ 
+    /**
+     * Add an extension fracture (great circle)
+     */
+    public addExtensionFracture(data: ExtensionFractureData, style: DataStyle = {}): void {
+        this.drawGreatCircle(data.strike, data.dip, style);
+
+        // Optionally add pole point
+        // const pole = this.planeTopole(data.strike, data.dip);
+        // this.drawPoint(pole.trend, pole.plunge, {
+        //     ...style,
+        //     size: (style.size || 4) / 2,
+        //     fillColor: 'white',
+        //     strokeColor: style.color || 'blue'
+        // }, 'circle', data.id);
+    }
+
+    /**
+     * Add multiple extension fractures
+     */
+    public addExtensionFractures(data: ExtensionFractureData[], style: DataStyle = {}): void {
+        data.forEach(fracture => this.addExtensionFracture(fracture, style));
+    }
+
+ 
+
+    /**
+     * ============================================================================
+     * STRIATED FAULT PLANES - UNIFIED METHODS
+     * ============================================================================
+     */
+    /**
+     * ============================================================================
+     * PUBLIC METHOD: Draw Great Circle with Correct Geometry
+     * ============================================================================
+     * Draws a plane as a great circle on the stereonet using correct geometry
+     * that considers dip direction. Uses pre-calculated vectors if provided.
+     * 
+     * @param strike - Strike angle [0, 360)
+     * @param dip - Dip angle [0, 90]
+     * @param dipDirection - Dip direction (N, S, E, W, NE, SE, SW, NW)
+     * @param style - Visual style (color, width, opacity)
+     * @param dashArray - Optional dash pattern for the line
+     * @param preCalculatedVectors - Optional pre-calculated n_strike, n_dip vectors
+     * @returns SVG path element or null if geometry is invalid
+     */
+    public drawGreatCircleWithDipDirection(
+        strike: number,
+        dip: number,
+        dipDirection: string,
+        style: DataStyle = {},
+        dashArray?: string,
+        preCalculatedVectors?: {
+            n_plane: number[];
+            n_strike: number[];
+            n_dip: number[];
+        }
+    ): d3.Selection<SVGPathElement, unknown, null, undefined> | null {
+        
+        const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+
+        try {
+            // Step 1: Parse and validate dip direction
+            const direction = this.parseDipDirection(dipDirection);
+            if (direction === null) {
+                console.error(`❌ Invalid dip direction: ${dipDirection}`);
+                return null;
+            }
+
+            console.debug(`🔵 Computing plane: strike=${strike}, dip=${dip}, dipDir=${dipDirection}`);
+
+            // Step 2: Get plane normal vector (upward pointing)
+            const n_plane = preCalculatedVectors?.n_plane || 
+                fromAnglesToNormal({ strike, dip, dipDirection: direction });
+            
+            console.debug(`🔵 n_plane =`, n_plane);
+
+            // Step 3: Get strike and dip vectors
+            const { n_strike, n_dip } = preCalculatedVectors 
+                ? { 
+                    n_strike: preCalculatedVectors.n_strike, 
+                    n_dip: preCalculatedVectors.n_dip 
+                }
+                : calculatePlaneVectors(n_plane);
+            
+            console.debug(`🔵 n_strike =`, n_strike);
+            console.debug(`🔵 n_dip =`, n_dip);
+
+            // Step 4: Generate 3D points along the great circle
+            // Points are defined as: P(α) = cos(α) * n_strike + sin(α) * n_dip
+            // for α in [0, π] (covers lower hemisphere)
+            const points3D = generateGreatCirclePoints(n_strike, n_dip, 100);
+            console.debug(`🔵 Generated ${points3D.length} 3D points along great circle`);
+
+            // Step 5: Project each 3D point onto the stereonet
+            const projectedPoints: [number, number][] = [];
+
+            for (const point3D of points3D) {
+                // Convert 3D Cartesian point to 2D stereonet coordinates
+                const projected = this.projectCartesianToStereonet(point3D);
+                
+                if (projected !== null) {
+                    projectedPoints.push(projected);
+                    console.debug(`  Point: (${point3D.x.toFixed(3)}, ${point3D.y.toFixed(3)}, ${point3D.z.toFixed(3)}) → (${projected[0].toFixed(1)}, ${projected[1].toFixed(1)})`);
+                }
+            }
+
+            console.log(`🔵 PROJECTED: ${projectedPoints.length} points on stereonet (out of ${points3D.length})`);
+
+            // Step 6: Check if we have enough points to draw a line
+            if (projectedPoints.length < 2) {
+                console.warn(`❌ Not enough projected points: ${projectedPoints.length} (need at least 2)`);
+                return null;
+            }
+
+            // Step 7: Create and draw the SVG path using D3
+            const lineGenerator = d3.line<[number, number]>()
+                .x(d => d[0])
+                .y(d => d[1]);
+
+            const path = this.svg.append('path')
+                .attr('d', lineGenerator(projectedPoints))
+                .attr('fill', 'none')
+                .attr('stroke', defaultStyle.color)
+                .attr('stroke-width', defaultStyle.width)
+                .attr('opacity', defaultStyle.opacity);
+
+            // Step 8: Apply optional dash pattern
+            if (dashArray) {
+                path.attr('stroke-dasharray', dashArray);
+            }
+
+            console.log(`✅ Great circle drawn: strike=${strike}, dip=${dip}, points=${projectedPoints.length}`);
+            return path;
+
+        } catch (error) {
+            console.error(`❌ Error drawing great circle with dip direction:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * ============================================================================
+     * PRIVATE METHOD: Project Cartesian Point to Stereonet
+     * ============================================================================
+     * Performs stereographic projection from 3D Cartesian coordinates
+     * to 2D stereonet plane using south pole projection.
+     * 
+     * Coordinate system: (X, Y, Z) = (East, North, Up)
+     * Only projects lower hemisphere points (z ≤ 0, pointing downward or horizontal)
+     * 
+     * Formula: Stereographic projection from south pole (0, 0, -1)
+     *   x_proj = radius * x / (1 - z)
+     *   y_proj = radius * y / (1 - z)
+     * 
+     * Note: y_proj is negated to match stereonet display convention (North = up)
+     * 
+     * @param point - 3D vector in (East, North, Up) system: {x, y, z}
+     * @returns [x, y] pixel coordinates on stereonet, or null if in upper hemisphere
+     */
+    private projectCartesianToStereonet(
+        point: { x: number; y: number; z: number }
+    ): [number, number] | null {
+        
+        // ✅ STEP 1: Check hemisphere
+        // Only project lower hemisphere (z ≤ 0)
+        // Points with z > 0 point upward and should not be plotted
+        if (point.z > 0) {
+            return null;  // Upper hemisphere - skip this point
+        }
+
+        // ✅ STEP 2: Apply stereographic projection formula
+        // From south pole (0, 0, -1) onto equatorial plane (z = 0)
+        // 
+        // The formula is: P_proj = radius * P_point / (1 - P_point.z)
+        // 
+        // Derivation:
+        //   - South pole is at (0, 0, -1)
+        //   - Equatorial plane is at z = 0
+        //   - A ray from south pole through point P intersects plane at:
+        //     P_proj = (1 - z_p) * P_p + z_p * (0,0,-1)
+        //     simplified to: P_proj = P_p / (1 - z_p)
+
+        const denominator = 1 - point.z;
+        
+        // Avoid division by very small numbers
+        if (Math.abs(denominator) < 1e-10) {
+            console.warn(`⚠️  Point too close to south pole (z ≈ -1), skipping`);
+            return null;
+        }
+
+        // Project X (East) component
+        const x_proj = this.radius * point.x / denominator;
+        
+        // Project Y (North) component
+        // NOTE: We negate y to match stereonet display convention where:
+        //   - Positive y points North on globe
+        //   - Positive y points UP on display screen
+        const y_proj = -this.radius * point.y / denominator;
+
+        // ✅ STEP 3: Check if projected point is within the stereonet circle
+        // The stereonet is a circle of radius `this.radius`
+        // Points outside should be clipped (optional)
+        const distFromCenter = Math.sqrt(x_proj * x_proj + y_proj * y_proj);
+        
+        if (distFromCenter > this.radius * 1.01) {
+            // Point is outside the stereonet - optional: can still plot or skip
+            console.debug(`⚠️  Projected point outside stereonet boundary: distance=${distFromCenter.toFixed(1)} (radius=${this.radius})`);
+            // Uncomment next line to skip points outside stereonet:
+            // return null;
+        }
+
+        return [x_proj, y_proj];
+    }
+
+    /**
+     * ============================================================================
+     * PUBLIC METHOD: Draw Striation Vector
+     * ============================================================================
+     * Draws a striation arrow on the stereonet using a pre-calculated
+     * unit striation vector from FaultDataHelper.
+     * 
+     * The vector represents the direction of movement of the top block
+     * relative to the bottom block along the fault plane.
+     * 
+     * @param n_striation - Unit striation vector in Cartesian coordinates
+     *                      Format: array [x, y, z] or object {x, y, z}
+     *                      Reference frame: (X, Y, Z) = (East, North, Up)
+     * @param style - Visual style for the striation arrow
+     * @param id - Data point identifier for labeling
+     */
+    private drawStriationFromVector(
+        n_striation: number[] | Vector3,
+        style: DataStyle,
+        id?: number | string
+    ): void {
+        
+        try {
+            // Step 1: Convert to array format if needed
+            const striation = Array.isArray(n_striation) 
+                ? n_striation 
+                : [n_striation.x, n_striation.y, n_striation.z];
+            
+            let [sx, sy, sz] = striation;
+
+            console.debug(`🔵 Striation vector before hemisphere check: (${sx.toFixed(3)}, ${sy.toFixed(3)}, ${sz.toFixed(3)})`);
+
+            // Step 2: Ensure we're plotting on the LOWER hemisphere
+            // The striation vector points in the direction of movement
+            // If it points upward (positive Z), we flip it to plot on lower hemisphere
+            if (sz > 0) {
+                sx = -sx;
+                sy = -sy;
+                sz = -sz;
+                console.debug(`  Flipped to lower hemisphere: (${sx.toFixed(3)}, ${sy.toFixed(3)}, ${sz.toFixed(3)})`);
+            }
+
+            // Step 3: Verify the vector is normalized (magnitude ≈ 1)
+            const magnitude = Math.sqrt(sx * sx + sy * sy + sz * sz);
+            if (Math.abs(magnitude - 1.0) > 1e-6) {
+                console.warn(`⚠️  Striation vector not normalized: magnitude=${magnitude.toFixed(6)}`);
+            }
+
+            // Step 4: Convert from Cartesian (X=East, Y=North, Z=Up) to Spherical (phi, theta)
+            // Using existing math.ts function
+            const spherical = unitVectorCartesian2Spherical([sx, sy, sz]);
+            
+            console.debug(`  Spherical coords: phi=${spherical.phi.toFixed(4)} rad (${this.rad2deg(spherical.phi).toFixed(1)}°), theta=${spherical.theta.toFixed(4)} rad (${this.rad2deg(spherical.theta).toFixed(1)}°)`);
+
+            // Step 5: Convert from Spherical to Geographic coordinates
+            // 
+            // Spherical convention in math.ts:
+            //   phi: azimuthal angle [0, 2π), measured counterclockwise from X-axis (East)
+            //   theta: colatitude [0, π], measured downward from Z-axis (Up)
+            //
+            // Geographic convention (stereonet):
+            //   azimuth: [0, 360), measured clockwise from Y-axis (North)
+            //   plunge: angle below horizontal (positive = downward)
+            //
+            // Conversion formulas:
+            //   azimuth = π/2 - phi  (convert from East-origin to North-origin)
+            //   plunge = π/2 - theta  (convert colatitude to plunge)
+
+            const azimuthRad = Math.PI / 2 - spherical.phi;
+            const azimuthDeg = this.rad2deg(azimuthRad);
+
+            const plungeDeg = this.rad2deg(Math.PI / 2 - spherical.theta);
+
+            // Step 6: Normalize azimuth to [0, 360)
+            let finalAzimuth = azimuthDeg % 360;
+            if (finalAzimuth < 0) {
+                finalAzimuth += 360;
+            }
+
+            console.debug(`  Geographic coords: Azimuth=${finalAzimuth.toFixed(1)}°, Plunge=${plungeDeg.toFixed(1)}°`);
+
+            // Step 7: Plot the striation arrow on the stereonet
+            // Use 'arrow' symbol to indicate direction of fault movement
+            this.drawPoint(
+                finalAzimuth,
+                plungeDeg,
+                style,
+                'arrow',
+                id
+            );
+
+            console.log(`✅ Striation plotted: ID=${id}, Azimuth=${finalAzimuth.toFixed(1)}°, Plunge=${plungeDeg.toFixed(1)}°`);
+
+        } catch (error) {
+            console.error(`❌ Error drawing striation from vector:`, error);
+        }
+    }
+
+    /**
+     * ============================================================================
+     * PUBLIC METHOD: Add Striated Fault Plane
+     * ============================================================================
+     * Plots a striated fault plane on the stereonet:
+     *   1. Draws the fault plane as a great circle
+     *   2. Draws the striation arrow indicating movement direction
+     * 
+     * Uses pre-calculated vectors from FaultDataHelper if provided for
+     * correct kinematics (considers type of movement and rake).
+     * 
+     * @param data - Fault plane data with strike, dip, dipDirection, rake, etc.
+     * @param style - Visual style options
+     */
+    public addStriatedPlane(
+        data: { 
+            strike: number; 
+            dip: number; 
+            dipDirection?: string;
+            rake: number;
+            strikeDirection?: string;
+            typeOfMovement?: string;
+            id?: number | string;
+            _planeVectors?: {
+                n_plane: number[];
+                n_strike: number[];
+                n_dip: number[];
+                n_striation: number[];
+                n_perp_striation?: number[];
+            };
+        },
+        style: DataStyle = {}
+    ): void {
+        
+        try {
+            // Step 1: Auto-estimate dipDirection if not provided
+            const dipDir = data.dipDirection || this.estimateDipDirectionFromStrike(data.strike);
+            
+            console.log(`\n📍 Adding striated plane: ID=${data.id}, Strike=${data.strike}°, Dip=${data.dip}°, DipDir=${dipDir}`);
+
+            // Step 2: Draw the fault plane (great circle)
+            const planeResult = this.drawGreatCircleWithDipDirection(
+                data.strike, 
+                data.dip, 
+                dipDir, 
+                { ...style, opacity: 0.7 },
+                undefined,
+                data._planeVectors
+            );
+            
+            // Step 3: Check if plane was drawn successfully
+            if (!planeResult) {
+                console.error(
+                    `❌ FAILED to plot striated fault plane id=${data.id || 'unknown'}: ` +
+                    `Strike=${data.strike}, Dip=${data.dip}, DipDir=${dipDir}`
+                );
+                return;  // ← EXIT HERE if plane failed
+            }
+
+            console.debug(`✅ Plane drawn successfully`);
+
+            // Step 4: Draw striation using pre-calculated vector if available
+            if (data._planeVectors?.n_striation) {
+                this.drawStriationFromVector(
+                    data._planeVectors.n_striation,
+                    style,
+                    data.id
+                );
+            } else {
+                // Fallback: Use old method if vector not provided
+                console.warn(`⚠️  No striation vector provided for plane id=${data.id}. Using fallback method.`);
+                this.drawStriation(data.strike, data.dip, data.rake, style, data.id);
+            }
+
+            console.log(`✅ Striated plane complete: ID=${data.id}`);
+
+        } catch (error) {
+            console.error(`❌ Error in addStriatedPlane:`, error);
+        }
+    }
+
+    /**
+     * ============================================================================
+     * PUBLIC METHOD: Add Multiple Striated Fault Planes
+     * ============================================================================
+     * Batch method to plot multiple striated fault planes at once.
+     * 
+     * @param data - Array of fault plane data
+     * @param style - Visual style options (applied to all planes)
+     */
+    public addStriatedPlanes(
+        data: Array<{ 
+            strike: number; 
+            dip: number; 
+            dipDirection?: string;
+            rake: number;
+            strikeDirection?: string;
+            typeOfMovement?: string;
+            id?: number | string;
+            _planeVectors?: {
+                n_plane: number[];
+                n_strike: number[];
+                n_dip: number[];
+                n_striation: number[];
+                n_perp_striation?: number[];
+            };
+        }>,
+        style: DataStyle = {}
+    ): void {
+        
+        let successCount = 0;
+        let failCount = 0;
+
+        console.log(`\n📊 Adding ${data.length} striated planes...`);
+
+        data.forEach((plane, index) => {
+            try {
+                this.addStriatedPlane(plane, style);
+                successCount++;
+            } catch (error) {
+                failCount++;
+                console.error(`❌ Failed to plot striated plane ${index + 1} id=${plane.id || 'unknown'}:`, error);
+            }
+        });
+
+        console.log(`\n📊 Striated Planes Summary:`);
+        console.log(`  ✅ Success: ${successCount}/${data.length}`);
+        if (failCount > 0) {
+            console.log(`  ❌ Failed: ${failCount}/${data.length}`);
+        }
+    }
+
+    /**
+     * ============================================================================
+     * HELPER METHOD: Estimate Dip Direction from Strike (Right-Hand Rule)
+     * ============================================================================
+     * When dip direction is not provided, estimate it using the right-hand rule:
+     * Point your right hand fingers in the strike direction, your thumb points
+     * in the dip direction.
+     * 
+     * @param strike - Strike angle [0, 360)
+     * @returns Estimated dip direction string (N, NE, E, SE, S, SW, W, NW)
+     */
+    private estimateDipDirectionFromStrike(strike: number): string {
+        // Normalize strike to [0, 360)
+        const normalizedStrike = ((strike % 360) + 360) % 360;
+        
+        // Right-hand rule: rotate strike + 90° to get dip direction
+        const dipAngle = (normalizedStrike + 90) % 360;
+        
+        // Convert angle to compass direction
+        if (dipAngle < 22.5) return 'N';
+        if (dipAngle < 67.5) return 'NE';
+        if (dipAngle < 112.5) return 'E';
+        if (dipAngle < 157.5) return 'SE';
+        if (dipAngle < 202.5) return 'S';
+        if (dipAngle < 247.5) return 'SW';
+        if (dipAngle < 292.5) return 'W';
+        return 'NW';
+    }
+
+    /**
+     * Add multiple striated fault planes
+     * @param data - Array of fault plane data
+     * @param style - Visual style options
+     */
+
+    /**
+     * Add a stylolite pole
+     */
+    public addStylolitePole(
+        data: { 
+            trend: number; 
+            plunge: number; 
+            id?: number | string;
+        },
+        style: DataStyle = {}
+    ): void {
+        this.drawPoint(data.trend, data.plunge, style, 'cross', data.id);
+    }
+
+    /**
+     * Add multiple stylolite poles
+     */
+    public addStylolitePoles(data: PoleData[], style: DataStyle = {}): void {
+        data.forEach(pole => this.addStylolitePole(pole, style));
+    }
+
+    /**
+     * Add a lineation
+     */
+    public addLineation(data: LineData, style: DataStyle = {}): void {
+        this.drawPoint(data.trend, data.plunge, style, 'triangle', data.id);
+    }
+
+    /**
+     * Add multiple lineations
+     */
+    public addLineations(data: LineData[], style: DataStyle = {}): void {
+        data.forEach(line => this.addLineation(line, style));
+    }
+
+    /**
+     * Add a generic pole point
+     */
+    public addPole(data: PoleData, style: DataStyle = {}, symbol: string = 'circle'): void {
+        this.drawPoint(data.trend, data.plunge, style, symbol, data.id);
+    }
+
+    /**
+     * Add multiple poles
+     */
+    public addPoles(data: PoleData[], style: DataStyle = {}, symbol: string = 'circle'): void {
+        data.forEach(pole => this.addPole(pole, style, symbol));
+    }
+
+    /**
+     * Clear all data from the stereonet (keeping the base grid)
+     */
+    public clearData(): void {
+        this.svg.selectAll('*:not(.grid):not(.axis):not(.direction)')
+            .filter(function () {
+                const element = d3.select(this);
+                return !element.classed('grid') &&
+                    !element.classed('axis') &&
+                    !element.classed('direction') &&
+                    element.node()?.tagName !== 'circle' ||
+                    (element.node()?.tagName === 'circle' &&
+                        parseFloat(element.attr('r')) !== this.radius);
+            })
+            .remove();
+    }
+
+    /**
+     * Update stereonet options
+     */
+    public updateOptions(newOptions: Partial<WulffOptions>): void {
+        this.options = { ...this.options, ...newOptions };
+        this.container.remove();
+        this.initializeSVG(this.container.node()!.parentElement!.id);
+        this.drawBaseStereonet();
+    }
+
+    /**
+     * Export stereonet as SVG string
+     */
+    public exportSVG(): string {
+        return new XMLSerializer().serializeToString(this.container.node()!);
+    }
+
+    /**
+     * Get the SVG element for further manipulation
+     */
+    public getSVG(): d3.Selection<SVGSVGElement, unknown, null, undefined> {
+        return this.container;
+    }
+
+    // =========================== Private methods ===========================
+
+    private initializeSVG(containerId: string): void {
+        // Remove any existing SVG
+        d3.select(`#${containerId}`).select('svg').remove();
+
+        this.container = d3.select(`#${containerId}`)
+            .append('svg')
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .style('background-color', this.options.stereonetStyle!.backgroundColor);
+
+        this.svg = this.container
+            .append('g')
+            .attr('transform', `translate(${this.centerX}, ${this.centerY})`);
+    }
+
+    private drawBaseStereonet(): void {
+        const style = this.options.stereonetStyle!;
+
+        // Draw outer circle
+        this.svg.append('circle')
+            .attr('r', this.radius)
+            .attr('fill', 'none')
+            .attr('stroke', style.borderColor)
+            .attr('stroke-width', style.borderWidth)
+            .classed('axis', true)
+
+        if (this.options.showGrid) {
+            this.drawGrid();
+        }
+
+        if (this.options.showDirections) {
+            this.drawDirections();
+        }
+
+        // Draw main axes
+        this.svg.append('line')
+            .attr('x1', -this.radius)
+            .attr('y1', 0)
+            .attr('x2', this.radius)
+            .attr('y2', 0)
+            .attr('stroke', style.borderColor)
+            .attr('stroke-width', style.borderWidth)
+            .classed('axis', true)
+
+        this.svg.append('line')
+            .attr('x1', 0)
+            .attr('y1', -this.radius)
+            .attr('x2', 0)
+            .attr('y2', this.radius)
+            .attr('stroke', style.borderColor)
+            .attr('stroke-width', style.borderWidth)
+            .classed('axis', true)
+    }
+
+    private drawGrid(): void {
+        const style = this.options.stereonetStyle!;
+        const interval = this.options.gridInterval!;
+
+        // Draw latitude lines (small circles)
+        for (let lat = interval; lat < 90; lat += interval) {
+            const r = this.radius * Math.tan(Math.PI * lat / 360);
+            if (r <= this.radius) {
+                this.svg.append('circle')
+                    .attr('r', r)
+                    .attr('fill', 'none')
+                    .attr('stroke', style.gridColor)
+                    .attr('stroke-width', style.gridWidth)
+                    .attr('stroke-dasharray', style.gridDashArray)
+                    .classed('grid', true)
+            }
+        }
+
+        // Draw longitude lines (great circles)
+        for (let long = 0; long < 360; long += interval) {
+            if (long !== 0 && long !== 90 && long !== 180 && long !== 270) {
+                this.drawGreatCircle(long, 90, {
+                    color: style.gridColor,
+                    width: style.gridWidth,
+                    opacity: 0.5
+                }, style.gridDashArray).classed('grid', true)
+            }
+        }
+    }
+
+    private drawDirections(): void {
+        const style = this.options.stereonetStyle!;
+        const directions = [
+            { label: 'N', angle: 0 },
+            { label: 'E', angle: 90 },
+            { label: 'S', angle: 180 },
+            { label: 'W', angle: 270 }
+        ];
+
+        this.svg.selectAll('.direction')
+            .data(directions)
+            .enter()
+            .append('text')
+            .attr('class', 'direction')
+            .attr('x', d => (this.radius + 15) * Math.sin(d.angle * Math.PI / 180))
+            .attr('y', d => -(this.radius + 15) * Math.cos(d.angle * Math.PI / 180))
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .text(d => d.label)
+            .attr('font-weight', 'bold')
+            .attr('font-size', style.labelSize)
+            .attr('fill', style.labelColor);
+    }
+
+    /**
+     * Convert spherical coordinates to stereographic projection
+     */
+    private projectPoint(longitude: number, latitude: number): [number, number] {
+        const r = this.radius * Math.tan((90 - latitude) * Math.PI / 360);
+        const longRad = longitude * Math.PI / 180 - Math.PI / 2;
+        const x = r * Math.cos(longRad);
+        const y = r * Math.sin(longRad);
+        return [x, y];
+    }
+
+
+
+    /**
+     * Convert plane orientation to pole coordinates
+     */
+    private planeTopole(strike: number, dip: number): { trend: number; plunge: number } {
+        const trend = (strike + 90) % 360;
+        const plunge = 90 - dip;
+        return { trend, plunge };
+    }
+
+    /**
+     * Draw a great circle for a plane
+     */
+    private drawGreatCircle(strike: number, dip: number, style: DataStyle = {}, dashArray?: string): d3.Selection<SVGPathElement, unknown, null, undefined> {
+        const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+
+        const strikeRad = strike * Math.PI / 180;
+        const dipRad = dip * Math.PI / 180;
+
+        const points: [number, number][] = [];
+
+        for (let t = -90; t <= 90; t += 1) {
+            const tRad = t * Math.PI / 180;
+
+            // Calculate point on the plane
+            let x = Math.cos(tRad);
+            let y = Math.sin(tRad);
+            let z = 0;
+
+            // Rotate to align with strike and dip
+            const tempX = x;
+            x = tempX * Math.cos(dipRad) + z * Math.sin(dipRad);
+            z = -tempX * Math.sin(dipRad) + z * Math.cos(dipRad);
+
+            const tempX2 = x;
+            x = tempX2 * Math.cos(strikeRad) + y * Math.sin(strikeRad);
+            y = -tempX2 * Math.sin(strikeRad) + y * Math.cos(strikeRad);
+
+            // Project points in lower hemisphere
+            if (z <= 0) {
+                const zAbs = Math.abs(z);
+                const r = this.radius * Math.sqrt((1 - zAbs) / (1 + zAbs));
+                const norm = Math.sqrt(x * x + y * y);
+                if (norm > 0) {
+                    points.push([r * x / norm, -r * y / norm]);
+                }
+            }
+        }
+
+        const lineGenerator = d3.line<[number, number]>()
+            .x(d => d[0])
+            .y(d => d[1]);
+
+        const path = this.svg.append('path')
+            .attr('d', lineGenerator(points))
+            .attr('fill', 'none')
+            .attr('stroke', defaultStyle.color)
+            .attr('stroke-width', defaultStyle.width)
+            .attr('opacity', defaultStyle.opacity);
+
+        if (dashArray) {
+            path.attr('stroke-dasharray', dashArray);
+        }
+
+        return path;
+    }
+
+    /**
+     * ============================================================================
+     * NEW GEOMETRY-BASED METHODS
+     * These methods use fromAnglesToNormal and correct plane geometry
+     * ============================================================================
+     */
+
+    /**
+     * Parse dip direction string to Direction enum
+     */
+    private parseDipDirection(dipDir: string): Direction | null {
+        const normalized = dipDir.trim().toUpperCase();
+        
+        switch (normalized) {
+            case 'N':
+            case 'NORTH': return Direction.N;
+            case 'S':
+            case 'SOUTH': return Direction.S;
+            case 'E':
+            case 'EAST': return Direction.E;
+            case 'W':
+            case 'WEST': return Direction.W;
+            case 'NE':
+            case 'NORTHEAST': return Direction.NE;
+            case 'SE':
+            case 'SOUTHEAST': return Direction.SE;
+            case 'SW':
+            case 'SOUTHWEST': return Direction.SW;
+            case 'NW':
+            case 'NORTHWEST': return Direction.NW;
+            case 'UND':
+            case 'UNDEFINED': return Direction.UND;
+            default: return null;
+        }
+    }
+
+    /**
+     * Draw an arrow for striation direction
+     */
+    private drawStriation(strike: number, dip: number, rake: number, style: DataStyle = {}, label?: string | number): void {
+        const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+
+        const strikeRad = strike * Math.PI / 180;
+        const dipRad = dip * Math.PI / 180;
+        const rakeRad = rake * Math.PI / 180;
+
+        // Calculate striation vector on the fault plane
+        let sx = Math.cos(rakeRad);
+        let sy = Math.sin(rakeRad);
+        let sz = 0;
+
+        // Rotate to fault plane orientation
+        const tempSx = sx;
+        sx = tempSx * Math.cos(dipRad) + sz * Math.sin(dipRad);
+        sz = -tempSx * Math.sin(dipRad) + sz * Math.cos(dipRad);
+
+        const tempSx2 = sx;
+        sx = tempSx2 * Math.cos(strikeRad) + sy * Math.sin(strikeRad);
+        sy = -tempSx2 * Math.sin(strikeRad) + sy * Math.cos(strikeRad);
+
+        // Project to lower hemisphere if necessary
+        if (sz > 0) {
+            sx = -sx;
+            sy = -sy;
+            sz = -sz;
+        }
+
+        // Stereographic projection
+        const zAbs = Math.abs(sz);
+        const r = this.radius * Math.sqrt((1 - zAbs) / (1 + zAbs));
+        const norm = Math.sqrt(sx * sx + sy * sy);
+
+        if (norm > 0) {
+            const startX = r * sx / norm;
+            const startY = -r * sy / norm;
+
+            // Calculate arrow direction
+            const arrowLength = defaultStyle.arrowSize!;
+            const angle = Math.atan2(-sy, sx);
+
+            const endX = startX + arrowLength * Math.cos(angle);
+            const endY = startY + arrowLength * Math.sin(angle);
+
+            // Draw arrow shaft
+            this.svg.append('line')
+                .attr('x1', startX)
+                .attr('y1', startY)
+                .attr('x2', endX)
+                .attr('y2', endY)
+                .attr('stroke', defaultStyle.color)
+                .attr('stroke-width', defaultStyle.width)
+                .attr('opacity', defaultStyle.opacity);
+
+            // Draw arrow head
+            const headSize = defaultStyle.arrowSize! * 0.6;
+            const head1X = endX - headSize * Math.cos(angle - Math.PI / 6);
+            const head1Y = endY - headSize * Math.sin(angle - Math.PI / 6);
+            const head2X = endX - headSize * Math.cos(angle + Math.PI / 6);
+            const head2Y = endY - headSize * Math.sin(angle + Math.PI / 6);
+
+            this.svg.append('path')
+                .attr('d', `M${endX},${endY} L${head1X},${head1Y} L${head2X},${head2Y} Z`)
+                .attr('fill', defaultStyle.color)
+                .attr('opacity', defaultStyle.opacity);
+
+            // Add label if provided
+            if (label !== undefined && defaultStyle.showLabels) {
+                const distanceFromCenter = Math.sqrt(startX * startX + startY * startY);
+
+                if (distanceFromCenter > 0.8 * this.radius) {
+                    // Place label outside the circle
+                    const labelAngle = Math.atan2(startY, startX);
+                    const labelRadius = this.radius + 20;
+                    const labelX = labelRadius * Math.cos(labelAngle);
+                    const labelY = labelRadius * Math.sin(labelAngle);
+
+                    this.svg.append('text')
+                        .attr('x', labelX)
+                        .attr('y', labelY)
+                        .attr('text-anchor', 'middle')
+                        .attr('dominant-baseline', 'central')
+                        .text(label.toString())
+                        .attr('fill', defaultStyle.color)
+                        .attr('font-size', '12px');
+                } else {
+                    // Place label in a circle at the arrow start
+                    this.svg.append('circle')
+                        .attr('cx', startX)
+                        .attr('cy', startY)
+                        .attr('r', 8)
+                        .attr('fill', 'white')
+                        .attr('stroke', defaultStyle.color)
+                        .attr('stroke-width', 1);
+
+                    this.svg.append('text')
+                        .attr('x', startX)
+                        .attr('y', startY)
+                        .attr('text-anchor', 'middle')
+                        .attr('dominant-baseline', 'central')
+                        .text(label.toString())
+                        .attr('fill', defaultStyle.color)
+                        .attr('font-size', '10px');
+                }
+            }
+        }
+    }
+
+    /**
+     * Draw a point (pole) on the stereonet
+     */
+    private drawPoint(trend: number, plunge: number, style: DataStyle = {}, symbol: string = 'circle', label?: string | number): void {
+        const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+        const innerStyle = this.options.stereonetStyle!;
+        const [x, y] = this.projectPoint(trend, plunge);
+
+        let element: d3.Selection<any, unknown, null, undefined>;
+
+        switch (symbol) {
+            case 'circle':
+                element = this.svg.append('circle')
+                    .attr('cx', x)
+                    .attr('cy', y)
+                    .attr('r', defaultStyle.size)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color)
+                    .attr('stroke', defaultStyle.strokeColor || 'black')
+                    .attr('stroke-width', 1);
+                break;
+            case 'square':
+                element = this.svg.append('rect')
+                    .attr('x', x - defaultStyle.size!)
+                    .attr('y', y - defaultStyle.size!)
+                    .attr('width', defaultStyle.size! * 2)
+                    .attr('height', defaultStyle.size! * 2)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color)
+                    .attr('stroke', defaultStyle.strokeColor || 'black')
+                    .attr('stroke-width', 1);
+                break;
+            case 'triangle':
+                const size = defaultStyle.size!;
+                element = this.svg.append('path')
+                    .attr('d', `M${x},${y - size} L${x - size},${y + size} L${x + size},${y + size} Z`)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color)
+                    .attr('stroke', defaultStyle.strokeColor || 'black')
+                    .attr('stroke-width', 1);
+                break;
+            case 'cross':
+                const g = this.svg.append('g');
+                g.append('line')
+                    .attr('x1', x - defaultStyle.size!)
+                    .attr('y1', y)
+                    .attr('x2', x + defaultStyle.size!)
+                    .attr('y2', y)
+                    .attr('stroke', defaultStyle.color)
+                    .attr('stroke-width', defaultStyle.width);
+                g.append('line')
+                    .attr('x1', x)
+                    .attr('y1', y - defaultStyle.size!)
+                    .attr('x2', x)
+                    .attr('y2', y + defaultStyle.size!)
+                    .attr('stroke', defaultStyle.color)
+                    .attr('stroke-width', defaultStyle.width);
+                element = g;
+                break;
+            default:
+                element = this.svg.append('circle')
+                    .attr('cx', x)
+                    .attr('cy', y)
+                    .attr('r', defaultStyle.size)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color);
+        }
+
+        element.attr('opacity', defaultStyle.opacity);
+
+        const fontSize = parseFloat(innerStyle.labelSize as string) * 0.8;
+
+        // Add label if provided
+        // console.log(defaultStyle);
+        if (label !== undefined && defaultStyle.showLabels) {
+            this.svg.append('text')
+                .attr('x', x + defaultStyle.size! + 5)
+                .attr('y', y + 3)
+                .text(label.toString())
+                .attr('fill', defaultStyle.color)
+                .attr('font-size', `${fontSize}px`);
+        }
+    }
+
+}

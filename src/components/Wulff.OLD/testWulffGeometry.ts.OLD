@@ -1,0 +1,101 @@
+/**
+ * Test the new Wulff geometry methods with sample data
+ */
+
+import { Wulff } from './Wulff';
+
+export function testWulffGeometry(): void {
+    console.log('========================================');
+    console.log('TESTING WULFF WITH NEW GEOMETRY');
+    console.log('========================================');
+
+    // Create a container for the test stereonet
+    const container = document.getElementById('wulff-test-container');
+    if (!container) {
+        console.error('Test container not found. Creating one...');
+        const newContainer = document.createElement('div');
+        newContainer.id = 'wulff-test-container';
+        newContainer.style.width = '500px';
+        newContainer.style.height = '500px';
+        newContainer.style.border = '2px solid #333';
+        newContainer.style.margin = '20px';
+        document.body.appendChild(newContainer);
+    }
+
+    // Create a Wulff stereonet
+    const wulff = new Wulff('wulff-test-container', {
+        width: 500,
+        height: 500,
+        showGrid: true,
+        showDirections: true
+    });
+
+    console.log('\n--- Test 1: plane  0, 45E ---');
+    // Plane dipping East
+    const plane1 = {
+        strike: 0,
+        dip: 45,
+        dipDirection: 'E',
+        id: 1
+    };
+    console.log('Plotting:', plane1);
+    wulff.addExtensionFractureWithDipDirection(plane1, { color: 'blue', width: 2 });
+    console.log('✅ Plane 1 plotted');
+
+        console.log('\n--- Test 1b: plane  30, 45W ---');
+    // Plane dipping East
+    const plane1b = {
+        strike: 30,
+        dip: 45,
+        dipDirection: 'W',
+        id: 11
+    };
+    console.log('Plotting:', plane1b);
+    wulff.addExtensionFractureWithDipDirection(plane1b, { color: 'blue', width: 2 });
+    console.log('✅ Plane 1b plotted');
+
+    console.log('\n--- Test 2: Vertical plane 0, 90E ---');
+    // Vertical plane striking N-S
+    const plane2 = {
+        strike: 0,
+        dip: 90,
+        dipDirection: 'E', // Will be ignored for vertical
+        id: 2
+    };
+    console.log('Plotting:', plane2);
+    wulff.addExtensionFractureWithDipDirection(plane2, { color: 'red', width: 2 });
+    console.log('✅ Plane 2 plotted');
+
+    console.log('\n--- Test 3: Pole to plane ---');
+    // Plot pole to the first plane
+    console.log('Plotting pole for plane 1');
+    wulff.addPoleWithDipDirection(plane1, { color: 'blue', size: 8 }, 'circle');
+    console.log('✅ Pole plotted');
+
+    console.log('\n--- Test 4: Multiple planes ---');
+    const planes = [
+        { strike: 45, dip: 30, dipDirection: 'NW', id: 3 },
+        { strike: 135, dip: 30, dipDirection: 'SW', id: 4 },
+        { strike: 225, dip: 30, dipDirection: 'SE', id: 5 },
+        { strike: 315, dip: 30, dipDirection: 'NE', id: 6 }
+    ];
+    console.log(`Plotting ${planes.length} planes`);
+    wulff.addExtensionFracturesWithDipDirection(planes, { color: 'green', width: 1.5 });
+    console.log('✅ Multiple planes plotted');
+
+    console.log('\n--- Test 5: Invalid data (should handle gracefully) ---');
+    const badPlane = {
+        strike: 0,
+        dip: 45,
+        dipDirection: 'INVALID',  // Bad direction
+        id: 999
+    };
+    console.log('Plotting invalid plane:', badPlane);
+    wulff.addExtensionFractureWithDipDirection(badPlane, { color: 'red', width: 2 });
+    console.log('✅ Invalid data handled (check for warning above)');
+
+    console.log('\n========================================');
+    console.log('WULFF GEOMETRY TEST COMPLETE');
+    console.log('Check the stereonet visualization on the page!');
+    console.log('========================================\n');
+}

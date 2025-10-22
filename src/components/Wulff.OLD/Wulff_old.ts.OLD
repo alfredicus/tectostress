@@ -1,5 +1,8 @@
-import { fromAnglesToNormal } from '@alfredo-taboada/stress';
 import * as d3 from 'd3';
+import { fromAnglesToNormal } from '../../io/fromAnglesToNormal';
+import { spherical2unitVectorCartesian } from '../../math/math';
+import { calculatePlaneVectors, generateGreatCirclePoints } from '../../math/math';
+import { Direction } from '../../io/fault/types';
 
 // Types for geological data
 export interface Point3D {
@@ -126,6 +129,139 @@ export class Wulff {
 
         this.initializeSVG(containerId);
         this.drawBaseStereonet();
+    }
+
+    /**
+     * ============================================================================
+     * NEW PUBLIC METHODS - Using Correct Plane Geometry
+     * These methods consider dip direction and use validated geometry
+     * ============================================================================
+     */
+
+    /**
+     * Add an extension fracture with correct geometry (considers dip direction)
+     * @param data - Plane data including strike, dip, and dipDirection
+     * @param style - Visual style options
+     */
+    public addExtensionFractureWithDipDirection(
+        data: { strike: number; dip: number; dipDirection: string; id?: number | string },
+        style: DataStyle = {}
+    ): void {
+        const result = this.drawGreatCircleWithDipDirection(data.strike, data.dip, data.dipDirection, style);
+        
+        if (!result) {
+            console.warn(`Failed to plot extension fracture id=${data.id || 'unknown'}: Invalid geometry`);
+        }
+    }
+
+    /**
+     * Add multiple extension fractures with correct geometry
+     * @param data - Array of plane data
+     * @param style - Visual style options
+     */
+    public addExtensionFracturesWithDipDirection(
+        data: Array<{ strike: number; dip: number; dipDirection: string; id?: number | string }>,
+        style: DataStyle = {}
+    ): void {
+        let successCount = 0;
+        let failCount = 0;
+
+        data.forEach(fracture => {
+            const result = this.drawGreatCircleWithDipDirection(
+                fracture.strike,
+                fracture.dip,
+                fracture.dipDirection,
+                style
+            );
+
+            if (result) {
+                successCount++;
+            } else {
+                failCount++;
+                console.warn(`Failed to plot fracture id=${fracture.id || 'unknown'}`);
+            }
+        });
+
+        if (failCount > 0) {
+            console.warn(`Plotted ${successCount} fractures, ${failCount} failed due to invalid geometry`);
+        }
+    }
+
+    /**
+     * Add a pole (normal to plane) with correct geometry
+     * @param data - Plane data including strike, dip, and dipDirection
+     * @param style - Visual style options
+     * @param symbol - Symbol type ('circle', 'cross', 'triangle')
+     * NOTE: Poles are plotted in lower hemisphere, so we use -n_plane (downward normal)
+     */
+    public addPoleWithDipDirection(
+        data: { strike: number; dip: number; dipDirection: string; id?: number | string },
+        style: DataStyle = {},
+        symbol: string = 'circle'
+    ): void {
+        try {
+            // Convert dip direction string to Direction enum
+            const direction = this.parseDipDirection(data.dipDirection);
+            if (direction === null) {
+                console.warn(`Invalid dip direction for pole id=${data.id}: ${data.dipDirection}`);
+                return;
+            }
+
+            // Calculate the upward normal vector using fromAnglesToNormal
+            const n_plane_up = fromAnglesToNormal({ strike: data.strike, dip: data.dip, dipDirection: direction });
+
+            // For lower hemisphere projection, use downward normal (pole = -n_plane)
+            const n_pole = {
+                x: -n_plane_up.x,
+                y: -n_plane_up.y,
+                z: -n_plane_up.z
+            };
+
+            // Convert Cartesian to trend/plunge
+            // Trend: azimuth measured clockwise from North (Y-axis)
+            // Plunge: angle below horizontal (positive downward)
+            
+            let trend = Math.atan2(n_pole.x, n_pole.y) * 180 / Math.PI;
+            if (trend < 0) trend += 360;
+            
+            // For lower hemisphere: plunge is angle from horizontal downward
+            const plunge = Math.asin(-n_pole.z) * 180 / Math.PI;  // Negative z for downward
+
+            // Draw the pole point
+            this.drawPoint(trend, plunge, style, symbol, data.id);
+
+        } catch (error) {
+            console.error(`Error plotting pole id=${data.id || 'unknown'}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Add multiple poles with correct geometry
+     * @param data - Array of plane data
+     * @param style - Visual style options
+     * @param symbol - Symbol type
+     */
+    public addPolesWithDipDirection(
+        data: Array<{ strike: number; dip: number; dipDirection: string; id?: number | string }>,
+        style: DataStyle = {},
+        symbol: string = 'circle'
+    ): void {
+        let successCount = 0;
+        let failCount = 0;
+
+        data.forEach(plane => {
+            try {
+                this.addPoleWithDipDirection(plane, style, symbol);
+                successCount++;
+            } catch (error) {
+                failCount++;
+                console.warn(`Failed to plot pole id=${plane.id || 'unknown'}`);
+            }
+        });
+
+        if (failCount > 0) {
+            console.warn(`Plotted ${successCount} poles, ${failCount} failed due to invalid geometry`);
+        }
     }
 
     // Public methods for adding different types of geological data
@@ -456,6 +592,158 @@ export class Wulff {
         }
 
         return path;
+    }
+
+    /**
+     * ============================================================================
+     * NEW GEOMETRY-BASED METHODS
+     * These methods use fromAnglesToNormal and correct plane geometry
+     * ============================================================================
+     */
+
+    /**
+     * Draw a great circle using correct geometry (considers dip direction)
+     * @param strike - Strike angle [0, 360)
+     * @param dip - Dip angle [0, 90]
+     * @param dipDirection - Dip direction (N, S, E, W, NE, SE, SW, NW)
+     * @param style - Visual style
+     * @param dashArray - Optional dash pattern
+     * @returns SVG path element or null if geometry is invalid
+     */
+    private drawGreatCircleWithDipDirection(
+        strike: number,
+        dip: number,
+        dipDirection: string,
+        style: DataStyle = {},
+        dashArray?: string
+    ): d3.Selection<SVGPathElement, unknown, null, undefined> | null {
+        const defaultStyle = { ...this.options.defaultDataStyle, ...style };
+
+        try {
+            // Convert dip direction string to Direction enum
+            const direction = this.parseDipDirection(dipDirection);
+            if (direction === null) {
+                console.warn(`Invalid dip direction: ${dipDirection}`);
+                return null;
+            }
+
+            // Calculate the upward normal vector using fromAnglesToNormal
+            const n_plane = fromAnglesToNormal({ strike, dip, dipDirection: direction });
+
+            // Calculate strike and dip vectors
+            const { n_strike, n_dip } = calculatePlaneVectors(n_plane);
+
+            // Generate points along the great circle (full circle, then filter)
+            const greatCirclePoints3D = generateGreatCirclePoints(n_strike, n_dip, 100);
+
+            // Project to stereographic projection
+            const projectedPoints: [number, number][] = [];
+            
+            for (const point of greatCirclePoints3D) {
+                // Check which hemisphere
+                if (point.z <= 0) {
+                    // Lower hemisphere - project normally
+                    const projected = this.projectVector3DToStereonet(point);
+                    if (projected) {
+                        projectedPoints.push(projected);
+                    }
+                } else {
+                    // Upper hemisphere - reflect to lower hemisphere
+                    // This ensures we plot the complete visible trace
+                    const reflected = {
+                        x: point.x,
+                        y: point.y,
+                        z: -point.z  // Reflect across equatorial plane
+                    };
+                    const projected = this.projectVector3DToStereonet(reflected);
+                    if (projected) {
+                        projectedPoints.push(projected);
+                    }
+                }
+            }
+
+            if (projectedPoints.length < 2) {
+                console.warn(`Not enough points to draw great circle for strike=${strike}, dip=${dip}`);
+                return null;
+            }
+
+            // Draw the path
+            const lineGenerator = d3.line<[number, number]>()
+                .x(d => d[0])
+                .y(d => d[1]);
+
+            const path = this.svg.append('path')
+                .attr('d', lineGenerator(projectedPoints))
+                .attr('fill', 'none')
+                .attr('stroke', defaultStyle.color)
+                .attr('stroke-width', defaultStyle.width)
+                .attr('opacity', defaultStyle.opacity);
+
+            if (dashArray) {
+                path.attr('stroke-dasharray', dashArray);
+            }
+
+            return path;
+
+        } catch (error) {
+            console.error(`Error drawing great circle: ${error.message}`, { strike, dip, dipDirection });
+            return null;
+        }
+    }
+
+    /**
+     * Project a 3D vector to stereographic projection coordinates
+     * @param vector - 3D unit vector {x, y, z}
+     * @returns [x, y] coordinates on stereonet, or null if invalid
+     */
+    private projectVector3DToStereonet(vector: { x: number; y: number; z: number }): [number, number] | null {
+        // Stereographic projection formula: project from South pole onto equatorial plane
+        // For lower hemisphere (z <= 0):
+        // X_proj = radius * x / (1 - z)
+        // Y_proj = radius * y / (1 - z)
+        
+        if (vector.z > 0) {
+            return null; // Upper hemisphere - don't plot
+        }
+
+        const denominator = 1 - vector.z;
+        if (Math.abs(denominator) < 1e-10) {
+            return null; // Avoid division by zero
+        }
+
+        const x_proj = this.radius * vector.x / denominator;
+        const y_proj = -this.radius * vector.y / denominator; // Negative y for correct orientation
+
+        return [x_proj, y_proj];
+    }
+
+    /**
+     * Parse dip direction string to Direction enum
+     */
+    private parseDipDirection(dipDir: string): Direction | null {
+        const normalized = dipDir.trim().toUpperCase();
+        
+        switch (normalized) {
+            case 'N':
+            case 'NORTH': return Direction.N;
+            case 'S':
+            case 'SOUTH': return Direction.S;
+            case 'E':
+            case 'EAST': return Direction.E;
+            case 'W':
+            case 'WEST': return Direction.W;
+            case 'NE':
+            case 'NORTHEAST': return Direction.NE;
+            case 'SE':
+            case 'SOUTHEAST': return Direction.SE;
+            case 'SW':
+            case 'SOUTHWEST': return Direction.SW;
+            case 'NW':
+            case 'NORTHWEST': return Direction.NW;
+            case 'UND':
+            case 'UNDEFINED': return Direction.UND;
+            default: return null;
+        }
     }
 
     /**

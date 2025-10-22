@@ -743,6 +743,36 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         {solution.analysis && (
                             <>
                                 <div>
+                                    <h4 className="text-base font-medium mb-3">Eigenvectors</h4>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="bg-red-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-red-800 mb-2">v₁ (σ₁ direction)</h5>
+                                            <div className="space-y-1 text-sm">
+                                                <p><span className="font-medium">X:</span> {solution.analysis.eigenvectors[0][0].toFixed(4)}</p>
+                                                <p><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[0][1].toFixed(4)}</p>
+                                                <p><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[0][2].toFixed(4)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-yellow-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-yellow-800 mb-2">v₂ (σ₂ direction)</h5>
+                                            <div className="space-y-1 text-sm">
+                                                <p><span className="font-medium">X:</span> {solution.analysis.eigenvectors[1][0].toFixed(4)}</p>
+                                                <p><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[1][1].toFixed(4)}</p>
+                                                <p><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[1][2].toFixed(4)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-blue-50 p-4 rounded-lg">
+                                            <h5 className="text-sm font-medium text-blue-800 mb-2">v₃ (σ₃ direction)</h5>
+                                            <div className="space-y-1 text-sm">
+                                                <p><span className="font-medium">X:</span> {solution.analysis.eigenvectors[2][0].toFixed(4)}</p>
+                                                <p><span className="font-medium">Y:</span> {solution.analysis.eigenvectors[2][1].toFixed(4)}</p>
+                                                <p><span className="font-medium">Z:</span> {solution.analysis.eigenvectors[2][2].toFixed(4)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
                                     <h4 className="text-base font-medium mb-3">Euler Angles (ZXZ Convention)</h4>
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="bg-purple-50 p-4 rounded-lg text-center">

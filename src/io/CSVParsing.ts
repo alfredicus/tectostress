@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { normalizeName, mapColumnName } from '@alfredo-taboada/stress';
+import { validateGeologicalData } from './GeologicalDataValidator';
 
 export type ProcessCSVReturnType = {
     headers: string[];
@@ -147,13 +148,18 @@ export function processCSV(csvData: string): ProcessCSVReturnType {
             if (normalizedRow['type']) {
                 try {
                     const dataType = String(normalizedRow['type']).trim();
-                    const rowIssues = validateGeologicalData(dataType, normalizedRow);
+                    const validationResult = validateGeologicalData(dataType, normalizedRow);
 
-                    if (rowIssues.length > 0) {
+                    if (validationResult.errors.length > 0) {
                         issues.push({
-                            row: rowIndex + 2, // +2 to account for 0-indexing and header row
-                            messages: rowIssues
+                            row: rowIndex + 2,
+                            messages: validationResult.errors
                         });
+                    }
+                    
+                    // Store calculated plane vectors in the row data!
+                    if (validationResult.planeVectors) {
+                        normalizedRow['_planeVectors'] = validationResult.planeVectors;
                     }
                 } catch (error) {
                     errorRows++;

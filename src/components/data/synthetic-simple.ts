@@ -4,9 +4,9 @@ export const synthetic_simple = {
         example1: {
             name: 'Random Points',
             csv: `id;type;strike;dip;Dip direction
-1;Extension Fracture;0;60;E
-2;Extension Fracture;30;30;NW
-3;stylolite;120;20;S
+1;Striated plane;165;70;N;0;S;;left-lateral;;;;;;;;;;;;;;;
+2;Extension Fracture;30;30;SE
+3;Extension Fracture;60;30;NW
 `
         }
     }
