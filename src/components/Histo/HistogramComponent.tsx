@@ -1,18 +1,72 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Histogram, HistogramParameters } from './Histogram';
-import { Download, RotateCcw, BarChart3, TrendingUp } from 'lucide-react';
+import { Download, RotateCcw, BarChart3, TrendingUp, Layers } from 'lucide-react';
 import StablePlotWithSettings from '../PlotWithSettings';
 
 import {
     BaseVisualizationProps,
     useVisualizationState,
     DataExporter,
-    ColumnSelector,
-    ColorInput,
-    NumberInput,
-    ColumnInfo
+    ColorInput
 } from '../VisualizationStateSystem';
 import { createHistogramSettings, HistogramCompState } from './HistogramParameters';
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+interface AvailableDataType {
+    key: string;
+    dataType: string;
+    availableInFiles: string[];
+    enabled: boolean;
+}
+
+function getAvailableDataTypes(files: any[]): AvailableDataType[] {
+    const available: AvailableDataType[] = [];
+    const dataTypeMap = new Map<string, string[]>();
+
+    files.forEach(file => {
+        const fileData = file.data || file.content;
+        if (!fileData || fileData.length === 0) return;
+
+        fileData.forEach((row: any) => {
+            if (row.type) {
+                const type = row.type;
+                if (!dataTypeMap.has(type)) {
+                    dataTypeMap.set(type, []);
+                }
+                if (!dataTypeMap.get(type)!.includes(file.id)) {
+                    dataTypeMap.get(type)!.push(file.id);
+                }
+            }
+        });
+    });
+
+    dataTypeMap.forEach((fileIds, dataType) => {
+        available.push({
+            key: dataType,
+            dataType: dataType,
+            availableInFiles: fileIds,
+            enabled: false
+        });
+    });
+
+    return available;
+}
+
+function getAvailableColumns(files: any[], selectedFiles: string[]): string[] {
+    const columns = new Set<string>();
+
+    files
+        .filter(file => selectedFiles.includes(file.id))
+        .forEach(file => {
+            const headers = file.headers?.map((h: string) => h) || [];
+            headers.forEach(header => columns.add(header));
+        });
+
+    return Array.from(columns).sort();
+}
 
 // ============================================================================
 // HISTOGRAM COMPONENT
@@ -30,18 +84,72 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
     const containerRef = useRef<HTMLDivElement>(null);
     const [histogram, setHistogram] = React.useState<Histogram | null>(null);
     const [statistics, setStatistics] = React.useState<any>(null);
+    const [showDataPanel, setShowDataPanel] = useState(false);
+    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    const [availableDataTypes, setAvailableDataTypes] = useState<AvailableDataType[]>([]);
+    const [availableColumnsLocal, setAvailableColumnsLocal] = useState<string[]>([]);
+
+    // Initialize selected files when files change
+    useEffect(() => {
+        if (!files || files.length === 0) {
+            setSelectedFiles([]);
+            setAvailableDataTypes([]);
+            setAvailableColumnsLocal([]);
+            return;
+        }
+
+        // Select all files by default
+        const fileIds = files.map(f => f.id);
+        setSelectedFiles(fileIds);
+
+        // Update available data types
+        const dataTypes = getAvailableDataTypes(files);
+        setAvailableDataTypes(dataTypes);
+    }, [files]);
+
+    // Update available columns when files or data types change
+    useEffect(() => {
+        if (!files || files.length === 0) {
+            setAvailableColumnsLocal([]);
+            return;
+        }
+
+        const columns = getAvailableColumns(files, selectedFiles);
+        setAvailableColumnsLocal(columns);
+
+        // Auto-select first column if none selected or current selection is invalid
+        if (columns.length > 0 && (!currentState.selectedColumn || !columns.includes(currentState.selectedColumn))) {
+            updateSelectedColumn(columns[0]);
+        } else if (columns.length === 0) {
+            updateSelectedColumn('');
+        }
+    }, [files, selectedFiles]);
+
+    // Handlers for file and data type selection
+    const toggleFileSelection = (fileId: string) => {
+        setSelectedFiles(prev =>
+            prev.includes(fileId)
+                ? prev.filter(id => id !== fileId)
+                : [...prev, fileId]
+        );
+    };
+
+    const toggleDataType = (key: string) => {
+        setAvailableDataTypes(prev =>
+            prev.map(dt =>
+                dt.key === key ? { ...dt, enabled: !dt.enabled } : dt
+            )
+        );
+    };
 
     // Use the factorized visualization state hook
     const {
         state: currentState,
-        availableColumns,
         updateSettings,
         updateSelectedColumn,
         updatePlotDimensions,
         toggleSettingsPanel,
-        resetToDefaults,
-        getSelectedColumnData,
-        getSelectedColumnInfo
+        resetToDefaults
     } = useVisualizationState<HistogramCompState>(
         'histogram',
         createHistogramSettings(),
@@ -54,16 +162,10 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
 
     // Initialize and update histogram
     useEffect(() => {
-        if (!containerRef.current) return;
+        if (!containerRef.current || !currentState.selectedColumn) return;
 
-        const data = getSelectedColumnData();
-        if (data.length === 0) return;
-
-        const selectedColumnInfo = getSelectedColumnInfo();
-
-        // Calculate effective dimensions - leave space for margins and statistics
         const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const effectiveHeight = Math.max(currentState.plotDimensions.height - 120, 200); // Leave space for statistics
+        const effectiveHeight = Math.max(currentState.plotDimensions.height - 120, 200);
 
         const params: HistogramParameters = {
             width: effectiveWidth,
@@ -72,7 +174,7 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
             fillColor: currentState.settings.fillColor,
             strokeColor: currentState.settings.strokeColor,
             title: title,
-            xAxisLabel: selectedColumnInfo ? selectedColumnInfo.columnName : currentState.settings.xAxisLabel,
+            xAxisLabel: currentState.selectedColumn,
             yAxisLabel: currentState.settings.yAxisLabel,
             draw: {
                 grid: currentState.settings.showGrid,
@@ -82,29 +184,64 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
             }
         };
 
-        const newHistogram = new Histogram(containerRef.current, data, params);
+        const newHistogram = new Histogram(containerRef.current, [], params);
         setHistogram(newHistogram);
-
-        // Update statistics
-        const stats = newHistogram.getStatistics();
-        setStatistics(stats);
-
-        return () => {
-            // Cleanup if needed
-        };
-    }, [currentState, getSelectedColumnData, getSelectedColumnInfo, title]);
+    }, [
+        currentState.plotDimensions,
+        currentState.settings.bins,
+        currentState.settings.fillColor,
+        currentState.settings.strokeColor,
+        currentState.settings.showGrid,
+        currentState.settings.showDensity,
+        currentState.settings.showLabels,
+        currentState.selectedColumn,
+        title
+    ]);
 
     // Update histogram when data changes
     useEffect(() => {
-        if (!histogram) return;
+        if (!histogram || !files || files.length === 0 || !currentState.selectedColumn) {
+            if (histogram) histogram.data = [];
+            return;
+        }
 
-        const data = getSelectedColumnData();
-        if (data.length > 0) {
-            histogram.data = data;
+        const allData: number[] = [];
+
+        const enabledDataTypes = availableDataTypes
+            .filter(dt => dt.enabled)
+            .map(dt => dt.dataType);
+
+        // Get relevant files (those that are selected)
+        const relevantFiles = files.filter(f => selectedFiles.includes(f.id));
+
+        relevantFiles.forEach(file => {
+            const fileData = file.data || file.content;
+            if (!fileData || fileData.length === 0) return;
+
+            fileData.forEach((row: any) => {
+                // Filter by data type if any are enabled
+                const passesTypeFilter = enabledDataTypes.length === 0 ||
+                    enabledDataTypes.includes(row.type);
+
+                if (passesTypeFilter) {
+                    const value = parseFloat(row[currentState.selectedColumn]);
+                    if (!isNaN(value)) {
+                        allData.push(value);
+                    }
+                }
+            });
+        });
+
+        // Update histogram with data
+        if (allData.length > 0) {
+            histogram.data = allData;
             const stats = histogram.getStatistics();
             setStatistics(stats);
+        } else {
+            histogram.data = [];
+            setStatistics(null);
         }
-    }, [histogram, getSelectedColumnData]);
+    }, [histogram, files, selectedFiles, availableDataTypes, currentState.selectedColumn]);
 
     // Export functionality
     const exportData = () => {
@@ -126,14 +263,6 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
     // Main plot content
     const plotContent = (
         <div className="flex flex-col h-full">
-            {/* Column selector */}
-            <ColumnSelector
-                availableColumns={availableColumns}
-                selectedColumn={currentState.selectedColumn}
-                onColumnChange={updateSelectedColumn}
-                label="Select Data Column"
-            />
-
             {/* Histogram container */}
             <div className="flex-1 min-h-0 mb-4">
                 <div
@@ -177,6 +306,83 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
                     </div>
                 </div>
             )}
+        </div>
+    );
+
+    // Data selection panel (left panel)
+    const dataSelectionPanel = (
+        <div className="space-y-4">
+            {/* Files to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Files to Plot</h4>
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    {files && files.map(file => (
+                        <label key={file.id} className="flex items-center justify-between py-1">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedFiles.includes(file.id)}
+                                    onChange={() => toggleFileSelection(file.id)}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm">
+                                    {file.name} ({(file.data || file.content)?.length || 0} rows)
+                                </span>
+                            </div>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            {/* Data Types to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Data Types to Plot</h4>
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    {availableDataTypes.map(dataType => (
+                        <label key={dataType.key} className="flex items-center justify-between py-1">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={dataType.enabled}
+                                    onChange={() => toggleDataType(dataType.key)}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm">{dataType.dataType}</span>
+                            </div>
+                        </label>
+                    ))}
+                    {availableDataTypes.length === 0 && (
+                        <p className="text-sm text-gray-500 italic">
+                            No data types found in selected files
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Column to Plot */}
+            <div>
+                <h4 className="font-medium text-gray-800 mb-2">Column to Plot</h4>
+                <div className="border rounded-lg p-3">
+                    {availableColumnsLocal.length > 0 ? (
+                        <select
+                            value={currentState.selectedColumn}
+                            onChange={(e) => updateSelectedColumn(e.target.value)}
+                            className="w-full p-2 border rounded text-sm"
+                        >
+                            <option value="">-- Select a column --</option>
+                            {availableColumnsLocal.map((col, index) => (
+                                <option key={index} value={col}>
+                                    {col}
+                                </option>
+                            ))}
+                        </select>
+                    ) : (
+                        <p className="text-sm text-gray-500 italic">
+                            No columns available in selected files
+                        </p>
+                    )}
+                </div>
+            </div>
         </div>
     );
 
@@ -268,42 +474,25 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
                     </div>
                 </div>
             </div>
-
-            {/* Column info */}
-            <ColumnInfo columnInfo={getSelectedColumnInfo()} />
         </div>
-    );
-
-    // Header actions
-    const headerActions = (
-        <>
-            <button
-                onClick={resetToDefaults}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                title="Reset to Defaults"
-            >
-                <RotateCcw size={16} />
-            </button>
-            <button
-                onClick={exportData}
-                disabled={!histogram}
-                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                title="Export Data"
-            >
-                <Download size={16} />
-            </button>
-        </>
     );
 
     return (
         <StablePlotWithSettings
             title={title}
+            leftPanel={dataSelectionPanel}
             settingsPanel={settingsContent}
-            headerActions={headerActions}
             borderColor="#d1d5db"
             borderWidth={1}
             settingsPanelWidth={300}
+            leftPanelWidth={280}
             initialSettingsOpen={currentState.open}
+            initialLeftPanelOpen={showDataPanel}
+            showLeftPanelButton={true}
+            leftPanelButtonIcon={<Layers size={16} />}
+            onLeftPanelToggle={(isOpen) => {
+                setShowDataPanel(isOpen);
+            }}
             onSettingsToggle={(isOpen) => {
                 // Handle settings panel toggle
                 toggleSettingsPanel();

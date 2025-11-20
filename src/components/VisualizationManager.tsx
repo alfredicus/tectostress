@@ -13,6 +13,8 @@ import { HistogramDescriptor, HistogramIcon } from './Histo/HistogramDescriptor'
 import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
 import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
+import { FractureMap2D } from './Map2D/FractureMap2D';
+import { FractureMapIcon } from './Map2D/FractureMap2DParameters';
 
 // ============================================================================
 // VISUALIZATION TYPE DEFINITIONS
@@ -78,9 +80,9 @@ export const DATA_VISUALIZATIONS: VisualizationType[] = [
         defaultLayout: { w: 6, h: 4 }
     },
     {
-        id: 'mohr',
-        title: 'Mohr Circle',
-        icon: MohrCircleDescriptor.icon,
+        id: 'fractureMap2D',
+        title: 'Data map',
+        icon: FractureMapIcon,
         defaultLayout: { w: 6, h: 4 }
     }
 ];

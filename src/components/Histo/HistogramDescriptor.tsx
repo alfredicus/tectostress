@@ -1,6 +1,3 @@
-// HistogramDescriptor.ts
-// Exemple complet pour l'Histogram
-
 import React from 'react';
 import {
     VisualizationDescriptor,

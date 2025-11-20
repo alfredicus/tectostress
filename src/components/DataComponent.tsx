@@ -17,10 +17,11 @@ import {
 } from './VisualizationManager';
 import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { AddDataDialog } from './AddDataDialog';
+
 import { matelles } from './data/matelles';
-import { synthetic1 } from './data/synthetic1';
-import { faults_synthetic } from './data/faults';
-import { synthetic_simple } from './data/synthetic-simple';
+import { synthetic_1 } from './data/synthetic-1';
+import { synthetic_2 } from './data/synthetic-2';
+import { synthetic_faults } from './data/synthetic-faults';
 
 interface DataComponentProps {
     files: DataFile[];
@@ -132,10 +133,10 @@ const DataComponent: React.FC<DataComponentProps> = ({
     // Model definitions with multiple examples each
     const MODELS = {
         // ----------------------------------------------------
-        matelles,
-        synthetic1,
-        synthetic_simple,
-        faults_synthetic
+        synthetic_1,
+        synthetic_2,
+        synthetic_faults,
+        matelles
     }
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

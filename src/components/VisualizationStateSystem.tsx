@@ -1,4 +1,4 @@
-import FractureMap2DComponent, { FractureMap2DCompState } from './FractureMap2DComponent';
+// import FractureMap2DComponent, { FractureMap2DCompState } from './FractureMap2DComponent';
 
 // ============================================================================
 // BASE STATE INTERFACES

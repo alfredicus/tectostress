@@ -1,8 +1,8 @@
-export const synthetic_simple = {
-    name: 'Synthetic Data Simple',
+export const synthetic_1 = {
+    name: 'Synthetic 1',
     examples: {
         example1: {
-            name: 'Random Points',
+            name: 'Example',
             csv: `id;type;strike;dip;Dip direction
 1;Striated plane;165;70;N;0;S;;left-lateral;;;;;;;;;;;;;;;
 2;Extension Fracture;30;30;SE

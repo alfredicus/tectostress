@@ -108,6 +108,12 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Fracture Map 2D',
         icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 8, h: 6 }
+    },
+    {
+        id: 'fractureMap2D',
+        title: 'Fracture Map 2D',
+        icon: FractureMap2DDescriptor.icon,
+        defaultLayout: { w: 4, h: 4 }
     }
 ];
 
