@@ -59,6 +59,16 @@ interface RunComponentProps {
         selectedFiles: string[];
         showSettings?: boolean;
     }) => void;
+    persistedSolution?: any; // StressSolution
+    persistedVisualizations?: any[];
+    persistedSelectedFile?: string | null;
+    persistedLayout?: { [key: string]: any };
+    onSolutionChange?: (
+        solution: any | null,
+        visualizations: any[],
+        selectedFile: string | null,
+        layout: { [key: string]: any }
+    ) => void;
 }
 
 // Configuration data (same as before)
@@ -155,7 +165,12 @@ class SimulationObserver {
 const RunComponent: React.FC<RunComponentProps> = ({
     files,
     persistentState,
-    onStateChange
+    onStateChange,
+    persistedSolution,
+    persistedVisualizations = [],
+    persistedSelectedFile = null,
+    persistedLayout = {},
+    onSolutionChange
 }) => {
     // State management (same as before, but simplified for key parts)
     const [selectedMethod, setSelectedMethod] = useState<string>('');
@@ -166,7 +181,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
         status: 'En attente',
         progress: 0
     });
-    const [solution, setSolution] = useState<StressSolution | null>(null);
+    const [solution, setSolution] = useState<StressSolution | null>(persistedSolution || null);
+    // const [solution, setSolution] = useState<StressSolution | null>(null);
     const [showResultsPanel, setShowResultsPanel] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isComputing, setIsComputing] = useState<boolean>(false);
@@ -253,6 +269,18 @@ const RunComponent: React.FC<RunComponentProps> = ({
         // console.log('Persistent state for showSettings:', persistentState);
         setShowSettings(persistentState?.showSettings ?? false);
     }, [persistentState, initializeParams, getFirstActiveMethod]);
+
+    useEffect(() => {
+        if (persistedSolution) {
+            setSolution(persistedSolution);
+            setShowResultsPanel(true);
+            addConsoleMessage(
+                'info',
+                'Loaded previous stress inversion results',
+                `Solution with stress ratio: ${persistedSolution.stressRatio?.toFixed(2)}`
+            );
+        }
+    }, []); // Tableau de dépendance vide: exécuter UNE SEULE FOIS au montage
 
     // Debounced state change notification
     useEffect(() => {
@@ -499,6 +527,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setSimulationStatus({ status: 'Completed', progress: 100 });
             setShowResultsPanel(true);
 
+            if (onSolutionChange) {
+                onSolutionChange(enhancedSolution, [], null, {});
+            }
+
         } catch (error) {
             let message = "An unknown error occurred";
             if (error instanceof Error) {
@@ -516,6 +548,37 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setComputingProgress(0);
         }
     }, [selectedFiles, files, selectedMethod, currentParams, handleSimulationProgress, addConsoleMessage]);
+
+    // Cet effet s'assure que si les fichiers changent drastiquement 
+    // (ex: changement de modèle), la solution basée sur les anciens fichiers
+    // est supprimée car elle n'est plus valide
+    useEffect(() => {
+        // Si on a une solution mais que les fichiers ont changé
+        if (solution && solution.visualizationData?.inputData) {
+            const currentFileIds = new Set(files.map(f => f.id));
+            const solutionInputFileIds = new Set(
+                solution.visualizationData.inputData.map((f: DataFile) => f.id)
+            );
+
+            // Vérifier si des fichiers de la solution ont disparu
+            let hasInvalidFiles = false;
+            for (const fileId of solutionInputFileIds) {
+                if (!currentFileIds.has(fileId)) {
+                    hasInvalidFiles = true;
+                    break;
+                }
+            }
+
+            if (hasInvalidFiles) {
+                console.warn('Solution is based on files that no longer exist, clearing');
+                setSolution(null);
+                setShowResultsPanel(false);
+                if (onSolutionChange) {
+                    onSolutionChange(null, [], null, {});
+                }
+            }
+        }
+    }, [files, solution, onSolutionChange]);
 
     // Export functionality (same as before)
     const exportResults = useCallback((filename: string, format: 'json' | 'csv' | 'txt') => {
@@ -1037,6 +1100,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             {/* Results panel */}
             <ResultsPanel />
 
+            {/* ========== MODIFICATION 3 - PASSER LES PROPS AU StressAnalysisComponent ========== */}
             {/* Integrated Stress Analysis Visualizations */}
             {solution && (
                 <StressAnalysisComponent
@@ -1047,6 +1111,16 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     addButtonText="Add Analysis View"
                     dialogTitle="Add Stress Analysis Visualization"
                     showFileSelector={true}
+                    // ========== NOUVEAU ==========
+                    initialVisualizations={persistedVisualizations}
+                    initialSelectedFile={persistedSelectedFile}
+                    initialLayout={persistedLayout}
+                    onVisualizationsChange={(visualizations, selectedFile, layout) => {
+                        if (onSolutionChange && solution) {
+                            onSolutionChange(solution, visualizations, selectedFile, layout);
+                        }
+                    }}
+                    // ========== FIN NOUVEAU ==========
                 >
                     <div className="mt-8 mb-4">
                         <div className="flex items-center gap-3 mb-4">

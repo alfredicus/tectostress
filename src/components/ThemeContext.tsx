@@ -172,10 +172,10 @@ export const darkTheme: Theme = {
             paper: '#334155',
         },
         text: {
-            primary: '#f8fafc',
+            primary: '#f1f5f9',        // ✅ Light text (was #868686ff)
             secondary: '#cbd5e1',
-            tertiary: '#94a3b8',
-            inverse: '#1e293b',
+            tertiary: '#94a3b8',       // ✅ Lighter than before
+            inverse: '#000000',        // ✅ For use on light backgrounds
         },
         border: {
             primary: '#334155',

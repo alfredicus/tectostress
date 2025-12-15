@@ -384,6 +384,10 @@ export interface UseVisualizationManagerProps {
     onVisualizationRemoved?: (id: string) => void;
     onVisualizationLayoutChanged?: (updatedVisualizations: Visualization[]) => void;
     onVisualizationStateChanged?: (id: string, state: VisualizationState) => void;
+    // New persistence props
+    initialVisualizations?: any[];
+    initialSelectedFile?: string | null;
+    initialLayout?: { [key: string]: any };
 }
 
 export const useVisualizationManager = ({
@@ -393,12 +397,38 @@ export const useVisualizationManager = ({
     onVisualizationAdded: externalOnVisualizationAdded,
     onVisualizationRemoved: externalOnVisualizationRemoved,
     onVisualizationLayoutChanged: externalOnVisualizationLayoutChanged,
-    onVisualizationStateChanged: externalOnVisualizationStateChanged
+    onVisualizationStateChanged: externalOnVisualizationStateChanged,
+    initialVisualizations,
+    initialSelectedFile,
+    initialLayout
 }: UseVisualizationManagerProps) => {
     // Internal visualization state (if not managed externally)
     const [internalVisualizations, setInternalVisualizations] = useState<Visualization[]>([]);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedFileForView, setSelectedFileForView] = useState<string>('');
+
+    // Restore persisted visualizations when they change (e.g., when switching tabs)
+    React.useEffect(() => {
+        if (initialVisualizations && Array.isArray(initialVisualizations) && initialVisualizations.length > 0) {
+            console.log('Restoring persisted visualizations:', initialVisualizations.length);
+            // Convert persisted data back to Visualization objects with layout
+            const restoredViz = initialVisualizations.map((viz: any) => ({
+                id: viz.id,
+                type: viz.type,
+                title: viz.title,
+                layout: viz.layout || { x: 0, y: 0, w: 6, h: 4 },
+                state: viz.state || {}
+            })) as Visualization[];
+            setInternalVisualizations(restoredViz);
+        }
+    }, [initialVisualizations?.length]); // Watch for changes to trigger restoration
+
+    // Restore selected file for view
+    React.useEffect(() => {
+        if (initialSelectedFile) {
+            setSelectedFileForView(initialSelectedFile);
+        }
+    }, [initialSelectedFile]);
 
     // Use external visualizations if provided, otherwise use internal state
     const visualizations = externalVisualizations || internalVisualizations;

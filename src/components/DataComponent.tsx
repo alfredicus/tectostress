@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
     Table, TableHead, TableBody,
     TableRow, TableCell, Button, Typography, FormControl, InputLabel, Select, MenuItem
@@ -17,6 +17,7 @@ import {
 } from './VisualizationManager';
 import { ConsoleComponent, ConsoleMessage } from './ConsoleComponent';
 import { AddDataDialog } from './AddDataDialog';
+import { useTheme, useThemeClasses } from './ThemeContext';
 
 import { matelles } from './data/matelles';
 import { synthetic_1 } from './data/synthetic-1';
@@ -27,29 +28,127 @@ interface DataComponentProps {
     files: DataFile[];
     onFileLoaded: (file: DataFile) => void;
     onFileRemoved: (fileId: string) => void;
+    persistedVisualizations?: any[];
+    persistedSelectedFile?: string | null;
+    persistedLayout?: { [key: string]: any };
+    onVisualizationsChange?: (
+        visualizations: any[],
+        selectedFile: string | null,
+        layout: { [key: string]: any }
+    ) => void;
 }
 
 const DataComponent: React.FC<DataComponentProps> = ({
     files,
     onFileLoaded,
-    onFileRemoved
+    onFileRemoved,
+    persistedVisualizations = [],
+    persistedSelectedFile = null,
+    persistedLayout = {},
+    onVisualizationsChange
 }) => {
+    // ============================================================================
+    // ✅ STEP 1: ALL STATE HOOKS
+    // ============================================================================
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
     const [containerWidth, setContainerWidth] = useState<number>(1400);
     const [selectedModel, setSelectedModel] = useState<string>('');
-
-    // Add Data Dialog state
     const [isAddDataDialogOpen, setIsAddDataDialogOpen] = useState(false);
-
-    // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
-
     const [isChangingModel, setIsChangingModel] = useState(false);
 
+    // ============================================================================
+    // ✅ STEP 2: CONTEXT HOOKS
+    // ============================================================================
+    const { isDark } = useTheme();
+
+    // ============================================================================
+    // ✅ STEP 3: ALL useThemeClasses HOOKS - CALLED IN SAME ORDER EVERY RENDER
+    // ============================================================================
+    // Selection header button
+    const selectAllButtonClasses = useThemeClasses({
+        base: 'flex items-center gap-2 transition-colors',
+        light: 'text-gray-700 hover:text-blue-600',
+        dark: 'text-gray-300 hover:text-blue-400'
+    });
+
+    // Selection counter text
+    const selectionCounterClasses = useThemeClasses({
+        base: 'text-sm',
+        light: 'text-gray-500',
+        dark: 'text-gray-400'
+    });
+
+    // Current model display text
+    const currentModelClasses = useThemeClasses({
+        base: 'text-sm font-medium',
+        light: 'text-blue-600',
+        dark: 'text-blue-400'
+    });
+
+    // File card container
+    const fileCardClasses = useThemeClasses({
+        base: 'border rounded-md shadow-sm overflow-hidden',
+        light: 'border-gray-200 bg-white',
+        dark: 'border-gray-700 bg-gray-800'
+    });
+
+    // File card header
+    const fileCardHeaderClasses = useThemeClasses({
+        base: 'flex items-center justify-between p-2 border-b',
+        light: 'bg-gray-50 border-gray-200',
+        dark: 'bg-gray-700 border-gray-600'
+    });
+
+    // Drag handle
+    const dragHandleClasses = useThemeClasses({
+        base: 'drag-handle cursor-move p-1 rounded transition-colors',
+        light: 'hover:bg-gray-200 text-gray-400',
+        dark: 'hover:bg-gray-600 text-gray-500'
+    });
+
+    // Icon buttons (chart, remove)
+    const fileIconButtonClasses = useThemeClasses({
+        base: 'p-1 transition-colors',
+        light: 'text-gray-400 hover:text-blue-500',
+        dark: 'text-gray-500 hover:text-blue-400'
+    });
+
+    const fileRemoveButtonClasses = useThemeClasses({
+        base: 'p-1 transition-colors',
+        light: 'text-gray-400 hover:text-red-500',
+        dark: 'text-gray-500 hover:text-red-400'
+    });
+
+    // Table styles
+    const tableHeaderCellClasses = useThemeClasses({
+        base: 'font-bold whitespace-nowrap sticky top-0 z-1',
+        light: 'bg-gray-100 text-gray-900 border-gray-200',
+        dark: 'bg-gray-700 text-gray-100 border-gray-600'
+    });
+
+    const tableBodyCellClasses = useThemeClasses({
+        base: 'whitespace-nowrap',
+        light: 'text-gray-900 bg-white border-gray-200',
+        dark: 'text-gray-100 bg-gray-800 border-gray-700'
+    });
+
+    const tableRowHoverClasses = isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50';
+
+    // Container
+    const containerClasses = useThemeClasses({
+        base: 'p-6',
+        light: 'bg-gray-50',
+        dark: 'bg-gray-900'
+    });
+
+    // ============================================================================
+    // ✅ STEP 4: OTHER HOOKS AND CALLBACKS
+    // ============================================================================
     // Helper function to add messages to console
     const addConsoleMessage = useCallback((
         type: ConsoleMessage['type'],
@@ -81,6 +180,11 @@ const DataComponent: React.FC<DataComponentProps> = ({
     }, []);
 
     // Use the visualization manager hook with DATA_VISUALIZATIONS
+    const vizManagerKey = useMemo(() =>
+        `dataViz-${persistedVisualizations?.length || 0}-${persistedSelectedFile || 'none'}`,
+        [persistedVisualizations?.length, persistedSelectedFile]
+    );
+
     const {
         visualizations,
         isDialogOpen,
@@ -94,8 +198,64 @@ const DataComponent: React.FC<DataComponentProps> = ({
         handleVisualizationStateChanged
     } = useVisualizationManager({
         files,
-        availableTypes: DATA_VISUALIZATIONS
+        availableTypes: DATA_VISUALIZATIONS,
+        initialVisualizations: persistedVisualizations,
+        initialSelectedFile: persistedSelectedFile,
+        initialLayout: persistedLayout,
+        _reinitKey: vizManagerKey
     });
+
+    // ============================================================================
+    // ✅ STEP 5: EFFECT HOOKS
+    // ============================================================================
+    // Synchronize persisted visualizations when they change (e.g., when switching tabs)
+    useEffect(() => {
+        if (persistedVisualizations && persistedVisualizations.length > 0) {
+            const currentVizsString = JSON.stringify(visualizations.map(v => v.id));
+            const persistedVizsString = JSON.stringify(persistedVisualizations.map((v: any) => v.id));
+
+            if (currentVizsString !== persistedVizsString) {
+                console.log('Restoring persisted visualizations:', persistedVisualizations.length);
+            }
+        }
+    }, [persistedVisualizations?.length]);
+
+    useEffect(() => {
+        if (onVisualizationsChange) {
+            const layoutData = visualizations.reduce((acc, viz) => {
+                if (viz.id && viz.layout) {
+                    acc[viz.id] = viz.layout;
+                }
+                return acc;
+            }, {} as { [key: string]: any });
+        }
+    }, [visualizations, selectedFileForView, onVisualizationsChange]);
+
+    useEffect(() => {
+        const validFileIds = new Set(files.map(f => f.id));
+
+        if (selectedFileForView && !validFileIds.has(selectedFileForView)) {
+            console.warn('Persisted file not found, resetting:', selectedFileForView);
+            setSelectedFileForView(null);
+        }
+
+        const hasInvalidVisualizations = visualizations.some(
+            viz => viz.fileId && !validFileIds.has(viz.fileId)
+        );
+
+        if (hasInvalidVisualizations) {
+            console.warn('Found visualizations with invalid files');
+        }
+    }, [files, visualizations, selectedFileForView, setSelectedFileForView]);
+
+    useEffect(() => {
+        if (files.length === 0 && visualizations.length > 0) {
+            console.log('Files cleared, resetting visualizations');
+            if (onVisualizationsChange) {
+                onVisualizationsChange([], null, {});
+            }
+        }
+    }, [files.length, visualizations.length, onVisualizationsChange]);
 
     // Measure container width for responsive grid
     useEffect(() => {
@@ -118,7 +278,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
         };
     }, []);
 
-
     // Clear console when no files remain
     useEffect(() => {
         if (files.length === 0 && !isChangingModel) {
@@ -128,16 +287,18 @@ const DataComponent: React.FC<DataComponentProps> = ({
             clearConsole();
             setIsConsoleOpen(false);
         }
-    }, [files.length, clearConsole, setSelectedModel]);
+    }, [files.length, clearConsole]);
 
+    // ============================================================================
+    // ✅ STEP 6: EVENT HANDLERS AND FUNCTIONS
+    // ============================================================================
     // Model definitions with multiple examples each
     const MODELS = {
-        // ----------------------------------------------------
         synthetic_1,
         synthetic_2,
         synthetic_faults,
         matelles
-    }
+    };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileList = event.target.files;
@@ -189,7 +350,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
     };
 
     const handleAddDataFromDialog = useCallback((newFile: DataFile) => {
-        // Position the new file at the bottom of existing files
         const filesCount = files.length;
         const row = Math.floor(filesCount / 2);
         const col = filesCount % 2;
@@ -248,7 +408,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
         setSelectAll(false);
     };
 
-    // Clear all existing files (used when switching models)
     const clearAllFiles = () => {
         files.forEach(file => onFileRemoved(file.id));
         setSelectedFiles([]);
@@ -263,18 +422,14 @@ const DataComponent: React.FC<DataComponentProps> = ({
 
         if (!modelKey) return;
 
-        // Clear existing files first
         clearAllFiles();
-
         setConsoleMessages([]);
 
-        // Load the selected model's examples
         const model = MODELS[modelKey as keyof typeof MODELS];
         if (!model) return;
 
         const exampleKeys = Object.keys(model.examples);
 
-        // Add a small delay to ensure files are cleared before adding new ones
         setTimeout(() => {
             exampleKeys.forEach((exampleKey, index) => {
                 const dataset = model.examples[exampleKey as keyof typeof model.examples];
@@ -287,7 +442,6 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         return;
                     }
 
-                    // Position examples in a grid
                     const row = Math.floor(index / 2);
                     const col = index % 2;
                     const position = { x: col * 2, y: row * 2 };
@@ -312,8 +466,11 @@ const DataComponent: React.FC<DataComponentProps> = ({
         }, 100);
     };
 
+    // ============================================================================
+    // ✅ STEP 7: JSX RENDERING
+    // ============================================================================
     return (
-        <div ref={containerRef} className="p-6">
+        <div ref={containerRef} className={containerClasses}>
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
@@ -396,7 +553,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 <div className="flex items-center mb-4 gap-4">
                     <button
                         onClick={toggleSelectAll}
-                        className="flex items-center gap-2 text-gray-700 hover:text-blue-600"
+                        className={selectAllButtonClasses}
                     >
                         {selectAll || selectedFiles.length === files.length ? (
                             <CheckSquare className="w-5 h-5 text-blue-500" />
@@ -406,14 +563,14 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         <span>{selectAll ? "Deselect All" : "Select All"}</span>
                     </button>
 
-                    <div className="text-sm text-gray-500">
+                    <div className={selectionCounterClasses}>
                         {selectedFiles.length > 0
                             ? `${selectedFiles.length} of ${files.length} selected. Model loaded: ${selectedModel ? MODELS[selectedModel as keyof typeof MODELS]?.name : 'None'}`
                             : `${files.length} files total.`}
                     </div>
 
                     {selectedModel && (
-                        <div className="text-sm text-blue-600 font-medium">
+                        <div className={currentModelClasses}>
                             Current Model: {MODELS[selectedModel as keyof typeof MODELS]?.name}
                         </div>
                     )}
@@ -443,10 +600,9 @@ const DataComponent: React.FC<DataComponentProps> = ({
                         {files.map((file) => (
                             <div
                                 key={file.id}
-                                className={`border rounded-md shadow-sm overflow-hidden ${selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''
-                                    }`}
+                                className={`${fileCardClasses} ${selectedFiles.includes(file.id) ? 'ring-2 ring-blue-500' : ''}`}
                             >
-                                <div className="flex items-center justify-between p-2 border-b bg-gray-50">
+                                <div className={fileCardHeaderClasses}>
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => toggleSelectFile(file.id)}
@@ -458,22 +614,22 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                                 <Square className="w-5 h-5 text-gray-400" />
                                             )}
                                         </button>
-                                        <div className="drag-handle cursor-move p-1 hover:bg-gray-200 rounded">
-                                            <GripHorizontal size={20} className="text-gray-400" />
+                                        <div className={dragHandleClasses}>
+                                            <GripHorizontal size={20} />
                                         </div>
                                         <Typography variant="subtitle1">{file.name}</Typography>
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <button
                                             onClick={() => openAddDialog(file.id)}
-                                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
+                                            className={fileIconButtonClasses}
                                             title="Create visualization from this file"
                                         >
                                             <BarChart3 size={16} />
                                         </button>
                                         <button
                                             onClick={() => onFileRemoved(file.id)}
-                                            className="text-gray-400 hover:text-red-500 p-1"
+                                            className={fileRemoveButtonClasses}
                                             title="Remove file"
                                         >
                                             <X size={16} />
@@ -491,7 +647,8 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                                             style={{
                                                                 fontWeight: 'bold',
                                                                 whiteSpace: 'nowrap',
-                                                                backgroundColor: '#f5f5f5',
+                                                                backgroundColor: isDark ? '#374151' : '#f3f4f6',
+                                                                color: isDark ? '#f1f5f9' : '#1f2937',
                                                                 position: 'sticky',
                                                                 top: 0,
                                                                 zIndex: 1
@@ -504,11 +661,21 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                             </TableHead>
                                             <TableBody>
                                                 {file.content.map((row: any, rowIndex: number) => (
-                                                    <TableRow key={rowIndex} hover>
+                                                    <TableRow
+                                                        key={rowIndex}
+                                                        hover
+                                                        style={{
+                                                            backgroundColor: isDark ? '#1f2937' : '#ffffff'
+                                                        }}
+                                                    >
                                                         {Object.entries(row).map(([name, value]) => (
                                                             <TableCell
                                                                 key={name}
-                                                                style={{ whiteSpace: 'nowrap' }}
+                                                                style={{
+                                                                    whiteSpace: 'nowrap',
+                                                                    color: isDark ? '#e2e8f0' : '#1f2937',
+                                                                    backgroundColor: isDark ? '#1f2937' : '#ffffff'
+                                                                }}
                                                             >
                                                                 {String(value)}
                                                             </TableCell>
