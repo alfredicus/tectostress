@@ -4,7 +4,8 @@ Copyright (c) 2022-now Alfredo Taboada
 
 NOTE: 
 If you plan to use this library, please cite:
-Taboada, A., 1993. Stress and strain from striated pebbles. Theoretical analysis of striations on a rigid spherical body linked to a symmetrical tensor. Journal of structural geology, 15(11), pp.1315-1330.
+
+**Taboada, A., 1993. Stress and strain from striated pebbles. Theoretical analysis of striations on a rigid spherical body linked to a symmetrical tensor. Journal of structural geology, 15(11), pp.1315-1330.**
 
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
