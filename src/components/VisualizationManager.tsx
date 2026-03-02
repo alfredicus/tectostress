@@ -17,6 +17,27 @@ import { FractureMap2D } from './Map2D/FractureMap2D';
 import { FractureMapIcon } from './Map2D/FractureMap2DParameters';
 
 // ============================================================================
+// LAYOUT CONSTANTS - Centralized configuration
+// ============================================================================
+
+export const GRID_CONFIG = {
+    cols: 12,
+    rowHeight: 150,  // Increased from 120 for better visualization space
+    margin: [16, 16] as [number, number],
+    containerPadding: [0, 0] as [number, number],
+    // Minimum sizes for visualizations
+    minW: 4,
+    minH: 3,
+} as const;
+
+// Padding constants for consistent spacing
+export const VIZ_PADDING = {
+    container: 8,      // p-2 = 8px
+    header: 40,        // Header height in px
+    cell: 16,          // Internal cell padding
+} as const;
+
+// ============================================================================
 // VISUALIZATION TYPE DEFINITIONS
 // ============================================================================
 
@@ -65,7 +86,7 @@ export const DATA_VISUALIZATIONS: VisualizationType[] = [
         id: 'rose',
         title: 'Rose Diagram',
         icon: RoseDiagramDescriptor.icon,
-        defaultLayout: { w: 4, h: 4 }
+        defaultLayout: { w: 6, h: 4 }  // Increased from 4x4
     },
     {
         id: 'histogram',
@@ -252,8 +273,8 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
     onLayoutChanged,
     onVisualizationStateChanged,
     containerWidth = 1200,
-    gridCols = 12,
-    rowHeight = 120
+    gridCols = GRID_CONFIG.cols,
+    rowHeight = GRID_CONFIG.rowHeight
 }) => {
     const getLayoutFromVisualizations = (): Layout[] => {
         return visualizations.map(viz => ({
@@ -262,6 +283,8 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
             y: viz.layout.y,
             w: viz.layout.w,
             h: viz.layout.h,
+            minW: GRID_CONFIG.minW,
+            minH: GRID_CONFIG.minH,
             isDraggable: true,
             isResizable: true,
         }));
@@ -290,10 +313,11 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
     const calculateVisualizationDimensions = (viz: Visualization) => {
         const cellWidth = containerWidth / gridCols;
         const cellHeight = rowHeight;
-        const padding = 32;
+        // Account for grid margin and container padding
+        const totalPadding = VIZ_PADDING.cell * 2 + VIZ_PADDING.container * 2;
 
-        const width = Math.max(viz.layout.w * cellWidth - padding, 300);
-        const height = Math.max(viz.layout.h * cellHeight - padding, 200);
+        const width = Math.max(viz.layout.w * cellWidth - GRID_CONFIG.margin[0] - totalPadding, 250);
+        const height = Math.max(viz.layout.h * cellHeight - GRID_CONFIG.margin[1] - VIZ_PADDING.header - totalPadding, 200);
 
         return { width, height };
     };
@@ -319,8 +343,8 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
                 width={containerWidth}
                 onLayoutChange={handleLayoutChange}
                 draggableHandle=".drag-handle"
-                margin={[16, 16]}
-                containerPadding={[0, 0]}
+                margin={GRID_CONFIG.margin}
+                containerPadding={GRID_CONFIG.containerPadding}
                 compactType="vertical"
                 preventCollision={false}
                 autoSize={true}
@@ -331,9 +355,10 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
                     return (
                         <div
                             key={viz.id}
-                            className="border rounded-md bg-white shadow-sm overflow-hidden"
+                            className="border rounded-md bg-white shadow-sm overflow-hidden flex flex-col"
                         >
-                            <div className="flex items-center justify-between p-2 border-b bg-gray-50">
+                            {/* Fixed header */}
+                            <div className="flex items-center justify-between p-2 border-b bg-gray-50 flex-shrink-0" style={{ height: `${VIZ_PADDING.header}px` }}>
                                 <div className="flex items-center gap-2">
                                     <GripHorizontal
                                         size={16}
@@ -351,7 +376,8 @@ export const VisualizationGrid: React.FC<VisualizationGridProps> = ({
                                     <X size={16} />
                                 </button>
                             </div>
-                            <div className="p-2 h-[calc(100%-2.5rem)] overflow-hidden">
+                            {/* Flexible content area that fills remaining space */}
+                            <div className="flex-1 min-h-0 p-2 overflow-hidden">
                                 <VisualizationComponent
                                     type={viz.type}
                                     files={files}

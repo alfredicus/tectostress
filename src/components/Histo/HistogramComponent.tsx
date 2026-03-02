@@ -75,7 +75,7 @@ function getAvailableColumns(files: any[], selectedFiles: string[]): string[] {
 const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> = ({
     files,
     width = 600,
-    height = 400,
+    height = 500,
     title = "Data Histogram",
     state,
     onStateChange,
@@ -83,7 +83,7 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [histogram, setHistogram] = React.useState<Histogram | null>(null);
-    const [statistics, setStatistics] = React.useState<any>(null);
+    const [dataStats, setDataStats] = React.useState<any>(null);
     const [showDataPanel, setShowDataPanel] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [availableDataTypes, setAvailableDataTypes] = useState<AvailableDataType[]>([]);
@@ -160,12 +160,26 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
         onStateChange
     );
 
+    // Sync dimensions from props - only update if actually changed
+    useEffect(() => {
+        if (width > 0 && height > 0) {
+            const currentWidth = currentState.plotDimensions.width;
+            const currentHeight = currentState.plotDimensions.height;
+            if (currentWidth !== width || currentHeight !== height) {
+                updatePlotDimensions({ width, height });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
+
     // Initialize and update histogram
     useEffect(() => {
         if (!containerRef.current || !currentState.selectedColumn) return;
 
-        const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const effectiveHeight = Math.max(currentState.plotDimensions.height - 120, 200);
+        // Use available space, accounting for dataStats panel (~80px) and padding
+        const statsHeight = dataStats ? 80 : 0;
+        const effectiveWidth = Math.max(currentState.plotDimensions.width - 32, 200);
+        const effectiveHeight = Math.max(currentState.plotDimensions.height - statsHeight - 32, 150);
 
         const params: HistogramParameters = {
             width: effectiveWidth,
@@ -236,10 +250,10 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
         if (allData.length > 0) {
             histogram.data = allData;
             const stats = histogram.getStatistics();
-            setStatistics(stats);
+            setDataStats(stats);
         } else {
             histogram.data = [];
-            setStatistics(null);
+            setDataStats(null);
         }
     }, [histogram, files, selectedFiles, availableDataTypes, currentState.selectedColumn]);
 
@@ -262,46 +276,46 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
 
     // Main plot content
     const plotContent = (
-        <div className="flex flex-col h-full">
-            {/* Histogram container */}
-            <div className="flex-1 min-h-0 mb-4">
+        <div className="flex flex-col h-full overflow-hidden">
+            {/* Histogram container - takes remaining space */}
+            <div className="flex-1 min-h-0 overflow-auto">
                 <div
                     ref={containerRef}
                     className="w-full h-full border rounded-lg bg-white shadow-sm flex items-center justify-center"
                 />
             </div>
 
-            {/* Statistics summary */}
-            {statistics && (
-                <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2 mb-3">
-                        <TrendingUp className="w-5 h-5 text-green-600" />
-                        <h4 className="font-semibold">Statistical Summary</h4>
+            {/* Data stats summary - fixed at bottom */}
+            {dataStats && (
+                <div className="flex-shrink-0 p-3 bg-gray-50 rounded-lg mt-2 text-xs">
+                    <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                        <h4 className="font-semibold text-sm">Data Summary</h4>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-4 gap-2">
                         <div>
-                            <span className="font-medium">Count:</span> {statistics.count}
+                            <span className="font-medium">Count:</span> {dataStats.count}
                         </div>
                         <div>
-                            <span className="font-medium">Mean:</span> {statistics.mean?.toFixed(3)}
+                            <span className="font-medium">Mean:</span> {dataStats.mean?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Median:</span> {statistics.median?.toFixed(3)}
+                            <span className="font-medium">Median:</span> {dataStats.median?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Std Dev:</span> {statistics.stdDev?.toFixed(3)}
+                            <span className="font-medium">Std Dev:</span> {dataStats.stdDev?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Min:</span> {statistics.min?.toFixed(3)}
+                            <span className="font-medium">Min:</span> {dataStats.min?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Q1:</span> {statistics.q1?.toFixed(3)}
+                            <span className="font-medium">Q1:</span> {dataStats.q1?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Q3:</span> {statistics.q3?.toFixed(3)}
+                            <span className="font-medium">Q3:</span> {dataStats.q3?.toFixed(3)}
                         </div>
                         <div>
-                            <span className="font-medium">Max:</span> {statistics.max?.toFixed(3)}
+                            <span className="font-medium">Max:</span> {dataStats.max?.toFixed(3)}
                         </div>
                     </div>
                 </div>
@@ -493,26 +507,9 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
             onLeftPanelToggle={(isOpen) => {
                 setShowDataPanel(isOpen);
             }}
-            onSettingsToggle={(isOpen) => {
-                // Handle settings panel toggle
+            onSettingsToggle={() => {
                 toggleSettingsPanel();
-
-                // When settings panel opens/closes, adjust the plot dimensions
-                setTimeout(() => {
-                    if (containerRef.current) {
-                        // Calculate available width for the plot
-                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 600;
-                        const settingsPanelWidth = isOpen ? 300 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40; // 40px for padding
-
-                        const newDimensions = {
-                            width: Math.max(availableWidth, 250), // Minimum width for plot
-                            height: containerRef.current?.clientHeight || height || 400
-                        };
-
-                        updatePlotDimensions(newDimensions);
-                    }
-                }, 150);
+                // Dimensions are now automatically synced via useEffect
             }}
         >
             {plotContent}

@@ -1,6 +1,81 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle } from './Wulff';
+import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle, Vector3D } from './Wulff';
 import { Layers } from 'lucide-react';
+
+// ============================================================================
+// COORDINATE CONVERSION UTILITIES
+// ============================================================================
+
+/**
+ * Convert strike/dip angles to a normal vector (plane normal pointing upward)
+ * Convention: strike is clockwise from North, dip is angle from horizontal
+ */
+function strikeDipToNormal(strike: number, dip: number): Vector3D {
+    const strikeRad = strike * Math.PI / 180;
+    const dipRad = dip * Math.PI / 180;
+
+    // The normal vector points perpendicular to the plane
+    // For a plane with given strike and dip:
+    // - Strike direction is along the plane's horizontal line
+    // - Dip direction is 90° clockwise from strike (looking down)
+    // - Normal points in the dip direction, tilted up from horizontal by (90-dip)
+
+    // Dip direction azimuth (90° clockwise from strike)
+    const dipAzimuth = (strike + 90) * Math.PI / 180;
+
+    // Normal vector components
+    // x: East, y: North, z: Up
+    const x = Math.sin(dipRad) * Math.sin(dipAzimuth);
+    const y = Math.sin(dipRad) * Math.cos(dipAzimuth);
+    const z = Math.cos(dipRad);
+
+    return { x, y, z };
+}
+
+/**
+ * Convert trend/plunge angles to a direction vector
+ * Convention: trend is clockwise from North, plunge is angle below horizontal
+ */
+function trendPlungeToVector(trend: number, plunge: number): Vector3D {
+    const trendRad = trend * Math.PI / 180;
+    const plungeRad = plunge * Math.PI / 180;
+
+    // x: East, y: North, z: Up (negative for downward plunge)
+    const x = Math.cos(plungeRad) * Math.sin(trendRad);
+    const y = Math.cos(plungeRad) * Math.cos(trendRad);
+    const z = -Math.sin(plungeRad);
+
+    return { x, y, z };
+}
+
+/**
+ * Compute striation vector from strike, dip, and rake angles
+ * The striation lies in the fault plane
+ */
+function computeStriationVector(strike: number, dip: number, rake: number): Vector3D {
+    const strikeRad = strike * Math.PI / 180;
+    const dipRad = dip * Math.PI / 180;
+    const rakeRad = rake * Math.PI / 180;
+
+    // Start with striation in the local fault plane coordinates
+    // Local x: along strike, local y: down dip, local z: normal
+    let sx = Math.cos(rakeRad);
+    let sy = Math.sin(rakeRad);
+    let sz = 0;
+
+    // Rotate to align with fault plane orientation
+    // First rotate about strike axis (apply dip)
+    const tempSx = sx;
+    sx = tempSx * Math.cos(dipRad);
+    sz = -tempSx * Math.sin(dipRad);
+
+    // Then rotate about vertical axis (apply strike)
+    const tempSx2 = sx;
+    sx = tempSx2 * Math.cos(strikeRad) + sy * Math.sin(strikeRad);
+    sy = -tempSx2 * Math.sin(strikeRad) + sy * Math.cos(strikeRad);
+
+    return { x: sx, y: sy, z: sz };
+}
 import StablePlotWithSettings from '../PlotWithSettings';
 import {
     BaseVisualizationProps,
@@ -97,6 +172,18 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
         onStateChange
     );
 
+    // Sync dimensions from props - only update if actually changed
+    useEffect(() => {
+        if (width > 0 && height > 0) {
+            const currentWidth = currentState.plotDimensions.width;
+            const currentHeight = currentState.plotDimensions.height;
+            if (currentWidth !== width || currentHeight !== height) {
+                updatePlotDimensions({ width, height });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
+
     // Update available representations when files change
     useEffect(() => {
         if (!files || files.length === 0) {
@@ -126,8 +213,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
         const containerId = `stereonet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         containerRef.current.id = containerId;
 
-        const baseWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        // Use available space, accounting for dataStats panel (~80px) and padding
+        const statsHeight = dataStats ? 80 : 0;
+        const baseWidth = Math.max(currentState.plotDimensions.width - 32, 150);
+        const baseHeight = Math.max(currentState.plotDimensions.height - statsHeight - 32, 150);
         const baseSize = Math.min(baseWidth, baseHeight);
         const zoomedSize = baseSize * currentState.settings.zoomLevel;
         const labelSize = 14 * currentState.settings.zoomLevel;
@@ -239,16 +328,20 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             const trend = parseFloat(row.trend);
                             const plunge = parseFloat(row.plunge);
                             if (!isNaN(trend) && !isNaN(plunge)) {
-                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                                // Convert trend/plunge to vector
+                                const vector = trendPlungeToVector(trend, plunge);
+                                dataPoint = { vector, id: index + 1 } as PoleData;
                             }
                         }
                         else if (workingColumnConfig.required.includes('strike')) {
                             const dip = parseFloat(row.dip);
                             const strike = parseFloat(row.strike);
                             if (!isNaN(strike) && !isNaN(dip)) {
+                                // Convert strike/dip to pole vector (trend/plunge)
                                 const trend = (strike + 90) % 360;
                                 const plunge = 90 - dip;
-                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                                const vector = trendPlungeToVector(trend, plunge);
+                                dataPoint = { vector, id: index + 1 } as PoleData;
                             }
                         }
                     }
@@ -257,14 +350,18 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             const trend = parseFloat(row.trend);
                             const plunge = parseFloat(row.plunge);
                             if (!isNaN(trend) && !isNaN(plunge)) {
-                                dataPoint = { trend, plunge, id: index + 1 } as PoleData;
+                                // For planes from trend/plunge, the vector IS the normal
+                                const normal = trendPlungeToVector(trend, plunge);
+                                dataPoint = { normal, id: index + 1 } as ExtensionFractureData;
                             }
                         }
                         else if (workingColumnConfig.required.includes('strike')) {
                             const dip = parseFloat(row.dip);
                             const strike = parseFloat(row.strike);
                             if (!isNaN(strike) && !isNaN(dip)) {
-                                dataPoint = { strike, dip, id: index + 1 } as ExtensionFractureData;
+                                // Convert strike/dip to normal vector
+                                const normal = strikeDipToNormal(strike, dip);
+                                dataPoint = { normal, id: index + 1 } as ExtensionFractureData;
                             }
                         }
                     }
@@ -273,7 +370,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                         const dip = parseFloat(row.dip);
                         const rake = parseFloat(row.rake);
                         if (!isNaN(strike) && !isNaN(dip) && !isNaN(rake)) {
-                            dataPoint = { strike, dip, rake, id: index + 1 } as StriatedPlaneData;
+                            // Convert to normal and striation vectors
+                            const normal = strikeDipToNormal(strike, dip);
+                            const striation = computeStriationVector(strike, dip, rake);
+                            dataPoint = { normal, striation, id: index + 1 } as StriatedPlaneData;
                         }
                     }
 
@@ -485,21 +585,23 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
     );
 
     const plotContent = (
-        <div className="flex flex-col h-full relative">
-            <div className="flex-1 min-h-0 mb-4">
+        <div className="flex flex-col h-full overflow-hidden relative">
+            {/* Stereonet container - takes remaining space */}
+            <div className="flex-1 min-h-0 overflow-auto">
                 <div
                     ref={containerRef}
                     className="w-full h-full border rounded-lg bg-white shadow-sm flex items-center justify-center"
                 />
             </div>
 
+            {/* Data stats panel - fixed at bottom */}
             {dataStats && (
-                <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Layers className="w-5 h-5 text-blue-600" />
-                        <h4 className="font-semibold">Data Summary</h4>
+                <div className="flex-shrink-0 p-3 bg-gray-50 rounded-lg mt-2 text-xs">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Layers className="w-4 h-4 text-blue-600" />
+                        <h4 className="font-semibold text-sm">Data Summary</h4>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-3 gap-2">
                         <div>
                             <span className="font-medium">Total:</span> {dataStats.total}
                         </div>
@@ -676,26 +778,9 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
             onLeftPanelToggle={(isOpen) => {
                 setShowDataPanel(isOpen);
             }}
-            onSettingsToggle={(isOpen) => {
+            onSettingsToggle={() => {
                 toggleSettingsPanel();
-
-                setTimeout(() => {
-                    if (containerRef.current) {
-                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 600;
-                        const settingsPanelWidth = isOpen ? 320 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40;
-                        const availableHeight = containerRef.current?.clientHeight || height || 600;
-
-                        const size = Math.min(availableWidth, availableHeight - 100);
-
-                        const newDimensions = {
-                            width: Math.max(size, 300),
-                            height: Math.max(size, 300)
-                        };
-
-                        updatePlotDimensions(newDimensions);
-                    }
-                }, 150);
+                // Dimensions are now automatically synced via useEffect
             }}
         >
             {plotContent}

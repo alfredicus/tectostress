@@ -12,6 +12,7 @@ import { HistogramDescriptor } from './Histo/HistogramDescriptor';
 import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
+import { MCMCStatsDescriptor } from './MCMCStats/MCMCStatsDescriptor';
 
 // ============================================================================
 // ICON COMPONENTS
@@ -162,6 +163,12 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Fracture Map 2D',
         icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
+    },
+    {
+        id: 'mcmcStats',
+        title: 'MCMC Posterior Statistics',
+        icon: MCMCStatsDescriptor.icon,
+        defaultLayout: { w: 8, h: 3 }
     }
 ];
 
@@ -340,6 +347,16 @@ export interface VisualizationEnabledComponentProps {
     onVisualizationLayoutChanged?: (updatedVisualizations: Visualization[]) => void;
     onVisualizationStateChanged?: (id: string, state: VisualizationState) => void;
 
+    // Persistence
+    initialVisualizations?: any[];
+    initialSelectedFile?: string | null;
+    initialLayout?: { [key: string]: any };
+    onVisualizationsChange?: (
+        visualizations: any[],
+        selectedFile: string | null,
+        layout: { [key: string]: any }
+    ) => void;
+
     // UI customization
     addButtonText?: string;
     addButtonIcon?: ReactNode;
@@ -362,6 +379,10 @@ export const VisualizationEnabledComponent: React.FC<VisualizationEnabledCompone
     onVisualizationRemoved,
     onVisualizationLayoutChanged,
     onVisualizationStateChanged,
+    initialVisualizations,
+    initialSelectedFile,
+    initialLayout,
+    onVisualizationsChange,
     addButtonText = "Add Visualization",
     addButtonIcon = <Eye size={20} />,
     dialogTitle = "Add Visualization",
@@ -387,8 +408,24 @@ export const VisualizationEnabledComponent: React.FC<VisualizationEnabledCompone
         onVisualizationAdded,
         onVisualizationRemoved,
         onVisualizationLayoutChanged,
-        onVisualizationStateChanged
+        onVisualizationStateChanged,
+        initialVisualizations,
+        initialSelectedFile,
+        initialLayout
     });
+
+    // Notify parent of visualization changes for persistence
+    React.useEffect(() => {
+        if (onVisualizationsChange) {
+            const layoutData = visualizations.reduce((acc: { [key: string]: any }, viz: Visualization) => {
+                if (viz.id && viz.layout) {
+                    acc[viz.id] = viz.layout;
+                }
+                return acc;
+            }, {});
+            onVisualizationsChange(visualizations, selectedFileForView, layoutData);
+        }
+    }, [visualizations, selectedFileForView, onVisualizationsChange]);
 
     const availableTypes = customVisualizationTypes || VisualizationRegistry.getVisualizationTypes(visualizationContext);
 

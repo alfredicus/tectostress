@@ -17,7 +17,7 @@ import { createMohrSettings, MohrCompState } from './MohrCircleParameters';
 const MohrCircleComponent: React.FC<BaseVisualizationProps<MohrCompState>> = ({
     files,
     width = 600,
-    height = 400,
+    height = 500,
     title = "Mohr Circle",
     state,
     onStateChange,
@@ -48,13 +48,25 @@ const MohrCircleComponent: React.FC<BaseVisualizationProps<MohrCompState>> = ({
         onStateChange
     );
 
+    // Sync dimensions from props - only update if actually changed
+    useEffect(() => {
+        if (width > 0 && height > 0) {
+            const currentWidth = currentState.plotDimensions.width;
+            const currentHeight = currentState.plotDimensions.height;
+            if (currentWidth !== width || currentHeight !== height) {
+                updatePlotDimensions({ width, height });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
+
     // Initialize and update Mohr circle
     useEffect(() => {
         if (!containerRef.current) return;
 
-        // Calculate effective dimensions
-        const effectiveWidth = Math.max(currentState.plotDimensions.width - 40, 400);
-        const effectiveHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        // Use most of the available space with minimal padding
+        const effectiveWidth = Math.max(currentState.plotDimensions.width - 16, 250);
+        const effectiveHeight = Math.max(currentState.plotDimensions.height - 16, 200);
 
         const params: MohrParameters = {
             width: effectiveWidth,
@@ -488,26 +500,9 @@ const MohrCircleComponent: React.FC<BaseVisualizationProps<MohrCompState>> = ({
             borderWidth={1}
             settingsPanelWidth={320}
             initialSettingsOpen={currentState.open}
-            onSettingsToggle={(isOpen) => {
-                // Handle settings panel toggle
+            onSettingsToggle={() => {
                 toggleSettingsPanel();
-
-                // When settings panel opens/closes, adjust the plot dimensions
-                setTimeout(() => {
-                    if (containerRef.current) {
-                        // Calculate available width for the plot
-                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 600;
-                        const settingsPanelWidth = isOpen ? 320 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40; // 40px for padding
-
-                        const newDimensions = {
-                            width: Math.max(availableWidth, 400), // Minimum width for plot
-                            height: containerRef.current?.clientHeight || height || 400
-                        };
-
-                        updatePlotDimensions(newDimensions);
-                    }
-                }, 150);
+                // Dimensions are now automatically synced via useEffect
             }}
         >
             {plotContent}

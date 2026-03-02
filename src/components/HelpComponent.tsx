@@ -30,7 +30,11 @@ const getBasePath = () => {
     return isProduction ? '/tectostress' : '';
 };
 
-const HelpComponent = () => {
+interface HelpComponentProps {
+    requestedDoc?: string;
+}
+
+const HelpComponent: React.FC<HelpComponentProps> = ({ requestedDoc }) => {
     const [currentDoc, setCurrentDoc] = useState('');
     const [markdownContent, setMarkdownContent] = useState('');
     const [loading, setLoading] = useState(false);
@@ -38,6 +42,13 @@ const HelpComponent = () => {
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
     const [configLoaded, setConfigLoaded] = useState(false);
     const [configError, setConfigError] = useState<string | null>(null);
+
+    // React to external doc navigation requests
+    useEffect(() => {
+        if (requestedDoc) {
+            setCurrentDoc(requestedDoc);
+        }
+    }, [requestedDoc]);
 
     // Load configuration on component mount
     useEffect(() => {
@@ -201,25 +212,20 @@ const HelpComponent = () => {
                             )}
                         </button>
 
-                        {/* Category title */}
-                        {hasFile ? (
-                            <button
-                                onClick={() => setCurrentDoc(item.file!)}
-                                className={`flex-1 flex items-center py-1.5 px-2 ml-1 text-left rounded transition-colors ${isSelected ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-200'
-                                    }`}
-                            >
-                                <FileText className="w-4 h-4 mr-1.5 flex-shrink-0 text-gray-500" />
-                                <span className={`${level === 0 ? 'font-medium' : 'font-normal'} text-gray-800`}>
-                                    {item.title}
-                                </span>
-                            </button>
-                        ) : (
-                            <div className="flex-1 flex items-center py-1.5 px-2 ml-1">
-                                <span className={`${level === 0 ? 'font-medium' : 'font-normal'} text-gray-800`}>
-                                    {item.title}
-                                </span>
-                            </div>
-                        )}
+                        {/* Category title — clicking always toggles the folder */}
+                        <button
+                            onClick={() => {
+                                toggleSection(item.id);
+                                if (hasFile) setCurrentDoc(item.file!);
+                            }}
+                            className={`flex-1 flex items-center py-1.5 px-2 ml-1 text-left rounded transition-colors cursor-pointer ${isSelected ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-200'
+                                }`}
+                        >
+                            {hasFile && <FileText className="w-4 h-4 mr-1.5 flex-shrink-0 text-gray-500" />}
+                            <span className={`${level === 0 ? 'font-medium' : 'font-normal'} text-gray-800`}>
+                                {item.title}
+                            </span>
+                        </button>
                     </div>
                 ) : (
                     // Individual document (leaf node)

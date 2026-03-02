@@ -29,7 +29,7 @@ interface EnhancedVisualizationProps {
 
 /**
  * Composant de visualisation refactorisé
- * 
+ *
  * ✅ Plus de switch/case géant
  * ✅ Plus besoin de connaître les visualisations
  * ✅ Tout est résolu dynamiquement via la Factory
@@ -37,8 +37,8 @@ interface EnhancedVisualizationProps {
 export const VisualizationComponent: React.FC<EnhancedVisualizationProps> = ({
     type,
     files,
-    width,
-    height,
+    width = 400,
+    height = 400,
     state,
     onStateChange,
     onDimensionChange
@@ -49,7 +49,7 @@ export const VisualizationComponent: React.FC<EnhancedVisualizationProps> = ({
     // Si le type n'existe pas
     if (!VisualizationComponentClass) {
         return (
-            <div className="flex items-center justify-center h-full border-2 border-dashed border-gray-300 rounded-lg">
+            <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
                 <div className="text-center text-gray-500">
                     <p className="text-lg font-medium">Unknown visualization type: {type}</p>
                     <p className="text-sm">This visualization is not registered in the system.</p>

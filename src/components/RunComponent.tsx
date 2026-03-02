@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Play, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Settings, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { DataFile } from './DataFile';
 import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory } from '@alfredo-taboada/stress';
 import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio } from '../math/tensor_analysis';
@@ -69,6 +69,7 @@ interface RunComponentProps {
         selectedFile: string | null,
         layout: { [key: string]: any }
     ) => void;
+    onNavigateToHelp?: (docPath: string) => void;
 }
 
 // Configuration data (same as before)
@@ -106,6 +107,54 @@ const CONFIG_DATA: ConfigData = {
                         name: "stressRatioHalfInterval",
                         display: "Stress ratio interval",
                         value: 1,
+                        min: 0,
+                        max: 1
+                    }
+                ]
+            },
+            {
+                name: "MCMC",
+                active: true,
+                params: [
+                    {
+                        name: "nbIterations",
+                        display: "Nb iterations",
+                        value: 50000,
+                        min: 1000,
+                        max: 85000
+                    },
+                    {
+                        name: "burnIn",
+                        display: "Burn-in fraction",
+                        value: 0.2,
+                        min: 0,
+                        max: 0.5
+                    },
+                    {
+                        name: "temperature",
+                        display: "Temperature",
+                        value: 0.05,
+                        min: 0.001,
+                        max: 1
+                    },
+                    {
+                        name: "rotAngleStepSize",
+                        display: "Rotation step (deg)",
+                        value: 5,
+                        min: 0.1,
+                        max: 45
+                    },
+                    {
+                        name: "stressRatioStepSize",
+                        display: "Stress ratio step",
+                        value: 0.05,
+                        min: 0.001,
+                        max: 0.5
+                    },
+                    {
+                        name: "stressRatio",
+                        display: "Stress ratio",
+                        value: 0.5,
                         min: 0,
                         max: 1
                     }
@@ -170,7 +219,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
     persistedVisualizations = [],
     persistedSelectedFile = null,
     persistedLayout = {},
-    onSolutionChange
+    onSolutionChange,
+    onNavigateToHelp
 }) => {
     // State management (same as before, but simplified for key parts)
     const [selectedMethod, setSelectedMethod] = useState<string>('');
@@ -189,6 +239,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [computingMessage, setComputingMessage] = useState<string>('');
     const [computingProgress, setComputingProgress] = useState<number>(0);
     const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
+    const [ciLevel, setCiLevel] = useState<number>(90);
 
     // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
@@ -482,7 +533,9 @@ const RunComponent: React.FC<RunComponentProps> = ({
             addConsoleMessage('info', 'Running stress inversion algorithm...');
             await delay(50);
 
+            const t0 = performance.now();
             const sol = await runInversionAsync(inv);
+            const elapsedMs = performance.now() - t0;
 
             // Process results
             setComputingMessage('Processing results...');
@@ -497,9 +550,35 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
             // Log key results
             addConsoleMessage('success', 'Stress inversion completed successfully!');
+            const elapsedStr = elapsedMs < 1000
+                ? `${Math.round(elapsedMs)} ms`
+                : `${(elapsedMs / 1000).toFixed(2)} s`;
+            addConsoleMessage('info', `Running time: ${elapsedStr}`);
             addConsoleMessage('info', `Stress ratio: ${sol.stressRatio.toFixed(3)}`);
             addConsoleMessage('info', `Fit: ${((1 - sol.misfit) * 100).toFixed(1)}%`);
             addConsoleMessage('info', `Misfit: ${(sol.misfit * 180 / Math.PI).toFixed(1)}°`);
+
+            // Extract MCMC posterior stats if applicable
+            let mcmcStats: StressSolution['mcmcStats'] = undefined;
+            console.log('[RunComponent] selectedMethod:', selectedMethod, 'is MCMC:', selectedMethod === 'MCMC');
+            if (selectedMethod === 'MCMC' || selectedMethod === 'Monte Carlo') {
+                const sm = inv.searchMethod;
+                console.log('[RunComponent] searchMethod:', sm);
+                console.log('[RunComponent] getStats exists:', typeof (sm as any).getStats);
+                console.log('[RunComponent] chain length:', (sm as any).getChain?.()?.length);
+                const stats = (sm as any).getStats?.();
+                console.log('[RunComponent] getStats() returned:', stats);
+                if (stats) {
+                    mcmcStats = stats;
+                    const label = selectedMethod === 'MCMC' ? 'MCMC' : 'MC top-5%';
+                    addConsoleMessage('info', `${label} acceptance rate: ${stats.acceptanceRate.toFixed(1)}%`);
+                    addConsoleMessage('info', `${label} chain length: ${stats.chainLength} samples`);
+                    addConsoleMessage('info',
+                        `Stress ratio posterior: ${stats.stressRatio.mean.toFixed(3)} ± ${stats.stressRatio.std.toFixed(3)} ` +
+                        `[${stats.stressRatio.q05.toFixed(3)}, ${stats.stressRatio.q95.toFixed(3)}]`
+                    );
+                }
+            }
 
             // Finalize
             setComputingMessage('Finalizing...');
@@ -509,6 +588,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
             // Set final results with enhanced data for visualizations
             const enhancedSolution: StressSolution = {
                 ...sol,
+                elapsedMs,
+                mcmcStats,
                 analysis: {
                     ...analysis,
                     eulerAnglesDegrees: eulerDegrees,
@@ -528,7 +609,20 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setShowResultsPanel(true);
 
             if (onSolutionChange) {
-                onSolutionChange(enhancedSolution, [], null, {});
+                // Strip large distribution arrays before persisting to localStorage
+                const persistableSolution = { ...enhancedSolution };
+                if (persistableSolution.mcmcStats?.distributions) {
+                    persistableSolution.mcmcStats = {
+                        ...persistableSolution.mcmcStats,
+                        distributions: undefined as any
+                    };
+                }
+                onSolutionChange(
+                    persistableSolution,
+                    persistedVisualizations || [],
+                    persistedSelectedFile || null,
+                    persistedLayout || {}
+                );
             }
 
         } catch (error) {
@@ -547,7 +641,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setComputingMessage('');
             setComputingProgress(0);
         }
-    }, [selectedFiles, files, selectedMethod, currentParams, handleSimulationProgress, addConsoleMessage]);
+    }, [selectedFiles, files, selectedMethod, currentParams, handleSimulationProgress, addConsoleMessage, persistedVisualizations, persistedSelectedFile, persistedLayout]);
 
     // Cet effet s'assure que si les fichiers changent drastiquement 
     // (ex: changement de modèle), la solution basée sur les anciens fichiers
@@ -733,8 +827,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
         setSelectedFiles([]);
     };
 
-    // Results panel component (enhanced with integration information)
-    const ResultsPanel = () => {
+    // Results panel — inline JSX (not a nested component, to avoid remount flicker)
+    const resultsPanelContent = (() => {
         if (!solution) return null;
 
         const stressRatio = solution.stressRatio.toFixed(2);
@@ -770,7 +864,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 {showResultsPanel && (
                     <div className="p-6 space-y-6">
                         {/* Key metrics */}
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                             <div className="bg-blue-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-medium text-blue-800 mb-2">Stress Ratio</h4>
                                 <p className="text-2xl font-bold">{stressRatio}</p>
@@ -788,7 +882,371 @@ const RunComponent: React.FC<RunComponentProps> = ({
                                 <h4 className="text-sm font-medium text-amber-800 mb-2">Misfit</h4>
                                 <p className="text-2xl font-bold">{misfitDegrees}°</p>
                             </div>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Running Time</h4>
+                                <p className="text-2xl font-bold">
+                                    {solution.elapsedMs != null
+                                        ? solution.elapsedMs < 1000
+                                            ? `${Math.round(solution.elapsedMs)} ms`
+                                            : `${(solution.elapsedMs / 1000).toFixed(2)} s`
+                                        : '—'}
+                                </p>
+                            </div>
                         </div>
+
+                        {/* MCMC Posterior Statistics */}
+                        {solution.mcmcStats && (
+                            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-sm font-medium text-indigo-800">
+                                        {selectedMethod === 'Monte Carlo' ? 'Monte Carlo Top-5% Statistics' : 'MCMC Posterior Statistics'}
+                                    </h4>
+                                    {onNavigateToHelp && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onNavigateToHelp('gui/MCMC-analysis.md');
+                                            }}
+                                            className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded transition-colors"
+                                            title="Open MCMC documentation"
+                                        >
+                                            <HelpCircle className="w-3.5 h-3.5" />
+                                            Help
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm text-gray-600">Acceptance Rate</p>
+                                        <p className="text-lg font-semibold">{solution.mcmcStats.acceptanceRate.toFixed(1)}%</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Chain Length</p>
+                                        <p className="text-lg font-semibold">{solution.mcmcStats.chainLength.toLocaleString()} samples</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Stress Ratio (posterior)</p>
+                                        <p className="text-lg font-semibold">
+                                            {solution.mcmcStats.stressRatio.mean.toFixed(3)} ± {solution.mcmcStats.stressRatio.std.toFixed(3)}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            90% CI: [{solution.mcmcStats.stressRatio.q05.toFixed(3)}, {solution.mcmcStats.stressRatio.q95.toFixed(3)}]
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Misfit (posterior)</p>
+                                        <p className="text-lg font-semibold">
+                                            {solution.mcmcStats.misfit.mean.toFixed(4)} ± {solution.mcmcStats.misfit.std.toFixed(4)}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            Min: {solution.mcmcStats.misfit.min.toFixed(4)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Euler angle posterior stats + CI slider + histograms */}
+                                {(() => {
+                                    const mcmc = solution.mcmcStats!;
+                                    const dist = mcmc.distributions;
+                                    const bestFitAngles = solution.analysis?.eulerAnglesDegrees;
+
+                                    // Quantile helper: computes from raw sorted array
+                                    const quantile = (sorted: number[], q: number) => {
+                                        const pos = q * (sorted.length - 1);
+                                        const lo = Math.floor(pos);
+                                        const hi = Math.ceil(pos);
+                                        return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+                                    };
+
+                                    // Pre-sort distributions once for dynamic quantile computation
+                                    const sortedDists = dist ? {
+                                        stressRatio: [...dist.stressRatio].sort((a, b) => a - b),
+                                        phi: [...dist.phi].sort((a, b) => a - b),
+                                        theta: [...dist.theta].sort((a, b) => a - b),
+                                        psi: [...dist.psi].sort((a, b) => a - b),
+                                    } : undefined;
+
+                                    const qLo = (100 - ciLevel) / 200;  // e.g. 90% -> 0.05
+                                    const qHi = 1 - qLo;               // e.g. 90% -> 0.95
+
+                                    // Dynamic CI for angles
+                                    const angleDynCI = (key: 'phi' | 'theta' | 'psi') => {
+                                        if (!sortedDists) {
+                                            const s = mcmc.eulerAngles?.[key];
+                                            return s ? { lo: s.q05, hi: s.q95 } : { lo: 0, hi: 0 };
+                                        }
+                                        return { lo: quantile(sortedDists[key], qLo), hi: quantile(sortedDists[key], qHi) };
+                                    };
+
+                                    // Dynamic CI for stress ratio
+                                    const srCI = sortedDists
+                                        ? { lo: quantile(sortedDists.stressRatio, qLo), hi: quantile(sortedDists.stressRatio, qHi) }
+                                        : { lo: mcmc.stressRatio.q05, hi: mcmc.stressRatio.q95 };
+
+                                    return (
+                                        <>
+                                            {/* CI slider */}
+                                            <div className="mt-4 mb-2 flex items-center gap-3">
+                                                <label className="text-sm font-medium text-indigo-700 whitespace-nowrap">
+                                                    Credible Interval:
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    min={50}
+                                                    max={99}
+                                                    step={1}
+                                                    value={ciLevel}
+                                                    onChange={(e) => setCiLevel(parseInt(e.target.value))}
+                                                    className="flex-1 h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
+                                                />
+                                                <span className="text-sm font-bold text-indigo-800 w-12 text-right">{ciLevel}%</span>
+                                            </div>
+
+                                            {/* Stress ratio CI update */}
+                                            <div className="bg-blue-50 p-3 rounded-lg mb-2">
+                                                <p className="text-xs font-medium text-blue-700 mb-1">Stress Ratio (posterior)</p>
+                                                <p className="text-lg font-bold text-blue-900">
+                                                    {mcmc.stressRatio.mean.toFixed(3)} ± {mcmc.stressRatio.std.toFixed(3)}
+                                                </p>
+                                                <p className="text-xs text-blue-600">
+                                                    {ciLevel}% CI: [{srCI.lo.toFixed(3)}, {srCI.hi.toFixed(3)}]
+                                                </p>
+                                            </div>
+
+                                            {/* Euler angle stat cards with dynamic CI */}
+                                            {mcmc.eulerAngles && (
+                                                <>
+                                                    <h5 className="text-sm font-medium text-indigo-700 mt-3 mb-2">Euler Angles (posterior, ZXZ)</h5>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        {(['phi', 'theta', 'psi'] as const).map((angle) => {
+                                                            const sym = { phi: 'φ', theta: 'θ', psi: 'ψ' }[angle];
+                                                            const lbl = { phi: 'Phi', theta: 'Theta', psi: 'Psi' }[angle];
+                                                            const s = mcmc.eulerAngles[angle];
+                                                            const ci = angleDynCI(angle);
+                                                            return (
+                                                                <div key={angle} className="bg-purple-50 p-3 rounded-lg">
+                                                                    <p className="text-xs font-medium text-purple-700 mb-1">{sym} ({lbl})</p>
+                                                                    <p className="text-lg font-bold text-purple-900">
+                                                                        {s.mean.toFixed(1)}° ± {s.std.toFixed(1)}°
+                                                                    </p>
+                                                                    <p className="text-xs text-purple-600">
+                                                                        {ciLevel}% CI: [{ci.lo.toFixed(1)}°, {ci.hi.toFixed(1)}°]
+                                                                    </p>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* Posterior distribution histograms */}
+                                            {dist && (() => {
+                                                // Circular shift helper for periodic angles (period = 360°)
+                                                // Computes circular mean, shifts data so the peak is centered,
+                                                // and returns shifted data + offset to map back to true angles.
+                                                const circularShift = (arr: number[], period = 360): { shifted: number[], offset: number } => {
+                                                    const k = 2 * Math.PI / period;
+                                                    const sinSum = arr.reduce((s, v) => s + Math.sin(v * k), 0);
+                                                    const cosSum = arr.reduce((s, v) => s + Math.cos(v * k), 0);
+                                                    const circMean = Math.atan2(sinSum, cosSum) / k; // in same units as data
+                                                    // Shift so circMean maps to 0, then remap to [-period/2, period/2)
+                                                    const half = period / 2;
+                                                    const shifted = arr.map(v => {
+                                                        let s = v - circMean;
+                                                        while (s < -half) s += period;
+                                                        while (s >= half) s -= period;
+                                                        return s;
+                                                    });
+                                                    return { shifted, offset: circMean };
+                                                };
+
+                                                const histos: { data: number[]; sorted: number[]; label: string; unit: string; color: string; mean: number; bestFit?: number; periodic?: boolean }[] = [
+                                                    { data: dist.stressRatio, sorted: sortedDists!.stressRatio, label: 'Stress Ratio', unit: '', color: '#3b82f6',
+                                                      mean: mcmc.stressRatio.mean, bestFit: solution.stressRatio },
+                                                    { data: dist.phi, sorted: sortedDists!.phi, label: 'φ (Phi)', unit: '°', color: '#8b5cf6',
+                                                      mean: mcmc.eulerAngles?.phi.mean ?? 0, bestFit: bestFitAngles?.phi, periodic: true },
+                                                    { data: dist.theta, sorted: sortedDists!.theta, label: 'θ (Theta)', unit: '°', color: '#a855f7',
+                                                      mean: mcmc.eulerAngles?.theta.mean ?? 0, bestFit: bestFitAngles?.theta },
+                                                    { data: dist.psi, sorted: sortedDists!.psi, label: 'ψ (Psi)', unit: '°', color: '#7c3aed',
+                                                      mean: mcmc.eulerAngles?.psi.mean ?? 0, bestFit: bestFitAngles?.psi, periodic: true },
+                                                ];
+                                                return (
+                                                    <div className="mt-4">
+                                                        <h5 className="text-sm font-medium text-indigo-700 mb-2">Posterior Distributions</h5>
+                                                        <div className="flex flex-wrap gap-4 justify-center">
+                                                            {histos.map(({ data, sorted, label, unit, color, mean, bestFit, periodic }) => {
+                                                                if (!data || data.length === 0) return null;
+
+                                                                // For periodic angles, shift data so the cluster is centered
+                                                                let plotData = data;
+                                                                let plotMean = mean;
+                                                                let plotBestFit = bestFit;
+                                                                let plotCiLo = quantile(sorted, qLo);
+                                                                let plotCiHi = quantile(sorted, qHi);
+                                                                let shiftOffset = 0; // added back to x-axis labels
+
+                                                                if (periodic) {
+                                                                    const { shifted, offset } = circularShift(data);
+                                                                    plotData = shifted;
+                                                                    shiftOffset = offset;
+                                                                    // Shift mean, bestFit, CI into the shifted domain
+                                                                    const wrap = (v: number) => {
+                                                                        let s = v - offset;
+                                                                        while (s < -180) s += 360;
+                                                                        while (s >= 180) s -= 360;
+                                                                        return s;
+                                                                    };
+                                                                    plotMean = wrap(mean);
+                                                                    if (plotBestFit != null) plotBestFit = wrap(plotBestFit);
+                                                                    // Recompute CI from shifted+sorted data
+                                                                    const shiftedSorted = [...shifted].sort((a, b) => a - b);
+                                                                    plotCiLo = quantile(shiftedSorted, qLo);
+                                                                    plotCiHi = quantile(shiftedSorted, qHi);
+                                                                }
+
+                                                                const W = 440, H = 240, numBins = 45;
+                                                                const mn = Math.min(...plotData), mx = Math.max(...plotData);
+                                                                const range = mx - mn || 1;
+                                                                const bw = range / numBins;
+                                                                const bins = new Array(numBins).fill(0);
+                                                                for (const v of plotData) bins[Math.min(Math.floor((v - mn) / bw), numBins - 1)]++;
+                                                                const maxC = Math.max(...bins);
+                                                                const total = plotData.length;
+                                                                const pad = { top: 22, bottom: 38, left: 44, right: 12 };
+                                                                const cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+                                                                const barW = cW / numBins;
+                                                                const yTicks = [0, Math.round(maxC / 2), maxC];
+                                                                const xMid = (mn + mx) / 2;
+                                                                // Format: display true angle (shifted back) for periodic, raw value otherwise
+                                                                const fmtRaw = (v: number) => Math.abs(v) < 1 ? v.toFixed(3) : v.toFixed(1);
+                                                                const fmt = (v: number) => {
+                                                                    if (!periodic) return fmtRaw(v);
+                                                                    let trueVal = v + shiftOffset;
+                                                                    while (trueVal < -180) trueVal += 360;
+                                                                    while (trueVal >= 180) trueVal -= 360;
+                                                                    return fmtRaw(trueVal);
+                                                                };
+                                                                const valToX = (v: number) => pad.left + ((v - mn) / range) * cW;
+                                                                const inBounds = (x: number) => x >= pad.left && x <= pad.left + cW;
+                                                                const meanX = valToX(plotMean);
+                                                                const ciLoX = valToX(plotCiLo);
+                                                                const ciHiX = valToX(plotCiHi);
+                                                                const bestX = plotBestFit != null ? valToX(plotBestFit) : undefined;
+                                                                // Mode: center of the tallest bin
+                                                                const modeIdx = bins.indexOf(maxC);
+                                                                const modeVal = mn + (modeIdx + 0.5) * bw;
+                                                                const modeX = valToX(modeVal);
+                                                                return (
+                                                                    <svg key={label} width={W} height={H} className="bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                                                        <text x={W / 2} y={15} textAnchor="middle" fontSize={13} fontWeight={700} fill="#1f2937">
+                                                                            {label}{unit && ` (${unit})`}
+                                                                        </text>
+                                                                        {/* Y-axis */}
+                                                                        <line x1={pad.left} y1={pad.top} x2={pad.left} y2={pad.top + cH} stroke="#d1d5db" strokeWidth={0.5} />
+                                                                        {yTicks.map((t) => {
+                                                                            const y = pad.top + cH - (maxC > 0 ? (t / maxC) * cH : 0);
+                                                                            return (
+                                                                                <g key={t}>
+                                                                                    <line x1={pad.left - 4} y1={y} x2={pad.left} y2={y} stroke="#9ca3af" strokeWidth={0.5} />
+                                                                                    <text x={pad.left - 6} y={y + 3.5} textAnchor="end" fontSize={9} fill="#6b7280">{t}</text>
+                                                                                </g>
+                                                                            );
+                                                                        })}
+                                                                        <text x={8} y={pad.top + cH / 2} textAnchor="middle" fontSize={9} fill="#9ca3af"
+                                                                            transform={`rotate(-90, 8, ${pad.top + cH / 2})`}>count</text>
+                                                                        {/* X-axis */}
+                                                                        <line x1={pad.left} y1={pad.top + cH} x2={pad.left + cW} y2={pad.top + cH} stroke="#d1d5db" strokeWidth={0.5} />
+                                                                        {/* CI shaded band */}
+                                                                        {inBounds(ciLoX) && inBounds(ciHiX) && (
+                                                                            <rect x={ciLoX} y={pad.top} width={ciHiX - ciLoX} height={cH}
+                                                                                fill={color} opacity={0.08}>
+                                                                                <title>{`${ciLevel}% CI: [${fmt(plotCiLo)}, ${fmt(plotCiHi)}]${unit}`}</title>
+                                                                            </rect>
+                                                                        )}
+                                                                        {/* Bars */}
+                                                                        {bins.map((c, i) => {
+                                                                            const bH = maxC > 0 ? (c / maxC) * cH : 0;
+                                                                            const binLo = mn + i * bw;
+                                                                            const binHi = binLo + bw;
+                                                                            const pct = total > 0 ? ((c / total) * 100).toFixed(1) : '0';
+                                                                            return (
+                                                                                <rect key={i}
+                                                                                    x={pad.left + i * barW} y={pad.top + cH - bH}
+                                                                                    width={Math.max(barW - 0.5, 0.5)} height={bH}
+                                                                                    fill={color} opacity={0.7}>
+                                                                                    <title>{`${fmt(binLo)} – ${fmt(binHi)}${unit}\n${c} samples (${pct}%)`}</title>
+                                                                                </rect>
+                                                                            );
+                                                                        })}
+                                                                        {/* CI boundary lines */}
+                                                                        {inBounds(ciLoX) && (
+                                                                            <line x1={ciLoX} y1={pad.top} x2={ciLoX} y2={pad.top + cH}
+                                                                                stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.6} />
+                                                                        )}
+                                                                        {inBounds(ciHiX) && (
+                                                                            <line x1={ciHiX} y1={pad.top} x2={ciHiX} y2={pad.top + cH}
+                                                                                stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.6} />
+                                                                        )}
+                                                                        {/* Mean line */}
+                                                                        {inBounds(meanX) && (
+                                                                            <>
+                                                                                <line x1={meanX} y1={pad.top} x2={meanX} y2={pad.top + cH}
+                                                                                    stroke="#ef4444" strokeWidth={2} strokeDasharray="5,3" />
+                                                                                <text x={meanX} y={pad.top - 4} textAnchor="middle" fontSize={9} fill="#ef4444" fontWeight={700}>
+                                                                                    μ={fmtRaw(mean)}{unit}
+                                                                                </text>
+                                                                            </>
+                                                                        )}
+                                                                        {/* Best-fit marker */}
+                                                                        {bestX != null && inBounds(bestX) && (
+                                                                            <>
+                                                                                <line x1={bestX} y1={pad.top} x2={bestX} y2={pad.top + cH}
+                                                                                    stroke="#16a34a" strokeWidth={2} />
+                                                                                <polygon
+                                                                                    points={`${bestX - 5},${pad.top} ${bestX + 5},${pad.top} ${bestX},${pad.top + 8}`}
+                                                                                    fill="#16a34a" />
+                                                                            </>
+                                                                        )}
+                                                                        {/* Mode marker (orange diamond at top of tallest bin) */}
+                                                                        {inBounds(modeX) && (
+                                                                            <>
+                                                                                <polygon
+                                                                                    points={`${modeX},${pad.top + 2} ${modeX + 5},${pad.top + 8} ${modeX},${pad.top + 14} ${modeX - 5},${pad.top + 8}`}
+                                                                                    fill="#f59e0b" stroke="#d97706" strokeWidth={0.5} />
+                                                                                <line x1={modeX} y1={pad.top + 14} x2={modeX} y2={pad.top + cH}
+                                                                                    stroke="#f59e0b" strokeWidth={1} strokeDasharray="2,3" opacity={0.5} />
+                                                                            </>
+                                                                        )}
+                                                                        {/* X-axis labels */}
+                                                                        <text x={pad.left} y={H - 18} textAnchor="start" fontSize={9} fill="#6b7280">{fmt(mn)}</text>
+                                                                        <text x={pad.left + cW / 2} y={H - 18} textAnchor="middle" fontSize={9} fill="#6b7280">{fmt(xMid)}</text>
+                                                                        <text x={pad.left + cW} y={H - 18} textAnchor="end" fontSize={9} fill="#6b7280">{fmt(mx)}</text>
+                                                                        <text x={pad.left + cW / 2} y={H - 4} textAnchor="middle" fontSize={10} fill="#6b7280">
+                                                                            {label}{unit && ` (${unit})`}
+                                                                        </text>
+                                                                        {/* Legend */}
+                                                                        <g transform={`translate(${pad.left + cW - 130}, ${pad.top + 4})`}>
+                                                                            <line x1={0} y1={4} x2={14} y2={4} stroke="#16a34a" strokeWidth={2} />
+                                                                            <text x={18} y={7} fontSize={8} fill="#374151">Best fit</text>
+                                                                            <line x1={0} y1={16} x2={14} y2={16} stroke="#ef4444" strokeWidth={2} strokeDasharray="4,2" />
+                                                                            <text x={18} y={19} fontSize={8} fill="#374151">Mean (μ)</text>
+                                                                            <polygon points="7,24 12,28 7,32 2,28" fill="#f59e0b" stroke="#d97706" strokeWidth={0.5} />
+                                                                            <text x={18} y={31} fontSize={8} fill="#374151">Mode (peak)</text>
+                                                                            <rect x={0} y={36} width={14} height={8} fill={color} opacity={0.15} stroke={color} strokeWidth={0.5} strokeDasharray="3,2" />
+                                                                            <text x={18} y={43} fontSize={8} fill="#374151">{ciLevel}% CI</text>
+                                                                        </g>
+                                                                    </svg>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
 
                         {/* Integration notice */}
                         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-200">
@@ -876,7 +1334,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 )}
             </div>
         );
-    };
+    })();
 
     // Create enhanced files with solution data for visualizations
     const enhancedFiles = useMemo(() => {
@@ -898,6 +1356,42 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     { parameter: 'phi_degrees', value: solution.analysis.eulerAnglesDegrees.phi, unit: 'degrees' },
                     { parameter: 'theta_degrees', value: solution.analysis.eulerAnglesDegrees.theta, unit: 'degrees' },
                     { parameter: 'psi_degrees', value: solution.analysis.eulerAnglesDegrees.psi, unit: 'degrees' }
+                ] : []),
+                ...(solution.elapsedMs != null ? [
+                    { parameter: 'elapsed_ms', value: solution.elapsedMs, unit: 'ms' }
+                ] : []),
+                ...(solution.mcmcStats ? [
+                    { parameter: 'mcmc_acceptance_rate', value: solution.mcmcStats.acceptanceRate, unit: '%' },
+                    { parameter: 'mcmc_chain_length', value: solution.mcmcStats.chainLength, unit: 'samples' },
+                    { parameter: 'mcmc_stress_ratio_mean', value: solution.mcmcStats.stressRatio.mean, unit: '' },
+                    { parameter: 'mcmc_stress_ratio_std', value: solution.mcmcStats.stressRatio.std, unit: '' },
+                    { parameter: 'mcmc_stress_ratio_q05', value: solution.mcmcStats.stressRatio.q05, unit: '' },
+                    { parameter: 'mcmc_stress_ratio_q95', value: solution.mcmcStats.stressRatio.q95, unit: '' },
+                    { parameter: 'mcmc_misfit_mean', value: solution.mcmcStats.misfit.mean, unit: '' },
+                    { parameter: 'mcmc_misfit_std', value: solution.mcmcStats.misfit.std, unit: '' },
+                    { parameter: 'mcmc_misfit_min', value: solution.mcmcStats.misfit.min, unit: '' },
+                    // Euler angle posterior stats (degrees) — guarded for old persisted solutions
+                    ...(solution.mcmcStats.eulerAngles ? [
+                        { parameter: 'mcmc_phi_mean', value: solution.mcmcStats.eulerAngles.phi.mean, unit: 'degrees' },
+                        { parameter: 'mcmc_phi_std', value: solution.mcmcStats.eulerAngles.phi.std, unit: 'degrees' },
+                        { parameter: 'mcmc_phi_q05', value: solution.mcmcStats.eulerAngles.phi.q05, unit: 'degrees' },
+                        { parameter: 'mcmc_phi_q95', value: solution.mcmcStats.eulerAngles.phi.q95, unit: 'degrees' },
+                        { parameter: 'mcmc_theta_mean', value: solution.mcmcStats.eulerAngles.theta.mean, unit: 'degrees' },
+                        { parameter: 'mcmc_theta_std', value: solution.mcmcStats.eulerAngles.theta.std, unit: 'degrees' },
+                        { parameter: 'mcmc_theta_q05', value: solution.mcmcStats.eulerAngles.theta.q05, unit: 'degrees' },
+                        { parameter: 'mcmc_theta_q95', value: solution.mcmcStats.eulerAngles.theta.q95, unit: 'degrees' },
+                        { parameter: 'mcmc_psi_mean', value: solution.mcmcStats.eulerAngles.psi.mean, unit: 'degrees' },
+                        { parameter: 'mcmc_psi_std', value: solution.mcmcStats.eulerAngles.psi.std, unit: 'degrees' },
+                        { parameter: 'mcmc_psi_q05', value: solution.mcmcStats.eulerAngles.psi.q05, unit: 'degrees' },
+                        { parameter: 'mcmc_psi_q95', value: solution.mcmcStats.eulerAngles.psi.q95, unit: 'degrees' },
+                    ] : []),
+                    // Distribution arrays (JSON-encoded) — guarded for old persisted solutions
+                    ...(solution.mcmcStats.distributions ? [
+                        { parameter: 'mcmc_dist_stress_ratio', value: JSON.stringify(solution.mcmcStats.distributions.stressRatio), unit: 'json' },
+                        { parameter: 'mcmc_dist_phi', value: JSON.stringify(solution.mcmcStats.distributions.phi), unit: 'json' },
+                        { parameter: 'mcmc_dist_theta', value: JSON.stringify(solution.mcmcStats.distributions.theta), unit: 'json' },
+                        { parameter: 'mcmc_dist_psi', value: JSON.stringify(solution.mcmcStats.distributions.psi), unit: 'json' },
+                    ] : [])
                 ] : [])
             ],
             layout: { x: 0, y: 0, w: 6, h: 3 }
@@ -1036,69 +1530,50 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 </div>
             </div>
 
-            {/* Simulation table */}
-            <div className="w-full overflow-x-auto mt-6">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Simulation
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Status
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Progression
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {selectedFiles.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-4 text-sm text-gray-500 text-center italic">
-                                    Choose files to start the analysis
-                                </td>
-                            </tr>
-                        ) : (
-                            <tr>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {selectedMethod} ({selectedFiles.length} fichier{selectedFiles.length > 1 ? 's' : ''} sélectionné{selectedFiles.length > 1 ? 's' : ''})
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {simulationStatus.status}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                        <div
-                                            className="bg-blue-600 h-2.5 rounded-full"
-                                            style={{ width: `${simulationStatus.progress}%` }}
-                                        ></div>
-                                    </div>
-                                    <span className="text-xs text-gray-500 mt-1">{simulationStatus.progress}%</span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <button
-                                        onClick={startSimulation}
-                                        disabled={simulationStatus.status === 'En cours' || isComputing}
-                                        className={`p-2 rounded-full ${simulationStatus.status === 'En cours' || isComputing
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                                            }`}
-                                    >
-                                        <Play className="w-4 h-4" />
-                                    </button>
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+            {/* Run section */}
+            <div className="mt-6 flex flex-col items-center gap-4">
+                <button
+                    onClick={startSimulation}
+                    disabled={selectedFiles.length === 0 || isComputing}
+                    className={`px-10 py-4 rounded-xl text-lg font-bold shadow-lg transition-all duration-200 flex items-center gap-3 ${
+                        selectedFiles.length === 0 || isComputing
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl hover:scale-105 active:scale-95'
+                    }`}
+                >
+                    <Play className="w-6 h-6" />
+                    {isComputing ? 'Computing...' : 'Run Inversion'}
+                </button>
+
+                {/* Info line */}
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <span className="font-medium">{selectedMethod}</span>
+                    <span className="text-gray-300">|</span>
+                    <span>{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected</span>
+                    {simulationStatus.progress > 0 && (
+                        <>
+                            <span className="text-gray-300">|</span>
+                            <span>{simulationStatus.status}</span>
+                        </>
+                    )}
+                </div>
+
+                {/* Progress bar (only visible during/after computation) */}
+                {simulationStatus.progress > 0 && (
+                    <div className="w-full max-w-md">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${simulationStatus.progress}%` }}
+                            />
+                        </div>
+                        <p className="text-xs text-gray-500 text-center mt-1">{simulationStatus.progress}%</p>
+                    </div>
+                )}
             </div>
 
             {/* Results panel */}
-            <ResultsPanel />
+            {resultsPanelContent}
 
             {/* ========== MODIFICATION 3 - PASSER LES PROPS AU StressAnalysisComponent ========== */}
             {/* Integrated Stress Analysis Visualizations */}

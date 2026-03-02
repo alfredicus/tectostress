@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Play, HelpCircle, Database, Settings } from 'lucide-react';
 import HelpComponent from './HelpComponent';
 import RunComponent from './RunComponent';
@@ -174,7 +174,7 @@ const MainInterfaceContent = () => {
     // Save tab state to localStorage whenever it changes
     React.useEffect(() => {
         localStorage.setItem('tectostress-tab-state', JSON.stringify(tabState));
-        console.log('Saved tab state:', tabState);
+        // console.log('Saved tab state:', tabState);
     }, [tabState]);
 
     // Initialize custom visualization contexts for the application
@@ -225,15 +225,15 @@ const MainInterfaceContent = () => {
     };
 
     // Handle Run component state persistence
-    const handleRunStateChange = (newState: RunPersistentState) => {
+    const handleRunStateChange = useCallback((newState: RunPersistentState) => {
         setTabState(prev => ({
             ...prev,
             runState: newState
         }));
-    };
+    }, []);
 
     // Handle Data visualizations state changes
-    const handleDataVisualizationsChange = (visualizations: any[], selectedFileForView: string | null, layout: any) => {
+    const handleDataVisualizationsChange = useCallback((visualizations: any[], selectedFileForView: string | null, layout: any) => {
         setTabState(prev => ({
             ...prev,
             dataVisualizations: {
@@ -242,10 +242,10 @@ const MainInterfaceContent = () => {
                 layout
             }
         }));
-    };
+    }, []);
 
     // Handle Stress Analysis (Run) state changes
-    const handleStressAnalysisChange = (
+    const handleStressAnalysisChange = useCallback((
         solution: any | null,
         visualizations: any[],
         selectedFileForView: string | null,
@@ -262,11 +262,19 @@ const MainInterfaceContent = () => {
                 }
             }
         }));
-    };
+    }, []);
 
     const data_name = "data";
     const doc_name = "documentation";
     const run_name = "inversion";
+
+    // Help navigation: when a component requests to open a specific doc
+    const [helpRequestedDoc, setHelpRequestedDoc] = useState<string | undefined>(undefined);
+
+    const handleNavigateToHelp = useCallback((docPath: string) => {
+        setHelpRequestedDoc(docPath);
+        setActiveTab(doc_name);
+    }, []);
 
     // ============================================================================
     // ✅ STEP 6: JSX RENDERING (using pre-calculated classes)
@@ -399,38 +407,35 @@ const MainInterfaceContent = () => {
                     </div>
 
                     <div className={cardClasses}>
-                        {activeTab === data_name && (
-                            <div className="p-6">
-                                <DataComponent
-                                    files={loadedFiles}
-                                    onFileLoaded={handleFileLoaded}
-                                    onFileRemoved={handleFileRemoved}
-                                    persistedVisualizations={tabState.dataVisualizations.visualizations}
-                                    persistedSelectedFile={tabState.dataVisualizations.selectedFileForView}
-                                    persistedLayout={tabState.dataVisualizations.layout}
-                                    onVisualizationsChange={handleDataVisualizationsChange}
-                                />
-                            </div>
-                        )}
+                        <div className="p-6" style={{ display: activeTab === data_name ? 'block' : 'none' }}>
+                            <DataComponent
+                                files={loadedFiles}
+                                onFileLoaded={handleFileLoaded}
+                                onFileRemoved={handleFileRemoved}
+                                persistedVisualizations={tabState.dataVisualizations.visualizations}
+                                persistedSelectedFile={tabState.dataVisualizations.selectedFileForView}
+                                persistedLayout={tabState.dataVisualizations.layout}
+                                onVisualizationsChange={handleDataVisualizationsChange}
+                            />
+                        </div>
 
-                        {activeTab === run_name && (
-                            <div className="p-6">
-                                <RunComponent
-                                    files={loadedFiles}
-                                    persistentState={tabState.runState}
-                                    onStateChange={handleRunStateChange}
-                                    persistedSolution={tabState.stressAnalysis.solution}
-                                    persistedVisualizations={tabState.stressAnalysis.visualizations.visualizations}
-                                    persistedSelectedFile={tabState.stressAnalysis.visualizations.selectedFileForView}
-                                    persistedLayout={tabState.stressAnalysis.visualizations.layout}
-                                    onSolutionChange={handleStressAnalysisChange}
-                                />
-                            </div>
-                        )}
+                        <div className="p-6" style={{ display: activeTab === run_name ? 'block' : 'none' }}>
+                            <RunComponent
+                                files={loadedFiles}
+                                persistentState={tabState.runState}
+                                onStateChange={handleRunStateChange}
+                                persistedSolution={tabState.stressAnalysis.solution}
+                                persistedVisualizations={tabState.stressAnalysis.visualizations.visualizations}
+                                persistedSelectedFile={tabState.stressAnalysis.visualizations.selectedFileForView}
+                                persistedLayout={tabState.stressAnalysis.visualizations.layout}
+                                onSolutionChange={handleStressAnalysisChange}
+                                onNavigateToHelp={handleNavigateToHelp}
+                            />
+                        </div>
 
-                        {activeTab === doc_name && (
-                            <HelpComponent />
-                        )}
+                        <div style={{ display: activeTab === doc_name ? 'block' : 'none' }}>
+                            <HelpComponent requestedDoc={helpRequestedDoc} />
+                        </div>
                     </div>
 
                     {/* Enhanced footer with system information */}

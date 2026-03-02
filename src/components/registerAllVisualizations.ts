@@ -20,6 +20,9 @@ import { MohrCompState } from './Mohr/MohrCircleParameters';
 import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
 import { FractureMap2DCompState } from './Map2D/FractureMap2DParameters';
 
+import { MCMCStatsDescriptor } from './MCMCStats/MCMCStatsDescriptor';
+import { MCMCStatsCompState } from './MCMCStats/MCMCStatsParameters';
+
 /*
  * Enregistrer toutes les visualisations de l'application
  * ⚠️ IMPORTANT
@@ -33,7 +36,7 @@ import { FractureMap2DCompState } from './Map2D/FractureMap2DParameters';
  * NE PAS modifier d'autres fichiers !
  */
 
-export type VisualizationCompState = RoseCompState | WulffStereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState
+export type VisualizationCompState = RoseCompState | WulffStereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState | MCMCStatsCompState
 
 export function registerAllVisualizations(): void {
     const registry = getVisualizationRegistry();
@@ -49,9 +52,8 @@ export function registerAllVisualizations(): void {
 
     // ========== VISUALISATIONS DE CONTRAINTES ==========
     registry.register(MohrCircleDescriptor);
-    // ========== NOUVELLES VISUALISATIONS ==========
-    // Pour ajouter une nouvelle visualisation, décommenter et adapter :
-    // registry.register(MyNewVisualizationDescriptor);
+    // ========== MCMC ANALYSIS ==========
+    registry.register(MCMCStatsDescriptor);
 
     // Afficher les stats
     const stats = registry.getStats();

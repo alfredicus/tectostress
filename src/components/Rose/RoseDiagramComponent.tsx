@@ -73,8 +73,8 @@ function getAvailableColumns(files: any[], selectedFiles: string[]): string[] {
 
 const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
     files,
-    width = 400,
-    height = 400,
+    width = 500,
+    height = 500,
     title = "Rose Diagram",
     state,
     onStateChange,
@@ -103,6 +103,18 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
         state,
         onStateChange
     );
+
+    // Sync dimensions from props - only update if actually changed
+    useEffect(() => {
+        if (width > 0 && height > 0) {
+            const currentWidth = currentState.plotDimensions.width;
+            const currentHeight = currentState.plotDimensions.height;
+            if (currentWidth !== width || currentHeight !== height) {
+                updatePlotDimensions({ width, height });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
 
     // Initialize selected files when files change
     useEffect(() => {
@@ -146,8 +158,10 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
     useEffect(() => {
         if (!containerRef.current) return;
 
-        const baseWidth = Math.max(currentState.plotDimensions.width - 40, 300);
-        const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        // Use available space, accounting for dataStats panel (~80px) and padding
+        const statsHeight = dataStats ? 80 : 0;
+        const baseWidth = Math.max(currentState.plotDimensions.width - 32, 150);
+        const baseHeight = Math.max(currentState.plotDimensions.height - statsHeight - 32, 150);
         const baseSize = Math.min(baseWidth, baseHeight);
         const zoomedSize = baseSize * currentState.settings.zoomLevel;
 
@@ -355,23 +369,23 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
 
     // Main plot content
     const plotContent = (
-        <div className="flex flex-col h-full">
-            {/* Rose diagram container */}
-            <div className="flex-1 min-h-0 mb-4">
+        <div className="flex flex-col h-full overflow-hidden">
+            {/* Rose diagram container - takes remaining space */}
+            <div className="flex-1 min-h-0 overflow-auto">
                 <div
                     ref={containerRef}
                     className="w-full h-full border rounded-lg bg-white shadow-sm flex items-center justify-center"
                 />
             </div>
 
-            {/* Data info panel */}
+            {/* Data info panel - fixed at bottom */}
             {dataStats && (
-                <div className="flex-shrink-0 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Layers className="w-5 h-5 text-blue-600" />
-                        <h4 className="font-semibold">Data Summary</h4>
+                <div className="flex-shrink-0 p-3 bg-gray-50 rounded-lg mt-2 text-xs">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Layers className="w-4 h-4 text-blue-600" />
+                        <h4 className="font-semibold text-sm">Data Summary</h4>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-3 gap-2">
                         <div>
                             <span className="font-medium">Total:</span> {dataStats.total}
                         </div>
@@ -383,7 +397,7 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                         </div>
                     </div>
                     {dataStats.plotted > 0 && (
-                        <div className="grid grid-cols-3 gap-4 text-sm mt-2 pt-2 border-t">
+                        <div className="grid grid-cols-3 gap-2 mt-1 pt-1 border-t">
                             <div>
                                 <span className="font-medium">Min:</span> {dataStats.min.toFixed(1)}°
                             </div>
@@ -569,26 +583,9 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
             onLeftPanelToggle={(isOpen) => {
                 setShowDataPanel(isOpen);
             }}
-            onSettingsToggle={(isOpen) => {
+            onSettingsToggle={() => {
                 toggleSettingsPanel();
-
-                setTimeout(() => {
-                    if (containerRef.current) {
-                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 400;
-                        const settingsPanelWidth = isOpen ? 320 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40;
-                        const availableHeight = containerRef.current?.clientHeight || height || 400;
-
-                        const size = Math.min(availableWidth, availableHeight - 100);
-
-                        const newDimensions = {
-                            width: Math.max(size, 300),
-                            height: Math.max(size, 300)
-                        };
-
-                        updatePlotDimensions(newDimensions);
-                    }
-                }, 150);
+                // Dimensions are now automatically synced via useEffect
             }}
         >
             {plotContent}

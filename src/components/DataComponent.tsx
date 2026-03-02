@@ -228,6 +228,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                 }
                 return acc;
             }, {} as { [key: string]: any });
+            onVisualizationsChange(visualizations, selectedFileForView, layoutData);
         }
     }, [visualizations, selectedFileForView, onVisualizationsChange]);
 

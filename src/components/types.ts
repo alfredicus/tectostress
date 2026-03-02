@@ -38,6 +38,24 @@ export interface StressSolution {
     stressRatio: number;
     misfit: number;
     stressTensorSolution: number[][];
+    elapsedMs?: number;
+    mcmcStats?: {
+        acceptanceRate: number;
+        chainLength: number;
+        stressRatio: { mean: number; std: number; q05: number; q95: number };
+        misfit: { mean: number; std: number; min: number };
+        eulerAngles: {
+            phi: { mean: number; std: number; q05: number; q95: number };
+            theta: { mean: number; std: number; q05: number; q95: number };
+            psi: { mean: number; std: number; q05: number; q95: number };
+        };
+        distributions: {
+            stressRatio: number[];
+            phi: number[];
+            theta: number[];
+            psi: number[];
+        };
+    };
     analysis?: {
         eigenvalues: number[];
         eigenvectors: number[][];

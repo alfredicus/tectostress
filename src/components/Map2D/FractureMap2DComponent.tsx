@@ -58,8 +58,8 @@ function getAvailableDataTypes(files: any[]): AvailableDataType[] {
 
 const FractureMap2DComponent: React.FC<BaseVisualizationProps<FractureMap2DCompState>> = ({
     files,
-    width = 800,
-    height = 600,
+    width = 600,
+    height = 500,
     title = "Fracture Orientation Map",
     state,
     onStateChange,
@@ -88,6 +88,18 @@ const FractureMap2DComponent: React.FC<BaseVisualizationProps<FractureMap2DCompS
         state,
         onStateChange
     );
+
+    // Sync dimensions from props - only update if actually changed
+    useEffect(() => {
+        if (width > 0 && height > 0) {
+            const currentWidth = currentState.plotDimensions.width;
+            const currentHeight = currentState.plotDimensions.height;
+            if (currentWidth !== width || currentHeight !== height) {
+                updatePlotDimensions({ width, height });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
 
     // Initialize selected files when files change
     useEffect(() => {
@@ -234,8 +246,9 @@ const FractureMap2DComponent: React.FC<BaseVisualizationProps<FractureMap2DCompS
         const containerId = `fracture-map-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         containerRef.current.id = containerId;
 
-        const baseWidth = Math.max(currentState.plotDimensions.width - 40, 400);
-        const baseHeight = Math.max(currentState.plotDimensions.height - 40, 300);
+        // Use most of the available space with minimal padding
+        const baseWidth = Math.max(currentState.plotDimensions.width - 16, 250);
+        const baseHeight = Math.max(currentState.plotDimensions.height - 16, 200);
         const zoomedWidth = baseWidth * currentState.settings.zoomLevel;
         const zoomedHeight = baseHeight * currentState.settings.zoomLevel;
 
@@ -561,23 +574,9 @@ const FractureMap2DComponent: React.FC<BaseVisualizationProps<FractureMap2DCompS
             onLeftPanelToggle={(isOpen) => {
                 setShowDataPanel(isOpen);
             }}
-            onSettingsToggle={(isOpen) => {
+            onSettingsToggle={() => {
                 toggleSettingsPanel();
-
-                setTimeout(() => {
-                    if (containerRef.current) {
-                        const containerWidth = containerRef.current.parentElement?.clientWidth || width || 800;
-                        const settingsPanelWidth = isOpen ? 320 : 0;
-                        const availableWidth = containerWidth - settingsPanelWidth - 40;
-
-                        const newDimensions = {
-                            width: Math.max(availableWidth, 300),
-                            height: containerRef.current?.clientHeight || height || 600
-                        };
-
-                        updatePlotDimensions(newDimensions);
-                    }
-                }, 150);
+                // Dimensions are now automatically synced via useEffect
             }}
         >
             {plotContent}
