@@ -94,21 +94,60 @@
         {
             "id": "methods",
             "title": "Methods",
+            "file": "methods/methods.md",
             "children": [
                 {
                     "id": "monte-carlo",
-                    "title": "Monte Carlo Method",
+                    "title": "Monte Carlo",
                     "file": "methods/monteCarlo.md"
                 },
                 {
+                    "id": "mcmc-method",
+                    "title": "Markow Chain Monte Carlo (MCMC)",
+                    "file": "methods/mcmc.md"
+                },
+                {
                     "id": "grid-search",
-                    "title": "Grid Search Method",
+                    "title": "Grid Search",
                     "file": "methods/gridSearch.md"
                 },
                 {
                     "id": "debug-search",
-                    "title": "Debug Search Method",
+                    "title": "Debug Search",
                     "file": "methods/debugSearch.md"
+                }
+            ]
+        },
+        {
+            "id": "gui",
+            "title": "Graphical Interface",
+            "children": [
+                {
+                    "id": "gui-data",
+                    "title": "Data",
+                    "children": []
+                },
+                {
+                    "id": "gui-inversion",
+                    "title": "Inversion",
+                    "children": [
+                        {
+                            "id": "gui-results",
+                            "title": "Result Analysis",
+                            "children": [
+                                {
+                                    "id": "mcmc",
+                                    "title": "Markow Chain Monte Carlo (MCMC)",
+                                    "file": "gui/MCMC-analysis.md"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "gui-doc",
+                    "title": "Documentation",
+                    "children": []
                 }
             ]
         },
