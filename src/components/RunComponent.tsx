@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Play, Settings, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { DataFile } from './DataFile';
 import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory, Data } from '@alfredo-taboada/stress';
-import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio } from '../math/tensor_analysis';
+import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio, extractEulerAnglesFromWrot } from '../math/tensor_analysis';
 import ErrorModal from './ErrorModal';
 import LoadingOverlay from './LoadingOverlay';
 import { Download, FileText } from 'lucide-react';
@@ -671,7 +671,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
             const stressTensor = sol.stressTensorSolution;
             const analysis = decomposeStressTensor(stressTensor);
-            const eulerDegrees = eulerAnglesToDegrees(analysis.eulerAngles);
+            const eulerAngles = extractEulerAnglesFromWrot(sol.rotationMatrixW as number[][]);
+            const eulerDegrees = eulerAnglesToDegrees(eulerAngles);
             const calculatedStressRatio = calculateStressRatio(analysis.eigenvalues);
 
             // Log key results
@@ -713,8 +714,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 ...sol,
                 elapsedMs,
                 mcmcStats,
+                rotationMatrixW: sol.rotationMatrixW as number[][],
                 analysis: {
                     ...analysis,
+                    eulerAngles,
                     eulerAnglesDegrees: eulerDegrees,
                     calculatedStressRatio
                 },

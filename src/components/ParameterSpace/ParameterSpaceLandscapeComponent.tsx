@@ -100,14 +100,14 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
     // Ranges (degrees for angles, raw for R)
     const [ranges, setRanges] = useState<Record<ParamKey, [number, number]>>(() => {
         const a = solution?.analysis;
-        if (!a) return { phi: [0, 360], theta: [0, 180], psi: [0, 360], R: [0, 1] };
+        if (!a) return { phi: [-180, 180], theta: [-90, 90], psi: [-180, 180], R: [0, 1] };
         const pd = a.eulerAnglesDegrees;
         const sr = solution.stressRatio;
         return {
-            phi:   [Math.max(0,   pd.phi   - 30), Math.min(360, pd.phi   + 30)],
-            theta: [Math.max(0,   pd.theta - 20), Math.min(180, pd.theta + 20)],
-            psi:   [Math.max(0,   pd.psi   - 30), Math.min(360, pd.psi   + 30)],
-            R:     [Math.max(0,   sr       - 0.3), Math.min(1,  sr       + 0.3)],
+            phi:   [Math.max(-180, pd.phi   - 30), Math.min(180, pd.phi   + 30)],
+            theta: [Math.max(-90,  pd.theta - 20), Math.min(90,  pd.theta + 20)],
+            psi:   [Math.max(-180, pd.psi   - 30), Math.min(180, pd.psi   + 30)],
+            R:     [Math.max(0,    sr       - 0.3), Math.min(1,   sr       + 0.3)],
         };
     });
 
@@ -122,9 +122,10 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
 
     const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
-    // Reset ranges to full physical bounds
+    // Reset ranges to full physical bounds — match extractEulerAnglesFromWrot output ranges:
+    // φ, ψ ∈ [-180°, 180°] (atan2 output), θ ∈ [-90°, 90°] (arcsin output)
     const resetToBounds = useCallback(() => {
-        setRanges({ phi: [0, 360], theta: [0, 180], psi: [0, 360], R: [0, 1] });
+        setRanges({ phi: [-180, 180], theta: [-90, 90], psi: [-180, 180], R: [0, 1] });
     }, []);
 
     // Center ranges around the current solution (±30° for angles, ±0.2 for R)
@@ -134,10 +135,10 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
         const pd = a.eulerAnglesDegrees;
         const sr = solution.stressRatio;
         setRanges({
-            phi:   [Math.max(0,   pd.phi   - 30), Math.min(360, pd.phi   + 30)],
-            theta: [Math.max(0,   pd.theta - 20), Math.min(180, pd.theta + 20)],
-            psi:   [Math.max(0,   pd.psi   - 30), Math.min(360, pd.psi   + 30)],
-            R:     [Math.max(0,   sr       - 0.2), Math.min(1,  sr       + 0.2)],
+            phi:   [Math.max(-180, pd.phi   - 30), Math.min(180, pd.phi   + 30)],
+            theta: [Math.max(-90,  pd.theta - 20), Math.min(90,  pd.theta + 20)],
+            psi:   [Math.max(-180, pd.psi   - 30), Math.min(180, pd.psi   + 30)],
+            R:     [Math.max(0,    sr       - 0.2), Math.min(1,   sr       + 0.2)],
         });
     }, [solution]);
 
@@ -189,38 +190,67 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
     useEffect(() => {
         if (!grid) return;
 
-        // Find the global minimum across the entire grid.
-        // The dot is placed at that exact pixel — guaranteed to be the blue region.
-        let gMinVal = Infinity;
-        let dotI4 = -1, dotI3 = -1, dotI1 = -1, dotI2 = -1;
-        for (let i4 = 0; i4 < grid.length; i4++) {
-            for (let i3 = 0; i3 < grid[i4].length; i3++) {
-                const cell = grid[i4][i3];
-                if (!cell) continue;
-                for (let i = 0; i < cell.length; i++) {
-                    if (isFinite(cell[i]) && cell[i] < gMinVal) {
-                        gMinVal = cell[i];
-                        dotI4 = i4; dotI3 = i3;
-                        dotI2 = Math.floor(i / innerN);
-                        dotI1 = i % innerN;
-                    }
-                }
-            }
+        // Place the dot at the known solution position in parameter space.
+        // Wrap angular values by ±360° to bring them into the displayed range.
+        const [p1k, p2k, p3k, p4k] = axes;
+        const ed = solution?.analysis?.eulerAnglesDegrees;
+        const solDeg: Record<ParamKey, number> = {
+            phi:   ed?.phi   ?? 0,
+            theta: ed?.theta ?? 0,
+            psi:   ed?.psi   ?? 0,
+            R:     solution?.stressRatio ?? 0,
+        };
+
+        function wrapAngle(val: number, lo: number, hi: number): number {
+            let a = val;
+            while (a < lo) a += 360;
+            while (a > hi) a -= 360;
+            return a;
+        }
+        function toDisplay(pk: ParamKey): number {
+            return isAngle(pk) ? wrapAngle(solDeg[pk], ranges[pk][0], ranges[pk][1]) : solDeg[pk];
         }
 
-        for (let i4 = 0; i4 < grid.length; i4++) {
-            for (let i3 = 0; i3 < grid[i4].length; i3++) {
-                const canvas = canvasRefs.current[i4 * grid[i4].length + i3];
-                if (canvas && grid[i4][i3]) {
-                    const isMinCell = i3 === dotI3 && i4 === dotI4;
-                    const p1Frac = isMinCell ? dotI1 / (innerN - 1) : null;
-                    const p2Frac = isMinCell ? dotI2 / (innerN - 1) : null;
-                    drawCell(canvas, grid[i4][i3], colorRange[0], colorRange[1],
-                        innerN, p1Frac, p2Frac);
+        const solP1 = toDisplay(p1k);
+        const solP2 = toDisplay(p2k);
+        const solP3 = toDisplay(p3k);
+        const solP4 = toDisplay(p4k);
+
+        const N4 = grid.length;
+        const N3 = grid[0]?.length ?? 0;
+
+        // Find outer cell (i3, i4) whose P3/P4 is closest to the solution
+        let dotI3 = 0, dotI4 = 0;
+        let minD3 = Infinity, minD4 = Infinity;
+        for (let i = 0; i < N3; i++) {
+            const p3 = lerp(ranges[p3k][0], ranges[p3k][1], N3 > 1 ? i / (N3 - 1) : 0.5);
+            const d = Math.abs(p3 - solP3);
+            if (d < minD3) { minD3 = d; dotI3 = i; }
+        }
+        for (let i = 0; i < N4; i++) {
+            const p4 = lerp(ranges[p4k][0], ranges[p4k][1], N4 > 1 ? i / (N4 - 1) : 0.5);
+            const d = Math.abs(p4 - solP4);
+            if (d < minD4) { minD4 = d; dotI4 = i; }
+        }
+
+        // Fractional (P1, P2) position within that cell
+        const p1Frac = (solP1 - ranges[p1k][0]) / (ranges[p1k][1] - ranges[p1k][0]);
+        const p2Frac = (solP2 - ranges[p2k][0]) / (ranges[p2k][1] - ranges[p2k][0]);
+
+        for (let i4 = 0; i4 < N4; i4++) {
+            for (let i3 = 0; i3 < (grid[i4]?.length ?? 0); i3++) {
+                const canvas = canvasRefs.current[i4 * (grid[i4]?.length ?? 0) + i3];
+                const cell = grid[i4][i3];
+                if (canvas && cell && cell.length === innerN * innerN) {
+                    const isCell = i3 === dotI3 && i4 === dotI4;
+                    drawCell(canvas, cell, colorRange[0], colorRange[1],
+                        innerN,
+                        isCell ? p1Frac : null,
+                        isCell ? p2Frac : null);
                 }
             }
         }
-    }, [grid, colorRange, innerN, drawCell]);
+    }, [grid, colorRange, innerN, drawCell, axes, ranges, solution]);
 
     // ── Computation ──────────────────────────────────────────────────────────
     const compute = useCallback(async () => {

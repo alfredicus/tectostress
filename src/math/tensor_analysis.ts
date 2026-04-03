@@ -87,20 +87,10 @@ export function decomposeStressTensor(stressTensor: number[][]): StressTensorAna
     const sortedEigenvalues = combined.map(item => item.value);
     const sortedEigenvectors = combined.map(item => item.vector);
 
-    // Create rotation matrix from eigenvectors
-    const rotationMatrix = [
-        sortedEigenvectors[0],
-        sortedEigenvectors[1], 
-        sortedEigenvectors[2]
-    ];
-
-    // Calculate Euler angles (ZXZ convention)
-    const eulerAngles = extractEulerAngles(rotationMatrix);
-
     return {
         eigenvalues: sortedEigenvalues,
         eigenvectors: sortedEigenvectors,
-        eulerAngles,
+        eulerAngles: { phi: 0, theta: 0, psi: 0 }, // placeholder; use extractEulerAnglesFromWrot(W_rot) instead
         principalStresses: {
             sigma1: { 
                 value: sortedEigenvalues[0], 
@@ -119,27 +109,30 @@ export function decomposeStressTensor(stressTensor: number[][]): StressTensorAna
 }
 
 /**
- * Extract Euler angles from rotation matrix using ZXZ convention
- * @param rotationMatrix 3x3 rotation matrix
- * @returns Euler angles in radians
+ * Extract ZXZ Euler angles (φ, θ, ψ) from W_rot.
+ *
+ * W_rot = D_rot = D_T^T, where D_T columns are [σ1, σ3, σ2] directions (library convention).
+ * Reading entries of D_T via D_T[i][j] = W[j][i]:
+ *   D_T[2][0] = -sin θ  = W[0][2]  →  θ = arcsin(-W[0][2])
+ *   D_T[1][0] = sin φ cos θ = W[0][1]
+ *   D_T[0][0] = cos φ cos θ = W[0][0]  →  φ = atan2(W[0][1], W[0][0])
+ *   D_T[2][1] = cos θ sin ψ = W[1][2]
+ *   D_T[2][2] = cos θ cos ψ = W[2][2]  →  ψ = atan2(W[1][2], W[2][2])
  */
-function extractEulerAngles(rotationMatrix: number[][]): { phi: number; theta: number; psi: number } {
-    const r = rotationMatrix;
-    
-    // ZXZ Euler angle extraction
-    const theta = Math.acos(Math.max(-1, Math.min(1, r[2][2])));
-    
-    let phi, psi;
-    
-    if (Math.abs(Math.sin(theta)) < 1e-6) {
-        // Gimbal lock case
+export function extractEulerAnglesFromWrot(W: number[][]): { phi: number; theta: number; psi: number } {
+    const sinTheta = -W[0][2];
+    const theta = Math.asin(Math.max(-1, Math.min(1, sinTheta)));
+    const cosTheta = Math.cos(theta);
+
+    let phi: number, psi: number;
+    if (Math.abs(cosTheta) < 1e-7) {
+        // Gimbal lock: θ ≈ ±90°, only φ+ψ or φ-ψ is determined
         phi = 0;
-        psi = Math.atan2(-r[0][1], r[0][0]);
+        psi = Math.atan2(W[2][1], W[1][1]);
     } else {
-        phi = Math.atan2(r[0][2], -r[1][2]);
-        psi = Math.atan2(r[2][0], r[2][1]);
+        phi = Math.atan2(W[0][1], W[0][0]);
+        psi = Math.atan2(W[1][2], W[2][2]);
     }
-    
     return { phi, theta, psi };
 }
 
