@@ -37,6 +37,7 @@ export interface Visualization {
 export interface StressSolution {
     stressRatio: number;
     misfit: number;
+    misfitCriterion?: 'ANGLE' | 'DOT';
     stressTensorSolution: number[][];
     rotationMatrixW?: number[][];   // W_rot (3×3) — source of truth for Euler angles
     elapsedMs?: number;

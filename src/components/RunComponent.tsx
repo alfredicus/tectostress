@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Play, Settings, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { DataFile } from './DataFile';
-import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory, Data } from '@alfredo-taboada/stress';
+import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory, Data, FractureStrategy } from '@alfredo-taboada/stress';
 import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio, extractEulerAnglesFromWrot } from '../math/tensor_analysis';
 import ErrorModal from './ErrorModal';
 import LoadingOverlay from './LoadingOverlay';
@@ -352,6 +352,9 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [computingMessage, setComputingMessage] = useState<string>('');
     const [computingProgress, setComputingProgress] = useState<number>(0);
     const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
+    // Misfit criterion (ANGLE = normalized acos in [0,1], DOT = 1−|cos| in [0,1])
+    const [misfitStrategy, setMisfitStrategy] = useState<'ANGLE' | 'DOT'>('ANGLE');
+
     // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
@@ -617,9 +620,12 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         }
 
                         data.initialize(dataParams);
+                        (data as any).setStrategy?.(
+                            misfitStrategy === 'DOT' ? FractureStrategy.DOT : FractureStrategy.ANGLE
+                        );
 
                         console.warn(data, dataParams)
-                        
+
                         inv.addData(data);
                         processingStats.processed++;
 
@@ -683,7 +689,11 @@ const RunComponent: React.FC<RunComponentProps> = ({
             addConsoleMessage('info', `Running time: ${elapsedStr}`);
             addConsoleMessage('info', `Stress ratio: ${sol.stressRatio.toFixed(3)}`);
             addConsoleMessage('info', `Fit: ${((1 - sol.misfit) * 100).toFixed(1)}%`);
-            addConsoleMessage('info', `Misfit: ${(sol.misfit * 180 / Math.PI).toFixed(1)}°`);
+            addConsoleMessage('info', `Misfit: ${
+                misfitStrategy === 'DOT'
+                    ? sol.misfit.toFixed(4)
+                    : `${(sol.misfit * 180).toFixed(1)}°`
+            }`);
 
             // Extract MCMC posterior stats if applicable
             let mcmcStats: StressSolution['mcmcStats'] = undefined;
@@ -713,6 +723,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             const enhancedSolution: StressSolution = {
                 ...sol,
                 elapsedMs,
+                misfitCriterion: misfitStrategy,
                 mcmcStats,
                 rotationMatrixW: sol.rotationMatrixW as number[][],
                 analysis: {
@@ -1084,7 +1095,9 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
         const stressRatio = solution.stressRatio.toFixed(2);
         const fitPercentage = (Math.round((1 - solution.misfit) * 1000) / 10).toFixed(1);
-        const misfitDegrees = (Math.trunc(solution.misfit * 100) / 100 * 180 / Math.PI).toFixed(1);
+        const misfitDisplay = solution.misfitCriterion === 'DOT'
+            ? solution.misfit.toFixed(4)
+            : `${(solution.misfit * 180).toFixed(1)}°`;
 
         return (
             <div className="mt-6 bg-white border rounded-lg shadow-sm overflow-hidden">
@@ -1133,7 +1146,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             </div>
                             <div className="bg-amber-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-medium text-amber-800 mb-2">Misfit</h4>
-                                <p className="text-2xl font-bold">{misfitDegrees}°</p>
+                                <p className="text-2xl font-bold">{misfitDisplay}</p>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Running Time</h4>
@@ -1188,6 +1201,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                                 data={processedData.data}
                                 engine={processedData.engine}
                                 solution={solution}
+                                misfitCriterion={misfitStrategy}
                             />
                         )}
 
@@ -1329,6 +1343,26 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     : 'opacity-0 max-h-0 overflow-hidden p-0 m-0 border-0 mb-0'
                     }`}
             >
+                {/* Misfit criterion — global for all fracture/fault data */}
+                <div className="flex items-center gap-4 mb-4 pb-3 border-b border-gray-200">
+                    <span className="text-sm font-medium text-gray-700">Misfit criterion:</span>
+                    {(['ANGLE', 'DOT'] as const).map(s => (
+                        <label key={s} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                                type="radio"
+                                name="misfitStrategy"
+                                value={s}
+                                checked={misfitStrategy === s}
+                                onChange={() => setMisfitStrategy(s)}
+                                className="accent-blue-600"
+                            />
+                            <span className="text-sm text-gray-700">
+                                {s === 'ANGLE' ? 'Angle (°)' : 'Dot product'}
+                            </span>
+                        </label>
+                    ))}
+                </div>
+
                 <h3 className="text-lg font-medium mb-3">{selectedMethod} parameters</h3>
                 <div className="grid grid-cols-2 gap-4">
                     {currentMethodConfig?.params.map(param => (

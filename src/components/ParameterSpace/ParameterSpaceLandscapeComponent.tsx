@@ -88,9 +88,16 @@ interface Props {
     data: Data[];
     engine: any;       // HomogeneousEngine from inv.engine
     solution: StressSolution;
+    misfitCriterion?: 'ANGLE' | 'DOT';
 }
 
-const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solution }) => {
+const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solution, misfitCriterion = 'ANGLE' }) => {
+    // When ANGLE criterion, stored costs are acos/π ∈ [0,1] → display in degrees (×180)
+    const toDisplayMisfit = useCallback(
+        (v: number) => misfitCriterion === 'ANGLE' ? v * 180 : v,
+        [misfitCriterion]
+    );
+    const misfitUnit = misfitCriterion === 'ANGLE' ? '°' : '';
 
     // Axis assignment: [P1=innerX, P2=innerY, P3=outerX, P4=outerY]
     const [axes, setAxes] = useState<[ParamKey, ParamKey, ParamKey, ParamKey]>(
@@ -179,7 +186,7 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
             p1Frac >= 0 && p1Frac <= 1 && p2Frac >= 0 && p2Frac <= 1) {
             const cx = p1Frac * (n - 1);
             const cy = (1 - p2Frac) * (n - 1);        // flip Y
-            ctx.fillStyle = 'black';
+            ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(cx, cy, 1.8, 0, 2 * Math.PI);
             ctx.fill();
@@ -418,8 +425,8 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
                 </div>
             </div>
 
-            {/* Compute button */}
-            <div className="flex items-center gap-3">
+            {/* Compute button + colorbar bounds */}
+            <div className="flex items-center gap-4 flex-wrap">
                 <button
                     onClick={compute}
                     disabled={isComputing || data.length === 0}
@@ -427,11 +434,42 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
                 >
                     {isComputing ? `Computing… ${progress}%` : 'Compute landscape'}
                 </button>
+
                 {grid && !isComputing && (
-                    <span className="text-xs text-gray-500">
-                        Misfit [{colorRange[0].toFixed(4)}, {colorRange[1].toFixed(4)}]
-                        &nbsp;·&nbsp; ● = current solution
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {/* Color scale: blue → red gradient with editable bounds */}
+                        <span className="text-xs text-gray-500 font-medium">Color scale:</span>
+                        <input
+                            type="number"
+                            step={misfitCriterion === 'ANGLE' ? 1 : 0.001}
+                            className="text-xs border border-gray-300 rounded px-1 py-0.5 w-16 text-right"
+                            value={toDisplayMisfit(colorRange[0]).toFixed(misfitCriterion === 'ANGLE' ? 1 : 4)}
+                            onChange={e => {
+                                const display = +e.target.value;
+                                const raw = misfitCriterion === 'ANGLE' ? display / 180 : display;
+                                setColorRange(r => [raw, r[1]]);
+                            }}
+                        />
+                        <div
+                            className="h-3 rounded"
+                            style={{
+                                width: 80,
+                                background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000)',
+                            }}
+                        />
+                        <input
+                            type="number"
+                            step={misfitCriterion === 'ANGLE' ? 1 : 0.001}
+                            className="text-xs border border-gray-300 rounded px-1 py-0.5 w-16"
+                            value={toDisplayMisfit(colorRange[1]).toFixed(misfitCriterion === 'ANGLE' ? 1 : 4)}
+                            onChange={e => {
+                                const display = +e.target.value;
+                                const raw = misfitCriterion === 'ANGLE' ? display / 180 : display;
+                                setColorRange(r => [r[0], raw]);
+                            }}
+                        />
+                        <span className="text-xs text-gray-400">{misfitUnit}&nbsp;·&nbsp; ● = solution</span>
+                    </div>
                 )}
             </div>
 
@@ -510,14 +548,18 @@ const ParameterSpaceLandscapeComponent: React.FC<Props> = ({ data, engine, solut
 
                     {/* Rainbow color bar */}
                     <div className="flex flex-col items-center ml-2">
-                        <span className="text-xs text-gray-500 mb-1">{colorRange[1].toFixed(3)}</span>
+                        <span className="text-xs text-gray-500 mb-1">
+                            {toDisplayMisfit(colorRange[1]).toFixed(misfitCriterion === 'ANGLE' ? 1 : 3)}{misfitUnit}
+                        </span>
                         <div style={{
                             width: 14,
                             height: outerN * (cellPx + 4),
                             background: 'linear-gradient(to bottom, red, yellow, green, cyan, blue)',
                             borderRadius: 3,
                         }} />
-                        <span className="text-xs text-gray-500 mt-1">{colorRange[0].toFixed(3)}</span>
+                        <span className="text-xs text-gray-500 mt-1">
+                            {toDisplayMisfit(colorRange[0]).toFixed(misfitCriterion === 'ANGLE' ? 1 : 3)}{misfitUnit}
+                        </span>
                         <span className="text-xs text-gray-400 mt-2" style={{ writingMode: 'vertical-rl' }}>
                             misfit
                         </span>
