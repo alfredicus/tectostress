@@ -1,80 +1,73 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle, Vector3D } from './Wulff';
 import { Layers } from 'lucide-react';
+import { FaultDataHelper, Direction, CDirection, TypeOfMovement, CTypeOfMovement } from '@alfredo-taboada/stress';
 
 // ============================================================================
 // COORDINATE CONVERSION UTILITIES
 // ============================================================================
 
 /**
- * Convert strike/dip angles to a normal vector (plane normal pointing upward)
- * Convention: strike is clockwise from North, dip is angle from horizontal
+ * Map a numeric azimuth (degrees clockwise from N) to the nearest compass Direction enum.
  */
-function strikeDipToNormal(strike: number, dip: number): Vector3D {
-    const strikeRad = strike * Math.PI / 180;
-    const dipRad = dip * Math.PI / 180;
+function azimuthToDirection(az: number): Direction {
+    const a = ((az % 360) + 360) % 360;
+    if (a <= 22.5 || a > 337.5) return Direction.N;
+    if (a <= 67.5)  return Direction.NE;
+    if (a <= 112.5) return Direction.E;
+    if (a <= 157.5) return Direction.SE;
+    if (a <= 202.5) return Direction.S;
+    if (a <= 247.5) return Direction.SW;
+    if (a <= 292.5) return Direction.W;
+    return Direction.NW;
+}
 
-    // The normal vector points perpendicular to the plane
-    // For a plane with given strike and dip:
-    // - Strike direction is along the plane's horizontal line
-    // - Dip direction is 90° clockwise from strike (looking down)
-    // - Normal points in the dip direction, tilted up from horizontal by (90-dip)
+/** Parse a Direction from a row field, falling back to deriving it from strike. */
+function parseDipDirection(row: any, strike: number): Direction {
+    if (row.dip_direction && CDirection.exists(String(row.dip_direction))) {
+        return CDirection.fromString(String(row.dip_direction));
+    }
+    return azimuthToDirection((strike + 90) % 360);
+}
 
-    // Dip direction azimuth (90° clockwise from strike)
-    const dipAzimuth = (strike + 90) * Math.PI / 180;
-
-    // Normal vector components
-    // x: East, y: North, z: Up
-    const x = Math.sin(dipRad) * Math.sin(dipAzimuth);
-    const y = Math.sin(dipRad) * Math.cos(dipAzimuth);
-    const z = Math.cos(dipRad);
-
-    return { x, y, z };
+/** Convert a library Vector3 ([E, N, Up]) to a Wulff Vector3D ({x, y, z}). */
+function libVec3ToVector3D(v: number[]): Vector3D {
+    return { x: v[0], y: v[1], z: v[2] };
 }
 
 /**
- * Convert trend/plunge angles to a direction vector
- * Convention: trend is clockwise from North, plunge is angle below horizontal
+ * Compute striation vector from strike/dip/rake using pure geometry (no movement validation).
+ * Fallback when FaultDataHelper.create() rejects the typeOfMovement.
+ * Uses the plane's strike (e_phi) and dip (e_theta) unit vectors.
+ */
+function striationFromRakeGeometry(normal: Vector3D, strike: number, rake: number): Vector3D {
+    const phi = Math.atan2(normal.x, normal.y); // azimuthal angle of dip direction
+    // e_phi: unit vector along strike (perpendicular to normal, horizontal)
+    const epx = -Math.sin(phi), epy = Math.cos(phi), epz = 0;
+    // e_theta: unit vector along dip (cross of e_phi and normal, points down-dip)
+    const etx = normal.y * epz - normal.z * epy;
+    const ety = normal.z * epx - normal.x * epz;
+    const etz = normal.x * epy - normal.y * epx;
+    const rakeRad = (rake * Math.PI) / 180;
+    return {
+        x: Math.cos(rakeRad) * epx + Math.sin(rakeRad) * etx,
+        y: Math.cos(rakeRad) * epy + Math.sin(rakeRad) * ety,
+        z: Math.cos(rakeRad) * epz + Math.sin(rakeRad) * etz,
+    };
+}
+
+/**
+ * Convert trend/plunge angles to a direction vector.
+ * Convention: trend is clockwise from North, plunge is angle below horizontal.
  */
 function trendPlungeToVector(trend: number, plunge: number): Vector3D {
     const trendRad = trend * Math.PI / 180;
     const plungeRad = plunge * Math.PI / 180;
-
-    // x: East, y: North, z: Up (negative for downward plunge)
-    const x = Math.cos(plungeRad) * Math.sin(trendRad);
-    const y = Math.cos(plungeRad) * Math.cos(trendRad);
-    const z = -Math.sin(plungeRad);
-
-    return { x, y, z };
-}
-
-/**
- * Compute striation vector from strike, dip, and rake angles
- * The striation lies in the fault plane
- */
-function computeStriationVector(strike: number, dip: number, rake: number): Vector3D {
-    const strikeRad = strike * Math.PI / 180;
-    const dipRad = dip * Math.PI / 180;
-    const rakeRad = rake * Math.PI / 180;
-
-    // Start with striation in the local fault plane coordinates
-    // Local x: along strike, local y: down dip, local z: normal
-    let sx = Math.cos(rakeRad);
-    let sy = Math.sin(rakeRad);
-    let sz = 0;
-
-    // Rotate to align with fault plane orientation
-    // First rotate about strike axis (apply dip)
-    const tempSx = sx;
-    sx = tempSx * Math.cos(dipRad);
-    sz = -tempSx * Math.sin(dipRad);
-
-    // Then rotate about vertical axis (apply strike)
-    const tempSx2 = sx;
-    sx = tempSx2 * Math.cos(strikeRad) + sy * Math.sin(strikeRad);
-    sy = -tempSx2 * Math.sin(strikeRad) + sy * Math.cos(strikeRad);
-
-    return { x: sx, y: sy, z: sz };
+    return {
+        x:  Math.cos(plungeRad) * Math.sin(trendRad),
+        y:  Math.cos(plungeRad) * Math.cos(trendRad),
+        z: -Math.sin(plungeRad),
+    };
 }
 import StablePlotWithSettings from '../PlotWithSettings';
 import {
@@ -328,51 +321,63 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             const trend = parseFloat(row.trend);
                             const plunge = parseFloat(row.plunge);
                             if (!isNaN(trend) && !isNaN(plunge)) {
-                                // Convert trend/plunge to vector
                                 const vector = trendPlungeToVector(trend, plunge);
                                 dataPoint = { vector, id: index + 1 } as PoleData;
                             }
-                        }
-                        else if (workingColumnConfig.required.includes('strike')) {
-                            const dip = parseFloat(row.dip);
+                        } else if (workingColumnConfig.required.includes('strike')) {
                             const strike = parseFloat(row.strike);
+                            const dip = parseFloat(row.dip);
                             if (!isNaN(strike) && !isNaN(dip)) {
-                                // Convert strike/dip to pole vector (trend/plunge)
                                 const trend = (strike + 90) % 360;
                                 const plunge = 90 - dip;
                                 const vector = trendPlungeToVector(trend, plunge);
                                 dataPoint = { vector, id: index + 1 } as PoleData;
                             }
                         }
-                    }
-                    else if (representationType === 'planes') {
+                    } else if (representationType === 'planes') {
                         if (workingColumnConfig.required.includes('trend')) {
                             const trend = parseFloat(row.trend);
                             const plunge = parseFloat(row.plunge);
                             if (!isNaN(trend) && !isNaN(plunge)) {
-                                // For planes from trend/plunge, the vector IS the normal
                                 const normal = trendPlungeToVector(trend, plunge);
                                 dataPoint = { normal, id: index + 1 } as ExtensionFractureData;
                             }
-                        }
-                        else if (workingColumnConfig.required.includes('strike')) {
-                            const dip = parseFloat(row.dip);
+                        } else if (workingColumnConfig.required.includes('strike')) {
                             const strike = parseFloat(row.strike);
+                            const dip = parseFloat(row.dip);
                             if (!isNaN(strike) && !isNaN(dip)) {
-                                // Convert strike/dip to normal vector
-                                const normal = strikeDipToNormal(strike, dip);
+                                const dipDirection = parseDipDirection(row, strike);
+                                const helper = new FaultDataHelper({ strike, dipDirection, dip });
+                                const normal = libVec3ToVector3D(helper.normal);
                                 dataPoint = { normal, id: index + 1 } as ExtensionFractureData;
                             }
                         }
-                    }
-                    else if (representationType === 'striated_planes') {
+                    } else if (representationType === 'striated_planes') {
                         const strike = parseFloat(row.strike);
                         const dip = parseFloat(row.dip);
                         const rake = parseFloat(row.rake);
                         if (!isNaN(strike) && !isNaN(dip) && !isNaN(rake)) {
-                            // Convert to normal and striation vectors
-                            const normal = strikeDipToNormal(strike, dip);
-                            const striation = computeStriationVector(strike, dip, rake);
+                            const dipDirection = parseDipDirection(row, strike);
+                            const planeHelper = new FaultDataHelper({ strike, dipDirection, dip });
+                            const normal = libVec3ToVector3D(planeHelper.normal);
+                            let striation: Vector3D;
+
+                            try {
+                                const parsedMov = row.typeOfMovement
+                                    ? CTypeOfMovement.fromString(String(row.typeOfMovement))
+                                    : undefined;
+                                const typeOfMovement = CTypeOfMovement.isOk(parsedMov) ? parsedMov : TypeOfMovement.UND;
+                                const fullHelper = FaultDataHelper.create(
+                                    { strike, dipDirection, dip },
+                                    { trendIsDefined: false, rake, strikeDirection: Direction.N, typeOfMovement, trend: 0 }
+                                );
+                                striation = libVec3ToVector3D(fullHelper.striation);
+                                // console.log('1', normal, striation)
+                            } catch {
+                                striation = striationFromRakeGeometry(normal, strike, rake);
+                                // console.log('2', normal, striation)
+                            }
+
                             dataPoint = { normal, striation, id: index + 1 } as StriatedPlaneData;
                         }
                     }

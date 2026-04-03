@@ -12,7 +12,6 @@ import { HistogramDescriptor } from './Histo/HistogramDescriptor';
 import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
-import { MCMCStatsDescriptor } from './MCMCStats/MCMCStatsDescriptor';
 
 // ============================================================================
 // ICON COMPONENTS
@@ -163,12 +162,6 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Fracture Map 2D',
         icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
-    },
-    {
-        id: 'mcmcStats',
-        title: 'MCMC Posterior Statistics',
-        icon: MCMCStatsDescriptor.icon,
-        defaultLayout: { w: 8, h: 3 }
     }
 ];
 

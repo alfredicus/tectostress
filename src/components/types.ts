@@ -55,6 +55,12 @@ export interface StressSolution {
             theta: number[];
             psi: number[];
         };
+        axesStats?: {
+            sigma1: { trend: number; plunge: number; meanResultantLength: number; fisherCone95: number; fisherCone68: number };
+            sigma2: { trend: number; plunge: number; meanResultantLength: number; fisherCone95: number; fisherCone68: number };
+            sigma3: { trend: number; plunge: number; meanResultantLength: number; fisherCone95: number; fisherCone68: number };
+            rotationAngle: { mean: number; std: number; q05: number; q95: number };
+        };
     };
     analysis?: {
         eigenvalues: number[];
