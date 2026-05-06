@@ -103,11 +103,15 @@ License: MIT
 
 /*! ./MCMC */
 
+/*! ./MCMCQuaternion */
+
 /*! ./MohrCoulombCurves */
 
 /*! ./MohrPoint */
 
 /*! ./MonteCarlo */
+
+/*! ./MonteCarloQuaternion */
 
 /*! ./ParameterSpace */
 
@@ -137,15 +141,23 @@ License: MIT
 
 /*! ./analysis */
 
+/*! ./axisStats */
+
+/*! ./computeMisfitAt */
+
 /*! ./csv2json */
 
 /*! ./data */
 
 /*! ./eigen */
 
+/*! ./fault/FaultDataHelper */
+
 /*! ./fault/NeoformedStriatedPlane */
 
 /*! ./fault/StriatedPlane_Kin */
+
+/*! ./fault/types */
 
 /*! ./fieldMove2json */
 
@@ -158,6 +170,8 @@ License: MIT
 /*! ./fromDipAzimToNormal */
 
 /*! ./fromRotationsToTensor */
+
+/*! ./geomeca */
 
 /*! ./lib */
 
@@ -308,6 +322,10 @@ License: MIT
   \*********************************/
 
 /*!*********************************!*\
+  !*** ./lib/search/axisStats.ts ***!
+  \*********************************/
+
+/*!*********************************!*\
   !*** ./lib/types/PoleCoords.ts ***!
   \*********************************/
 
@@ -372,6 +390,10 @@ License: MIT
   \**************************************/
 
 /*!**************************************!*\
+  !*** ./lib/search/MCMCQuaternion.ts ***!
+  \**************************************/
+
+/*!**************************************!*\
   !*** ./lib/types/SphericalCoords.ts ***!
   \**************************************/
 
@@ -385,6 +407,10 @@ License: MIT
 
 /*!***************************************!*\
   !*** ./lib/filters/fieldMove2json.ts ***!
+  \***************************************/
+
+/*!***************************************!*\
+  !*** ./lib/search/computeMisfitAt.ts ***!
   \***************************************/
 
 /*!****************************************!*\
@@ -445,6 +471,10 @@ License: MIT
 
 /*!********************************************!*\
   !*** ./lib/analysis/FullParameterSpace.ts ***!
+  \********************************************/
+
+/*!********************************************!*\
+  !*** ./lib/search/MonteCarloQuaternion.ts ***!
   \********************************************/
 
 /*!*********************************************!*\
