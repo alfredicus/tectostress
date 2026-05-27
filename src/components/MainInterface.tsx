@@ -1,8 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { Play, HelpCircle, Database, Settings } from 'lucide-react';
+import { Play, HelpCircle, Database, Settings, MapPin, SlidersHorizontal } from 'lucide-react';
 import HelpComponent from './HelpComponent';
 import RunComponent from './RunComponent';
 import DataComponent from './DataComponent';
+import FieldRecordTab from './Field/FieldRecordTab';
+import ConfigTab from './Settings/ConfigTab';
+import { SettingsProvider } from './Settings/SettingsContext';
 import { DataFile } from './DataFile';
 import {
     VisualizationRegistry,
@@ -264,9 +267,11 @@ const MainInterfaceContent = () => {
         }));
     }, []);
 
-    const data_name = "data";
-    const doc_name = "documentation";
-    const run_name = "inversion";
+    const data_name   = "data";
+    const doc_name    = "doc";
+    const run_name    = "inversion";
+    const field_name  = "field";
+    const config_name = "config";
 
     // Help navigation: when a component requests to open a specific doc
     const [helpRequestedDoc, setHelpRequestedDoc] = useState<string | undefined>(undefined);
@@ -385,24 +390,41 @@ const MainInterfaceContent = () => {
 
                     {/* Tabs */}
                     <div className={tabClasses}>
-                        <nav className="flex -mb-px">
-                            {[data_name, run_name, doc_name].map((tab) => (
+                        <nav className="flex -mb-px overflow-x-auto">
+                            {/* Main tabs (left-aligned) */}
+                            {[data_name, field_name, run_name, doc_name].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`py-2 px-4 font-medium transition-colors duration-200 ${activeTab === tab
+                                    className={`py-2 px-4 font-medium transition-colors duration-200 whitespace-nowrap ${activeTab === tab
                                         ? `border-b-2 border-blue-500 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
                                         : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
                                         }`}
                                 >
                                     <div className="flex items-center gap-2">
-                                        {tab === data_name && <Database className="w-4 h-4" />}
-                                        {tab === run_name && <Play className="w-4 h-4" />}
-                                        {tab === doc_name && <HelpCircle className="w-4 h-4" />}
+                                        {tab === data_name  && <Database      className="w-4 h-4" />}
+                                        {tab === run_name   && <Play          className="w-4 h-4" />}
+                                        {tab === field_name && <MapPin        className="w-4 h-4" />}
+                                        {tab === doc_name   && <HelpCircle    className="w-4 h-4" />}
                                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
                                     </div>
                                 </button>
                             ))}
+
+                            {/* Config tab — pushed to the far right */}
+                            <div className="flex-1" />
+                            <button
+                                onClick={() => setActiveTab(config_name)}
+                                className={`py-2 px-4 font-medium transition-colors duration-200 whitespace-nowrap ${activeTab === config_name
+                                    ? `border-b-2 border-blue-500 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
+                                    : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
+                                    }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <SlidersHorizontal className="w-4 h-4" />
+                                    Config
+                                </div>
+                            </button>
                         </nav>
                     </div>
 
@@ -416,6 +438,13 @@ const MainInterfaceContent = () => {
                                 persistedSelectedFile={tabState.dataVisualizations.selectedFileForView}
                                 persistedLayout={tabState.dataVisualizations.layout}
                                 onVisualizationsChange={handleDataVisualizationsChange}
+                            />
+                        </div>
+
+                        <div style={{ display: activeTab === field_name ? 'block' : 'none' }}>
+                            <FieldRecordTab
+                                onFileLoaded={handleFileLoaded}
+                                onNavigateToData={() => setActiveTab(data_name)}
                             />
                         </div>
 
@@ -436,6 +465,10 @@ const MainInterfaceContent = () => {
                         <div style={{ display: activeTab === doc_name ? 'block' : 'none' }}>
                             <HelpComponent requestedDoc={helpRequestedDoc} />
                         </div>
+
+                        <div style={{ display: activeTab === config_name ? 'block' : 'none' }}>
+                            <ConfigTab />
+                        </div>
                     </div>
 
                     {/* Enhanced footer with system information */}
@@ -453,12 +486,14 @@ const MainInterfaceContent = () => {
     );
 };
 
-// Main Interface with Theme Provider
+// Main Interface with Theme + Settings providers
 const MainInterface = () => {
     return (
-        <ThemeProvider defaultMode="system" storageKey="tectostress-theme">
-            <MainInterfaceContent />
-        </ThemeProvider>
+        <SettingsProvider>
+            <ThemeProvider defaultMode="system" storageKey="tectostress-theme">
+                <MainInterfaceContent />
+            </ThemeProvider>
+        </SettingsProvider>
     );
 };
 

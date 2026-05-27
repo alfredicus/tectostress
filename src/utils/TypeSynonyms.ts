@@ -58,9 +58,19 @@ export class TypeSynonyms {
     }
 }
 
-// - to lower case
+// - insert a space before each uppercase letter that follows a lowercase letter
+//   or before a run of uppercase letters followed by a lowercase letter
+//   (e.g. "StriatedPlane" → "Striated Plane", "KMLExport" → "KML Export")
 // - replace underscores and hyphens with spaces
+// - collapse multiple spaces into one
 // - trim leading and trailing whitespace
+// - convert to lower case
 export function beautifyName(name: string): string {
-    return name.toLowerCase().replace('_', ' ').replace('-', ' ').trim();
+    return name
+        .replace(/([a-z])([A-Z])/g, '$1 $2')      // camelCase boundary: "dPlane" → "d Plane"
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // acronym boundary:  "KMLExport" → "KML Export"
+        .replace(/[_-]+/g, ' ')                     // underscores / hyphens → space
+        .replace(/\s+/g, ' ')                       // collapse multiple spaces
+        .trim()
+        .toLowerCase()
 }

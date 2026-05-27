@@ -43,7 +43,11 @@ export type MohrParameters = {
     strokeWidth?: number,
     xAxisLabel?: string,
     yAxisLabel?: string,
-    title?: string
+    title?: string,
+    /** When provided, fixes the x-axis (σn) domain instead of auto-computing it. */
+    xDomain?: [number, number],
+    /** When provided, fixes the y-axis (τ) domain instead of auto-computing it. */
+    yDomain?: [number, number],
 }
 
 /**
@@ -392,23 +396,32 @@ export class MohrCircle {
             return
         }
 
-        // Calculate scales - optimized for upper half-plane (τ > 0)
-        // Rock mechanics convention: σ3 <= σ2 <= σ1
-        const minStress = Math.min(this.sigma1_, this.sigma2_, this.sigma3_)
-        const maxStress = Math.max(this.sigma1_, this.sigma2_, this.sigma3_)
-        const stressRange = maxStress - minStress
-        const maxTau = Math.max(stressRange / 2, 1)
+        // Calculate axis domains
+        // If explicit domains are provided (e.g. for normalised diagrams) use them directly;
+        // otherwise fall back to the original auto-scaling logic.
+        let xDataMin: number, xDataMax: number, yDataMin: number, yDataMax: number
 
-        // Padding
-        const padding = Math.max(stressRange * 0.05, 5)
+        if (this.params.xDomain && this.params.yDomain) {
+            // Fixed domains supplied by the caller
+            xDataMin = this.params.xDomain[0]
+            xDataMax = this.params.xDomain[1]
+            yDataMin = this.params.yDomain[0]
+            yDataMax = this.params.yDomain[1]
+        } else {
+            // Auto-scale based on principal stress values
+            const minStress  = Math.min(this.sigma1_, this.sigma2_, this.sigma3_)
+            const maxStress  = Math.max(this.sigma1_, this.sigma2_, this.sigma3_)
+            const stressRange = maxStress - minStress
+            const maxTau = Math.max(stressRange / 2, 1)
+            const padding = Math.max(stressRange * 0.05, 5)
 
-        // Data ranges
-        const xDataMin = minStress - padding
-        const xDataMax = maxStress + padding
+            xDataMin = this.params.xDomain ? this.params.xDomain[0] : minStress - padding
+            xDataMax = this.params.xDomain ? this.params.xDomain[1] : maxStress + padding
+            yDataMin = this.params.yDomain ? this.params.yDomain[0] : -padding * 0.5
+            yDataMax = this.params.yDomain ? this.params.yDomain[1] : maxTau + padding
+        }
+
         const xDataRange = xDataMax - xDataMin
-
-        const yDataMin = -padding * 0.5
-        const yDataMax = maxTau + padding
         const yDataRange = yDataMax - yDataMin
 
         // Calculate scale factors to maintain aspect ratio (1:1)
@@ -686,9 +699,11 @@ export class MohrCircle {
         // - Lower envelope: half-circles (σ3, σ2) and (σ2, σ1) on τ > 0
         // The shaded area is the space between these envelopes
 
-        const bigRadius = (this.sigma1_ - this.sigma3_) / 2
-        const smallRadius1 = (this.sigma2_ - this.sigma3_) / 2  // circle σ3-σ2
-        const smallRadius2 = (this.sigma1_ - this.sigma2_) / 2  // circle σ2-σ1
+        // Use Math.abs so the area draws correctly when σ1 < σ3
+        // (e.g. engineer convention: s1=−1, s3=0).
+        const bigRadius = Math.abs(this.sigma1_ - this.sigma3_) / 2
+        const smallRadius1 = Math.abs(this.sigma2_ - this.sigma3_) / 2  // circle σ3-σ2
+        const smallRadius2 = Math.abs(this.sigma1_ - this.sigma2_) / 2  // circle σ2-σ1
 
         if (bigRadius <= 0) return
 

@@ -17,6 +17,8 @@ import {
 import { Button, FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import MCMCStatsComponent from './MCMCStats/MCMCStatsComponent';
 import ParameterSpaceLandscapeComponent from './ParameterSpace/ParameterSpaceLandscapeComponent';
+import InversionMohrComponent from './Mohr/InversionMohrComponent';
+import { useSettings } from './Settings/SettingsContext';
 
 // Configuration interfaces (same as before)
 interface ParamConfig {
@@ -354,6 +356,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
     // Misfit criterion (ANGLE = normalized acos in [0,1], DOT = 1−|cos| in [0,1])
     const [misfitStrategy, setMisfitStrategy] = useState<'ANGLE' | 'DOT'>('ANGLE');
+
+    // Global settings (stress convention, …)
+    const { settings } = useSettings();
+    const isEngineer = settings.stressConvention === 'engineer';
 
     // Console-related state
     const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
@@ -1105,7 +1111,13 @@ const RunComponent: React.FC<RunComponentProps> = ({
                     className="flex justify-between items-center px-6 py-4 bg-blue-50 border-b cursor-pointer"
                     onClick={toggleResultsPanel}
                 >
-                    <h3 className="text-lg font-medium text-blue-800">Simulation Results</h3>
+                    <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-medium text-blue-800">Simulation Results</h3>
+                        {isEngineer
+                            ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium select-none">Engineer — tension +</span>
+                            : <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-xs font-medium select-none">Geologist — compression +</span>
+                        }
+                    </div>
                     <div className="flex items-center space-x-2">
                         <button
                             onClick={(e) => {
@@ -1163,6 +1175,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         {/* Principal stress axis orientations (σ1, σ2, σ3) */}
                         {solution.mcmcStats?.axesStats && (() => {
                             const ax = solution.mcmcStats!.axesStats!;
+                            // Both conventions share the same axis directions (σ1=most compressive).
+                            // Only the sign of the stress values changes, not the axes.
                             const axes = [
                                 { label: 'σ₁ (max)', data: ax.sigma1, bg: 'bg-red-50',   hdr: 'text-red-800'   },
                                 { label: 'σ₂ (int)', data: ax.sigma2, bg: 'bg-green-50', hdr: 'text-green-800' },
@@ -1205,6 +1219,14 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             />
                         )}
 
+                        {/* Mohr Diagram — data normals plotted against inverted stress */}
+                        {processedData && solution.analysis && (
+                            <InversionMohrComponent
+                                solution={solution}
+                                data={processedData.data}
+                            />
+                        )}
+
                         {/* Integration notice */}
                         {/* <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-200">
                             <div className="flex items-center gap-2 mb-2">
@@ -1222,6 +1244,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             <>
                                 <div>
                                     <h4 className="text-xl font-semibold text-indigo-800">Eigenvectors</h4>
+                                    {/* Axis directions are convention-independent; only stress magnitudes change sign. */}
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="bg-red-50 p-4 rounded-lg">
                                             <h5 className="text-sm font-medium text-red-800 mb-2">v₁ (σ₁ direction)</h5>
@@ -1270,19 +1293,20 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
                                 <div>
                                     <h4 className="text-xl font-semibold text-indigo-800">Principal Stresses</h4>
+                                    {/* Engineer: same axes, values negated (compression becomes negative). */}
                                     <div className="grid grid-cols-3 gap-4">
-                                        <div className="bg-red-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-red-800 mb-2">σ₁ (Maximum)</h5>
-                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma1.value.toFixed(4)}</p>
-                                        </div>
-                                        <div className="bg-yellow-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-yellow-800 mb-2">σ₂ (Intermediate)</h5>
-                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma2.value.toFixed(4)}</p>
-                                        </div>
-                                        <div className="bg-blue-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-blue-800 mb-2">σ₃ (Minimum)</h5>
-                                            <p className="text-lg font-bold">{solution.analysis.principalStresses.sigma3.value.toFixed(4)}</p>
-                                        </div>
+                                        {[
+                                            { label: 'σ₁ (Maximum)',      val: solution.analysis.principalStresses.sigma1.value, bg: 'bg-red-50',    hdr: 'text-red-800'    },
+                                            { label: 'σ₂ (Intermediate)', val: solution.analysis.principalStresses.sigma2.value, bg: 'bg-yellow-50', hdr: 'text-yellow-800' },
+                                            { label: 'σ₃ (Minimum)',      val: solution.analysis.principalStresses.sigma3.value, bg: 'bg-blue-50',   hdr: 'text-blue-800'   },
+                                        ].map(({ label, val, bg, hdr }) => (
+                                            <div key={label} className={`${bg} p-4 rounded-lg`}>
+                                                <h5 className={`text-sm font-medium ${hdr} mb-2`}>{label}</h5>
+                                                <p className="text-lg font-bold">
+                                                    {(isEngineer ? val : -val).toFixed(4)}
+                                                </p>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             </>

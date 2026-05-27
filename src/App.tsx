@@ -21,16 +21,6 @@ function App() {
 
     return (
         <div className="App">
-            {/* Temporary test container - will appear at top of page */}
-            <div style={{ 
-                padding: '20px', 
-                backgroundColor: '#f0f0f0',
-                borderBottom: '2px solid #333'
-            }}>
-                <h2>🧪 Wulff Geometry Test (Temporary)</h2>
-                <div id="wulff-test-container"></div>
-            </div>
-            
             <MainInterface />
         </div>
     );

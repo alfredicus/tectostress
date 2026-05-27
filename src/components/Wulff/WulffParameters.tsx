@@ -50,7 +50,7 @@ export const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
         columns: [
             { required: ['trend', 'plunge'] },
             { required: ['strike', 'dip'] },
-            { required: ['dip', 'strike', 'dip_direction'] },
+            { required: ['dip', 'strike', 'dip direction'] },
         ],
         representations: [
             {
@@ -72,7 +72,7 @@ export const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
         columns: [
             { required: ['trend', 'plunge'] },
             { required: ['strike', 'dip'] },
-            { required: ['dip', 'strike', 'dip_direction'] },
+            { required: ['dip', 'strike', 'dip direction'] },
         ],
         representations: [
             {
@@ -93,7 +93,7 @@ export const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
         displayName: 'Fault',
         columns: [
             { required: ['strike', 'dip', 'rake'] },
-            { required: ['dip', 'strike', 'dip_direction', 'rake'] },
+            { required: ['dip', 'strike', 'dip direction', 'rake'] },
         ],
         representations: [
             {

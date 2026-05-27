@@ -22,12 +22,26 @@ function azimuthToDirection(az: number): Direction {
     return Direction.NW;
 }
 
-/** Parse a Direction from a row field, falling back to deriving it from strike. */
+/** Parse dip Direction from a row field, falling back to deriving it from strike. */
 function parseDipDirection(row: any, strike: number): Direction {
-    if (row.dip_direction && CDirection.exists(String(row.dip_direction))) {
-        return CDirection.fromString(String(row.dip_direction));
+    const dd = row['dip direction'];
+    if (dd && CDirection.exists(String(dd))) {
+        return CDirection.fromString(String(dd));
     }
     return azimuthToDirection((strike + 90) % 360);
+}
+
+/**
+ * Parse strike Direction from a row field.
+ * Returns Direction.UND when absent so FaultDataHelper can handle rake=0/90 correctly;
+ * for oblique rake with UND the create() call will throw and fall back to striationFromRakeGeometry().
+ */
+function parseStrikeDirection(row: any): Direction {
+    const sd = row['strike direction'];
+    if (sd && CDirection.exists(String(sd))) {
+        return CDirection.fromString(String(sd));
+    }
+    return Direction.UND;
 }
 
 /** Convert a library Vector3 ([E, N, Up]) to a Wulff Vector3D ({x, y, z}). */
@@ -363,13 +377,15 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             let striation: Vector3D;
 
                             try {
-                                const parsedMov = row.typeOfMovement
-                                    ? CTypeOfMovement.fromString(String(row.typeOfMovement))
+                                const movRaw = row['type of movement'];
+                                const parsedMov = movRaw
+                                    ? CTypeOfMovement.fromString(String(movRaw))
                                     : undefined;
                                 const typeOfMovement = CTypeOfMovement.isOk(parsedMov) ? parsedMov : TypeOfMovement.UND;
+                                const strikeDir = parseStrikeDirection(row);
                                 const fullHelper = FaultDataHelper.create(
                                     { strike, dipDirection, dip },
-                                    { trendIsDefined: false, rake, strikeDirection: Direction.N, typeOfMovement, trend: 0 }
+                                    { trendIsDefined: false, rake, strikeDirection: strikeDir, typeOfMovement, trend: 0 }
                                 );
                                 striation = libVec3ToVector3D(fullHelper.striation);
                                 // console.log('1', normal, striation)

@@ -2,3 +2,5 @@ node_modules
 dist
 data/pebble/python_env
 .DS_Store
+ios/
+android/
