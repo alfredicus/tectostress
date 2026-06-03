@@ -147,6 +147,9 @@ export interface WulffSettings {
     selectedFiles: string[];
     availableRepresentations: AvailableRepresentation[];
     zoomLevel: number;
+    // Predicted (computed) data overlay — populated after a stress inversion run
+    showPredicted: boolean;
+    predictedColor: string;
 }
 
 // ============================================================================
@@ -169,6 +172,8 @@ export function createWulffSettings(): WulffSettings {
         borderWidth: 2,
         selectedFiles: [],
         availableRepresentations: [],
-        zoomLevel: 1.0
+        zoomLevel: 1.0,
+        showPredicted: false,
+        predictedColor: '#0066cc'
     };
 }

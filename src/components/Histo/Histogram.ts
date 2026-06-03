@@ -23,6 +23,7 @@ export type HistogramParameters = {
     strokeColor?: string,
     strokeWidth?: number,
     densityColor?: string,
+    overlayColor?: string,
     xAxisLabel?: string,
     yAxisLabel?: string,
     title?: string
@@ -51,6 +52,7 @@ export const DefaultHistogramParameters: HistogramParameters = {
     strokeColor: '#2c3e50',
     strokeWidth: 1,
     densityColor: '#e74c3c',
+    overlayColor: '#0066cc',
     xAxisLabel: 'Value',
     yAxisLabel: 'Frequency',
     title: ''
@@ -62,6 +64,7 @@ export const DefaultHistogramParameters: HistogramParameters = {
 export class Histogram {
     private element_: HTMLElement = undefined
     private data_: number[] = []
+    private overlayData_: number[] = []
     private svg_: d3.Selection<SVGSVGElement, unknown, null, undefined> = undefined
     private chartGroup_: d3.Selection<SVGGElement, unknown, null, undefined> = undefined
     params: HistogramParameters = DefaultHistogramParameters
@@ -120,6 +123,21 @@ export class Histogram {
 
     get data() {
         return this.data_
+    }
+
+    // Optional secondary series (e.g. misfit-angle distribution) drawn translucent on top.
+    set overlayData(d: number[]) {
+        this.overlayData_ = (d || []).filter(val => !isNaN(val) && isFinite(val))
+        this.update()
+    }
+
+    get overlayData() {
+        return this.overlayData_
+    }
+
+    set overlayColor(color: string) {
+        this.params.overlayColor = color
+        this.update()
     }
 
     set bins(b: number) {
@@ -186,14 +204,20 @@ export class Histogram {
         // Ensure minimum dimensions
         if (chartWidth <= 0 || chartHeight <= 0) return
 
-        // Calculate data statistics
+        // Calculate data statistics (statistics/density use the primary series only)
         const extent = d3.extent(this.data_) as [number, number]
         const mean = d3.mean(this.data_)
         const stdDev = d3.deviation(this.data_)
 
+        // Include the overlay series in the x-domain so both fit on shared axes
+        const hasOverlay = this.overlayData_ && this.overlayData_.length > 0
+        const domainExtent = hasOverlay
+            ? d3.extent(this.data_.concat(this.overlayData_)) as [number, number]
+            : extent
+
         // Create scales
         const xScale = d3.scaleLinear()
-            .domain(extent)
+            .domain(domainExtent)
             .range([0, chartWidth])
 
         // Create histogram bins
@@ -203,9 +227,15 @@ export class Histogram {
             .thresholds(this.params.bins!)
 
         const bins = histogram(this.data_)
+        const overlayBins = hasOverlay ? histogram(this.overlayData_) : []
 
+        const yMax = Math.max(
+            d3.max(bins, d => d.length) || 0,
+            d3.max(overlayBins, d => d.length) || 0,
+            1
+        )
         const yScale = d3.scaleLinear()
-            .domain([0, d3.max(bins, d => d.length) || 1])
+            .domain([0, yMax])
             .range([chartHeight, 0])
 
         // Draw grid if enabled
@@ -278,6 +308,24 @@ export class Histogram {
                 d3.select(event.currentTarget).attr('opacity', 1)
                 d3.selectAll('.histogram-tooltip').remove()
             })
+
+        // Draw overlay (predicted/misfit) bars translucent on top of the primary series
+        if (hasOverlay) {
+            this.chartGroup_.selectAll('.overlay-bar')
+                .data(overlayBins)
+                .enter()
+                .append('rect')
+                .attr('class', 'overlay-bar')
+                .attr('x', d => xScale(d.x0!))
+                .attr('y', d => yScale(d.length))
+                .attr('width', d => Math.max(0, xScale(d.x1!) - xScale(d.x0!) - 1))
+                .attr('height', d => chartHeight - yScale(d.length))
+                .attr('fill', this.params.overlayColor!)
+                .attr('fill-opacity', 0.35)
+                .attr('stroke', this.params.overlayColor!)
+                .attr('stroke-width', 1.5)
+                .style('pointer-events', 'none')
+        }
 
         // Draw density curve if enabled
         if (this.params.draw!.density && mean !== undefined && stdDev !== undefined && stdDev > 0) {

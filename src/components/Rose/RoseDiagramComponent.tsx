@@ -214,6 +214,8 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
 
         let totalStats = { total: 0, plotted: 0, errors: 0 };
         const allData: number[] = [];
+        // Misfit-angle overlay (computed values present on rows after a stress inversion run)
+        const overlayData: number[] = [];
 
         const enabledDataTypes = availableDataTypes
             .filter(dt => dt.enabled)
@@ -242,6 +244,10 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                         } else {
                             totalStats.errors++;
                         }
+                        if (currentState.settings.showPredicted && row.misfit_angle != null) {
+                            const m = parseFloat(row.misfit_angle);
+                            if (!isNaN(m)) overlayData.push(m);
+                        }
                     } else {
                         totalStats.errors++;
                     }
@@ -249,6 +255,9 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
 
             });
         });
+
+        rose.params.overlayColor = currentState.settings.predictedColor;
+        rose.overlayData = overlayData;
 
         // Update rose diagram with data
         if (allData.length > 0) {
@@ -275,7 +284,15 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                 avg: 0
             });
         }
-    }, [rose, files, selectedFiles, availableDataTypes, selectedColumn]);
+    }, [
+        rose,
+        files,
+        selectedFiles,
+        availableDataTypes,
+        selectedColumn,
+        currentState.settings.showPredicted,
+        currentState.settings.predictedColor
+    ]);
 
     const toggleFileSelection = (fileId: string) => {
         setSelectedFiles(prev =>
@@ -539,6 +556,25 @@ const RoseDiagramComponent: React.FC<BaseVisualizationProps<RoseCompState>> = ({
                             onChange={(e) => updateSettings({ showCircles: e.target.checked })}
                             className="rounded"
                         />
+                    </label>
+
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show predicted (misfit)</span>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={currentState.settings.showPredicted}
+                                onChange={(e) => updateSettings({ showPredicted: e.target.checked })}
+                                className="rounded"
+                            />
+                            <input
+                                type="color"
+                                value={currentState.settings.predictedColor}
+                                onChange={(e) => updateSettings({ predictedColor: e.target.value })}
+                                className="w-6 h-5 border rounded cursor-pointer"
+                                disabled={!currentState.settings.showPredicted}
+                            />
+                        </div>
                     </label>
                 </div>
             </div>

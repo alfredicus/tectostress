@@ -66,6 +66,7 @@ export class TypeSynonyms {
 // - trim leading and trailing whitespace
 // - convert to lower case
 export function beautifyName(name: string): string {
+    if (name == null) return '';
     return name
         .replace(/([a-z])([A-Z])/g, '$1 $2')      // camelCase boundary: "dPlane" → "d Plane"
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // acronym boundary:  "KMLExport" → "KML Export"

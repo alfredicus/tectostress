@@ -108,13 +108,13 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Fracture Map 2D',
         icon: FractureMap2DDescriptor.icon,
         defaultLayout: { w: 8, h: 6 }
-    },
-    {
-        id: 'fractureMap2D',
-        title: 'Fracture Map 2D',
-        icon: FractureMap2DDescriptor.icon,
-        defaultLayout: { w: 4, h: 4 }
     }
+    // ,{
+    //     id: 'fractureMap2D',
+    //     title: 'Fracture Map 2D',
+    //     icon: FractureMap2DDescriptor.icon,
+    //     defaultLayout: { w: 4, h: 4 }
+    // }
 ];
 
 /**
@@ -127,42 +127,42 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         icon: HistogramDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
-    {
-        id: 'results',
-        title: 'Results Summary',
-        icon: ResultsIcon,
-        defaultLayout: { w: 8, h: 6 }
-    },
-    {
-        id: 'solution',
-        title: 'Solution Analysis',
-        icon: SolutionIcon,
-        defaultLayout: { w: 6, h: 5 }
-    },
-    {
-        id: 'mohr',
-        title: 'Stress State (Mohr)',
-        icon: MohrCircleDescriptor.icon,
-        defaultLayout: { w: 6, h: 4 }
-    },
+    // {
+    //     id: 'results',
+    //     title: 'Results Summary',
+    //     icon: ResultsIcon,
+    //     defaultLayout: { w: 8, h: 6 }
+    // },
+    // {
+    //     id: 'solution',
+    //     title: 'Solution Analysis',
+    //     icon: SolutionIcon,
+    //     defaultLayout: { w: 6, h: 5 }
+    // },
+    // {
+    //     id: 'mohr',
+    //     title: 'Stress State (Mohr)',
+    //     icon: MohrCircleDescriptor.icon,
+    //     defaultLayout: { w: 6, h: 4 }
+    // }
     {
         id: 'wulff',
-        title: 'Data Plot (Stereonet)',
+        title: 'Wulff Stereonet',
         icon: WulffStereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
         id: 'rose',
-        title: 'Strike Distribution',
+        title: 'Rose Diagram',
         icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
-    },
-    {
-        id: 'fractureMap2D',
-        title: 'Fracture Map 2D',
-        icon: FractureMap2DDescriptor.icon,
-        defaultLayout: { w: 4, h: 4 }
     }
+    // ,{
+    //     id: 'fractureMap2D',
+    //     title: 'Fracture Map 2D',
+    //     icon: FractureMap2DDescriptor.icon,
+    //     defaultLayout: { w: 4, h: 4 }
+    // }
 ];
 
 

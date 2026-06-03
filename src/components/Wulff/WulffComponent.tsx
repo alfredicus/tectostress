@@ -117,7 +117,7 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
                     }
                     )
 
-                    const hasMatchingType = file.content.some((row: any) => TypeSynonyms.isSameType(dataType, row.type))
+                    const hasMatchingType = file.content.some((row: any) => row.type != null && TypeSynonyms.isSameType(dataType, row.type))
                     return hasColumns && hasMatchingType;
                 })
                 .map(file => file.id);
@@ -301,11 +301,30 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
 
                         plotDataOnStereonet(stereonet, processedData.data, repr, dataStyle);
                     }
+
+                    if (currentState.settings.showPredicted && processedData.predicted.length > 0) {
+                        const predictedStyle: DataStyle = {
+                            color: currentState.settings.predictedColor,
+                            width: 2,
+                            size: 4,
+                            opacity: repr.opacity,
+                            arrowSize: 15,
+                            showLabels: false
+                        };
+
+                        plotPredictedOnStereonet(stereonet, processedData.predicted, repr, predictedStyle);
+                    }
                 });
             });
 
         setDataStats(totalStats);
-    }, [stereonet, currentState.settings.availableRepresentations, files]);
+    }, [
+        stereonet,
+        currentState.settings.availableRepresentations,
+        files,
+        currentState.settings.showPredicted,
+        currentState.settings.predictedColor
+    ]);
 
     const processDataForRepresentation = (
         data: any[],
@@ -313,7 +332,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
         repr: AvailableRepresentation,
         headers: string[]
     ) => {
-        const result = { data: [] as any[], stats: { total: data.length, plotted: 0, errors: 0 } };
+        const result = { data: [] as any[], predicted: [] as any[], stats: { total: data.length, plotted: 0, errors: 0 } };
         const representationType = repr.representation.name;
 
         const workingColumnConfig = config.columns.find((columnConfig: any) =>
@@ -348,6 +367,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                                 dataPoint = { vector, id: index + 1 } as PoleData;
                             }
                         }
+                        // Predicted pole = predicted plane normal (∥ σ3 for joints, σ1 for stylolites)
+                        if (row.predicted_normal) {
+                            result.predicted.push({ vector: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as PoleData);
+                        }
                     } else if (representationType === 'planes') {
                         if (workingColumnConfig.required.includes('trend')) {
                             const trend = parseFloat(row.trend);
@@ -365,6 +388,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                                 const normal = libVec3ToVector3D(helper.normal);
                                 dataPoint = { normal, id: index + 1 } as ExtensionFractureData;
                             }
+                        }
+                        // Predicted plane = great circle of the predicted normal
+                        if (row.predicted_normal) {
+                            result.predicted.push({ normal: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as ExtensionFractureData);
                         }
                     } else if (representationType === 'striated_planes') {
                         const strike = parseFloat(row.strike);
@@ -395,6 +422,15 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             }
 
                             dataPoint = { normal, striation, id: index + 1 } as StriatedPlaneData;
+
+                            // Predicted striation = computed slip direction on the same plane
+                            if (row.predicted_striation) {
+                                result.predicted.push({
+                                    normal,
+                                    striation: libVec3ToVector3D(row.predicted_striation),
+                                    id: index + 1
+                                } as StriatedPlaneData);
+                            }
                         }
                     }
 
@@ -433,6 +469,28 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                 break;
             case 'striated_planes':
                 stereonet.addStriatedPlanes(data as StriatedPlaneData[], style);
+                break;
+        }
+    };
+
+    // Overlay the computed (predicted) data in a distinct colour. For striated planes we draw
+    // only the striation arrow (the measured great circle is already drawn) so measured and
+    // computed slip directions can be compared on the same plane.
+    const plotPredictedOnStereonet = (
+        stereonet: Wulff,
+        predicted: any[],
+        repr: AvailableRepresentation,
+        style: DataStyle
+    ) => {
+        switch (repr.representation.name) {
+            case 'poles':
+                stereonet.addPoles(predicted as PoleData[], style, 'square');
+                break;
+            case 'planes':
+                stereonet.addExtensionFractures(predicted as ExtensionFractureData[], style);
+                break;
+            case 'striated_planes':
+                (predicted as StriatedPlaneData[]).forEach(p => stereonet.addStriationArrow(p, style));
                 break;
         }
     };
@@ -709,6 +767,28 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             className="rounded"
                         />
                     </label>
+
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Predicted</span>
+                        <input
+                            type="checkbox"
+                            checked={currentState.settings.showPredicted}
+                            onChange={(e) => updateSettings({ showPredicted: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+
+                    {currentState.settings.showPredicted && (
+                        <label className="flex items-center justify-between">
+                            <span className="text-sm">Predicted Color</span>
+                            <input
+                                type="color"
+                                value={currentState.settings.predictedColor}
+                                onChange={(e) => updateSettings({ predictedColor: e.target.value })}
+                                className="w-10 h-6 rounded"
+                            />
+                        </label>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium mb-1">

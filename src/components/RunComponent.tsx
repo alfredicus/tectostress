@@ -630,7 +630,9 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             misfitStrategy === 'DOT' ? FractureStrategy.DOT : FractureStrategy.ANGLE
                         );
 
-                        console.warn(data, dataParams)
+                        // Tag the datum with its source file so predicted results can be
+                        // matched back to the right rows (id is only unique within a file).
+                        try { (data as any).filename = file.name; } catch { /* setter may be absent */ }
 
                         inv.addData(data);
                         processingStats.processed++;
@@ -971,6 +973,65 @@ const RunComponent: React.FC<RunComponentProps> = ({
         setSelectedFiles([]);
     };
 
+    // After a run, compute the predicted (ideal) orientation for each datum from the inverted
+    // stress tensor via each Data's predict() method. Keyed by `${filename}::${id}` so results
+    // can be matched back to the right rows (id is only unique within a file).
+    // predict() returns either { normal, striation } (faults) or a Vector3 = predicted normal
+    // (joints ∥ σ3, stylolites ∥ σ1); shear fractures return void and are skipped.
+    const predictions = useMemo(() => {
+        const map = new Map<string, { normal?: number[]; striation?: number[]; misfitAngle?: number }>();
+        if (!processedData?.data || !solution) return map;
+
+        const { data, engine } = processedData;
+        try {
+            // The search leaves the engine on the last candidate evaluated, so reset it to the
+            // best solution before predicting (mirrors the lib's own Runner).
+            engine?.setHypotheticalStress?.(solution.rotationMatrixW, solution.stressRatio);
+        } catch (e) {
+            console.warn('Could not reset engine to solution for prediction', e);
+            return map;
+        }
+
+        const isNonZero = (v: number[]) => Array.isArray(v) && v.some(c => Math.abs(c) > 1e-9);
+        // Acute angle (0–90°) between two vectors; sense-independent, suitable as a misfit metric.
+        const angleDeg = (a: number[], b: number[]): number | undefined => {
+            if (!Array.isArray(a) || !Array.isArray(b)) return undefined;
+            const na = Math.hypot(a[0], a[1], a[2]);
+            const nb = Math.hypot(b[0], b[1], b[2]);
+            if (na === 0 || nb === 0) return undefined;
+            const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
+            return Math.acos(Math.min(1, Math.max(-1, Math.abs(c)))) * 180 / Math.PI;
+        };
+
+        data.forEach((d: any) => {
+            if (typeof d?.predict !== 'function') return;
+            try {
+                const stress = engine.stress(d.position);
+                const pred = d.predict(engine, { stress });
+                if (!pred) return;
+
+                const key = `${d.filename ?? ''}::${d.id}`;
+                if (Array.isArray(pred)) {
+                    // Predicted normal (extension fractures / stylolites)
+                    if (isNonZero(pred)) {
+                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred) });
+                    }
+                } else if (pred.striation && isNonZero(pred.striation)) {
+                    // Predicted striation (striated planes / faults); zero when shear stress ≈ 0
+                    map.set(key, {
+                        normal: pred.normal,
+                        striation: pred.striation,
+                        misfitAngle: angleDeg(d.striationVector, pred.striation)
+                    });
+                }
+            } catch {
+                // Skip data that cannot be predicted (e.g. shear stress ≈ 0)
+            }
+        });
+
+        return map;
+    }, [processedData, solution]);
+
     // Create enhanced files with solution data for visualizations
     const enhancedFiles = useMemo(() => {
         if (!solution) return files;
@@ -1092,8 +1153,31 @@ const RunComponent: React.FC<RunComponentProps> = ({
             layout: { x: 0, y: 0, w: 6, h: 3 }
         };
 
-        return [...files, resultsFile];
-    }, [files, solution, selectedMethod, currentParams]);
+        // Attach predicted (computed) orientations onto copies of the input rows so the
+        // visualizations (e.g. Wulff) can overlay measured vs computed data. Originals are
+        // never mutated.
+        const augmentedFiles = predictions.size === 0
+            ? files
+            : files.map(file => {
+                const rows = file.content || (file as any).data;
+                if (!Array.isArray(rows)) return file;
+                let touched = false;
+                const newRows = rows.map((row: any) => {
+                    const pred = predictions.get(`${file.name}::${row.id}`);
+                    if (!pred) return row;
+                    touched = true;
+                    return {
+                        ...row,
+                        ...(pred.normal ? { predicted_normal: pred.normal } : {}),
+                        ...(pred.striation ? { predicted_striation: pred.striation } : {}),
+                        ...(pred.misfitAngle != null ? { misfit_angle: pred.misfitAngle } : {})
+                    };
+                });
+                return touched ? { ...file, content: newRows } : file;
+            });
+
+        return [...augmentedFiles, resultsFile];
+    }, [files, solution, selectedMethod, currentParams, predictions]);
 
     // Results panel — inline JSX (not a nested component, to avoid remount flicker)
     const resultsPanelContent = (() => {

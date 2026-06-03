@@ -15,6 +15,9 @@ export interface RoseSettings {
     showCircles: boolean;
     innerRadius: number;
     zoomLevel: number;
+    // Misfit-angle overlay (populated after a stress inversion run)
+    showPredicted: boolean;
+    predictedColor: string;
 }
 
 export function createRoseSettings(): RoseSettings {
@@ -28,7 +31,9 @@ export function createRoseSettings(): RoseSettings {
         showCardinals: true,
         showCircles: true,
         innerRadius: 5,
-        zoomLevel: 1.0
+        zoomLevel: 1.0,
+        showPredicted: false,
+        predictedColor: '#0066cc'
     };
 }
 

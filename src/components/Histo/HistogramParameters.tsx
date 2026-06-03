@@ -14,6 +14,9 @@ export interface HistogramSettings {
     xAxisLabel: string;
     yAxisLabel: string;
     zoomLevel: number;
+    // Misfit-angle overlay (populated after a stress inversion run)
+    showPredicted: boolean;
+    predictedColor: string;
 }
 
 export function createHistogramSettings(): HistogramSettings {
@@ -26,6 +29,8 @@ export function createHistogramSettings(): HistogramSettings {
         showLabels: true,
         xAxisLabel: 'Value',
         yAxisLabel: 'Frequency',
-        zoomLevel: 1.0
+        zoomLevel: 1.0,
+        showPredicted: false,
+        predictedColor: '#0066cc'
     };
 }

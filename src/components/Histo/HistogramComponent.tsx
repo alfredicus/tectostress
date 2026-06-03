@@ -220,6 +220,8 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
         }
 
         const allData: number[] = [];
+        // Misfit-angle overlay (computed values present on rows after a stress inversion run)
+        const overlayData: number[] = [];
 
         const enabledDataTypes = availableDataTypes
             .filter(dt => dt.enabled)
@@ -242,20 +244,36 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
                     if (!isNaN(value)) {
                         allData.push(value);
                     }
+                    if (currentState.settings.showPredicted && row.misfit_angle != null) {
+                        const m = parseFloat(row.misfit_angle);
+                        if (!isNaN(m)) overlayData.push(m);
+                    }
                 }
             });
         });
 
+        histogram.params.overlayColor = currentState.settings.predictedColor;
+
         // Update histogram with data
         if (allData.length > 0) {
             histogram.data = allData;
+            histogram.overlayData = overlayData;
             const stats = histogram.getStatistics();
             setDataStats(stats);
         } else {
+            histogram.overlayData = [];
             histogram.data = [];
             setDataStats(null);
         }
-    }, [histogram, files, selectedFiles, availableDataTypes, currentState.selectedColumn]);
+    }, [
+        histogram,
+        files,
+        selectedFiles,
+        availableDataTypes,
+        currentState.selectedColumn,
+        currentState.settings.showPredicted,
+        currentState.settings.predictedColor
+    ]);
 
     // Export functionality
     const exportData = () => {
@@ -469,6 +487,25 @@ const HistogramComponent: React.FC<BaseVisualizationProps<HistogramCompState>> =
                             onChange={(e) => updateSettings({ showLabels: e.target.checked })}
                             className="rounded"
                         />
+                    </label>
+
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Predicted (misfit)</span>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={currentState.settings.showPredicted}
+                                onChange={(e) => updateSettings({ showPredicted: e.target.checked })}
+                                className="rounded"
+                            />
+                            <input
+                                type="color"
+                                value={currentState.settings.predictedColor}
+                                onChange={(e) => updateSettings({ predictedColor: e.target.value })}
+                                className="w-6 h-5 border rounded cursor-pointer"
+                                disabled={!currentState.settings.showPredicted}
+                            />
+                        </div>
                     </label>
                 </div>
             </div>

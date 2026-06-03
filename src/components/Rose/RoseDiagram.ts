@@ -25,6 +25,7 @@ export type RoseDiagramParameters = {
     fillColor?: string,
     lineColor?: string,
     colourHover?: string,
+    overlayColor?: string,
 }
 
 /**
@@ -51,7 +52,8 @@ export const DefaultRoseDiagramParameters: RoseDiagramParameters = {
     fillColor: '#ff0000',
     lineColor: '#000000',
     gradTickSpacing: 7,
-    colourHover: 'purple'
+    colourHover: 'purple',
+    overlayColor: '#0066cc'
 }
 
 /**
@@ -60,6 +62,7 @@ export const DefaultRoseDiagramParameters: RoseDiagramParameters = {
 export class RoseDiagram {
     private element_: string = undefined
     private data_: number[] = []
+    private overlayData_: number[] = []
     params: RoseDiagramParameters = DefaultRoseDiagramParameters
 
     constructor(element: string, data: number[], params: RoseDiagramParameters = DefaultRoseDiagramParameters) {
@@ -86,6 +89,21 @@ export class RoseDiagram {
 
     get data() {
         return this.data_
+    }
+
+    // Optional secondary series (e.g. misfit-angle distribution) drawn translucent on top.
+    set overlayData(d: number[]) {
+        this.overlayData_ = d || []
+        this.update()
+    }
+
+    get overlayData() {
+        return this.overlayData_
+    }
+
+    set overlayColor(c: string) {
+        this.params.overlayColor = c
+        this.update()
     }
 
     set is360(b: boolean) {
@@ -193,28 +211,43 @@ export class RoseDiagram {
 
         // Only process and display data if available
         if (hasData) {
-            // Binning...
-            let dataRose: Item[] = binSerieFromAngle(data, this.params.deltaAngle, isBetween0and360)
-
-            let children: Item[] = undefined
-            if (isBetween0and360 === false) {
-                let dataRoseSym = dataRose.map((d, i) => {
-                    return {
+            // Helper: bin a serie and mirror it for [0,180] mode (matches the primary series)
+            const toChildren = (serie: number[]): Item[] => {
+                const binned = binSerieFromAngle(serie, this.params.deltaAngle, isBetween0and360)
+                if (isBetween0and360 === false) {
+                    const sym = binned.map((d) => ({
                         startAngle: d.startAngle + Math.PI,
                         endAngle: d.endAngle + Math.PI,
                         freq: d.freq,
-                    }
-                })
-                children = dataRose.concat(dataRoseSym)
-            }
-            else {
-                children = dataRose
+                    }))
+                    return binned.concat(sym)
+                }
+                return binned
             }
 
-            // Range and domain of the frequence for rose diagram
+            // Binning...
+            let dataRose: Item[] = binSerieFromAngle(data, this.params.deltaAngle, isBetween0and360)
+            let children: Item[] = toChildren(data)
+
+            // Optional overlay series (e.g. misfit-angle distribution)
+            const overlayHas = this.overlayData_ && this.overlayData_.length > 0
+            const overlayData = overlayHas ? this.overlayData_.map(d => {
+                while (d < 0) d += 360
+                while (d > 360) d -= 360
+                return d
+            }) : []
+            const overlayRose: Item[] = overlayHas ? binSerieFromAngle(overlayData, this.params.deltaAngle, isBetween0and360) : []
+            const overlayChildren: Item[] = overlayHas ? toChildren(overlayData) : []
+
+            // Range and domain of the frequence for rose diagram (shared by both series)
+            const freqMax = Math.max(
+                d3.max(dataRose, (d: Item) => d.freq) || 0,
+                d3.max(overlayRose, (d: Item) => d.freq) || 0,
+                1
+            )
             let freq = d3
                 .scaleLinear()
-                .domain([0, d3.max(dataRose, (d: Item) => d.freq)])
+                .domain([0, freqMax])
                 .range([this.params.innerR, outerR])
 
             radius.domain([0, d3.max(dataRose, (d: Item) => undefined),])
@@ -236,6 +269,25 @@ export class RoseDiagram {
             }
 
             gg.style('fill', this.params.fillColor).join('path')
+
+            // Plot the overlay series translucent on top
+            if (overlayHas) {
+                g.append('g')
+                    .selectAll('path')
+                    .data(overlayChildren)
+                    .join('path')
+                    .attr('d', d3.arc<Item>()
+                        .innerRadius((d) => freq((d as Item).freq))
+                        .outerRadius(this.params.innerR)
+                        .padAngle(0.01)
+                        .padRadius(20)
+                    )
+                    .style('fill', this.params.overlayColor)
+                    .style('fill-opacity', 0.35)
+                    .attr('stroke', this.params.overlayColor)
+                    .attr('stroke-width', 1)
+                    .style('pointer-events', 'none')
+            }
 
             // Add radius line (only with data)
             g.selectAll('.axis')
