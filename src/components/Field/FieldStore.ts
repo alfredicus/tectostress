@@ -24,6 +24,12 @@ export const FieldStore = {
         return records
     },
 
+    update(record: FieldRecord): FieldRecord[] {
+        const records = FieldStore.load().map(r => r.id === record.id ? record : r)
+        FieldStore.save(records)
+        return records
+    },
+
     remove(id: string): FieldRecord[] {
         const records = FieldStore.load().filter(r => r.id !== id)
         FieldStore.save(records)

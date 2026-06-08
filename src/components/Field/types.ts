@@ -56,6 +56,15 @@ export interface StriationOrientation {
     plunge?: number
 }
 
+// Metadata for a file attached to a record (e.g. a LiDAR 3D scan). The actual
+// bytes are stored in IndexedDB (see AttachmentStore), keyed by `id`.
+export interface Attachment {
+    id: string          // IndexedDB key
+    name: string        // original filename
+    mime: string        // MIME type ('' → application/octet-stream)
+    size: number        // bytes
+}
+
 export interface GpsPosition {
     latitude: number
     longitude: number
@@ -77,6 +86,8 @@ export interface FieldRecord {
 
     gps?: GpsPosition
     photos: string[]        // data-URIs or Capacitor file paths
+    audio?: string          // voice note as a data-URI (audio/webm, audio/mp4…)
+    attachments?: Attachment[]   // arbitrary files (3D scans…); bytes in IndexedDB
     notes: string
     convention: OrientationConvention
 }

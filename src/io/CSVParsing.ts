@@ -17,6 +17,37 @@ export type ProcessCSVReturnType = {
 }
 
 /**
+ * The stress library is inconsistent about how it reads multi-word geological
+ * parameters: the plane decoder used by fractures/stylolites reads camelCase
+ * (`dipDirection`), while the fault reader reads the space-separated form
+ * (`dip direction`). Column normalization produces the space-separated keys, so
+ * non-vertical fractures fail at initialization because `dipDirection` is
+ * missing. To satisfy both reader conventions we add camelCase aliases (with the
+ * same value) alongside the canonical space-separated keys on every row.
+ */
+const CAMEL_CASE_ALIASES: Record<string, string> = {
+    'dip direction': 'dipDirection',
+    'strike direction': 'strikeDirection',
+    'type of movement': 'typeOfMovement',
+    'striation trend': 'striationTrend',
+    'line trend': 'lineTrend',
+    'line plunge': 'linePlunge',
+    'deformation phase': 'deformationPhase',
+    'relative weight': 'relativeWeight',
+    'bedding plane strike': 'beddingPlaneStrike',
+    'bedding plane dip': 'beddingPlaneDip',
+    'bedding plane dip direction': 'beddingPlaneDipDirection',
+}
+
+function addCamelCaseAliases(row: Record<string, any>): void {
+    for (const [spaced, camel] of Object.entries(CAMEL_CASE_ALIASES)) {
+        if (row[spaced] !== undefined && row[camel] === undefined) {
+            row[camel] = row[spaced]
+        }
+    }
+}
+
+/**
  * Enhanced CSV processor with better error handling and delimiter detection
  */
 export function processCSV(csvData: string): ProcessCSVReturnType {
@@ -143,6 +174,9 @@ export function processCSV(csvData: string): ProcessCSVReturnType {
                     normalizedRow[normalizedKey] = value;
                 }
             });
+
+            // Satisfy the library's camelCase plane reader (see note above).
+            addCamelCaseAliases(normalizedRow);
 
             // Validate the row if it has a type field
             if (normalizedRow['type']) {
