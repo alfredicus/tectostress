@@ -179,8 +179,9 @@ export async function toZip(records: FieldRecord[], sep: CsvDelimiter = ';'): Pr
     const zip = new JSZip()
     const photosDir = zip.folder('photos')!
     const audioDir = zip.folder('audio')!
+    const videoDir = zip.folder('video')!
     const filesDir = zip.folder('files')!
-    const headers = [...CONVENTIONAL_HEADERS, 'photos', 'voice', 'files']
+    const headers = [...CONVENTIONAL_HEADERS, 'photos', 'voice', 'video', 'files']
 
     const withPlane = records.filter(r => r.plane)
     const lines: string[] = []
@@ -206,6 +207,17 @@ export async function toZip(records: FieldRecord[], sep: CsvDelimiter = ';'): Pr
             }
         }
 
+        // Videos: blobs from IndexedDB stored as real files under video/.
+        const videoRefs: string[] = []
+        for (const v of r.videos ?? []) {
+            const blob = await AttachmentStore.get(v.id)
+            if (!blob) continue
+            const safe = v.name.replace(/[\/\\]/g, '_')
+            const name = `rec-${idx + 1}-${safe}`
+            videoDir.file(name, blob)
+            videoRefs.push(`video/${name}`)
+        }
+
         // Attachments: pull each blob from IndexedDB and store it as a real file.
         const fileRefs: string[] = []
         for (const a of r.attachments ?? []) {
@@ -221,6 +233,7 @@ export async function toZip(records: FieldRecord[], sep: CsvDelimiter = ';'): Pr
             .map(h =>
                 h === 'photos' ? photoRefs.join('|')
                 : h === 'voice' ? voiceRef
+                : h === 'video' ? videoRefs.join('|')
                 : h === 'files' ? fileRefs.join('|')
                 : row[h])
             .map(csvCell)

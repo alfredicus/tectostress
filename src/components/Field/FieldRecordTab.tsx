@@ -65,10 +65,13 @@ export default function FieldRecordTab({ onFileLoaded, onNavigateToData }: Props
         setRecords(FieldStore.load())
     }, [])
 
-    // All attachment ids referenced across the given records.
+    // All blob ids (attachments + videos) referenced across the given records.
     function referencedAttachmentIds(recs: FieldRecord[]): Set<string> {
         const ids = new Set<string>()
-        recs.forEach(r => (r.attachments ?? []).forEach(a => ids.add(a.id)))
+        recs.forEach(r => {
+            (r.attachments ?? []).forEach(a => ids.add(a.id))
+            ;(r.videos ?? []).forEach(v => ids.add(v.id))
+        })
         return ids
     }
 
@@ -299,6 +302,15 @@ export default function FieldRecordTab({ onFileLoaded, onNavigateToData }: Props
                         </div>
                     )}
 
+                    {selected.videos && selected.videos.length > 0 && (
+                        <div>
+                            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Videos</div>
+                            <div className="flex flex-col gap-2">
+                                {selected.videos.map(v => <StoredVideo key={v.id} id={v.id} />)}
+                            </div>
+                        </div>
+                    )}
+
                     {selected.attachments && selected.attachments.length > 0 && (
                         <div>
                             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Attachments</div>
@@ -491,6 +503,7 @@ export default function FieldRecordTab({ onFileLoaded, onNavigateToData }: Props
                                     </span>
                                     <span className="flex items-center gap-1.5 text-xs text-gray-400">
                                         {r.audio && <span title="Voice note">🎤</span>}
+                                        {r.videos && r.videos.length > 0 && <span title="Videos">🎥 {r.videos.length}</span>}
                                         {r.attachments && r.attachments.length > 0 && <span title="Attachments">📎 {r.attachments.length}</span>}
                                         {r.photos.length > 0 && <span>{r.photos.length} photo{r.photos.length > 1 ? 's' : ''}</span>}
                                     </span>
@@ -518,6 +531,22 @@ export default function FieldRecordTab({ onFileLoaded, onNavigateToData }: Props
             )}
         </div>
     )
+}
+
+// Plays a video stored as a blob in IndexedDB, resolving it to an object URL.
+function StoredVideo({ id }: { id: string }) {
+    const [url, setUrl] = useState<string>()
+    useEffect(() => {
+        let revoked = false
+        let objUrl: string | undefined
+        AttachmentStore.get(id).then(blob => {
+            if (blob && !revoked) { objUrl = URL.createObjectURL(blob); setUrl(objUrl) }
+        })
+        return () => { revoked = true; if (objUrl) URL.revokeObjectURL(objUrl) }
+    }, [id])
+    return url
+        ? <video src={url} controls className="w-full rounded-lg border border-gray-300 dark:border-gray-700" />
+        : <div className="text-xs text-gray-400">Loading video…</div>
 }
 
 function TypeIcon({ type }: { type: string }) {

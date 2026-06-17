@@ -87,6 +87,7 @@ export interface FieldRecord {
     gps?: GpsPosition
     photos: string[]        // data-URIs or Capacitor file paths
     audio?: string          // voice note as a data-URI (audio/webm, audio/mp4…)
+    videos?: Attachment[]   // video clips; bytes in IndexedDB (large)
     attachments?: Attachment[]   // arbitrary files (3D scans…); bytes in IndexedDB
     notes: string
     convention: OrientationConvention
