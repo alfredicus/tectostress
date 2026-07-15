@@ -101,7 +101,7 @@ import {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
+function getAvailableRepresentations(files: any[], enableByDefault = false): AvailableRepresentation[] {
     const available: AvailableRepresentation[] = [];
 
     Object.entries(DATA_TYPE_CONFIGS).forEach(([dataType, config]) => {
@@ -128,7 +128,7 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
                     dataType,
                     representation: repr,
                     availableInFiles,
-                    enabled: false,
+                    enabled: enableByDefault,
                     color: repr.defaultColor,
                     opacity: 1.0
                 });
@@ -143,14 +143,15 @@ function getAvailableRepresentations(files: any[]): AvailableRepresentation[] {
 // WULFF STEREONET COMPONENT
 // ============================================================================
 
-const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
+const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEnable?: boolean }> = ({
     files,
     width = 600,
     height = 600,
     title = "Wulff Stereonet",
     state,
     onStateChange,
-    onDimensionChange
+    onDimensionChange,
+    autoEnable = false
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [stereonet, setStereonet] = useState<Wulff | null>(null);
@@ -197,7 +198,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
             return;
         }
 
-        const newAvailableRepresentations = getAvailableRepresentations(files);
+        const newAvailableRepresentations = getAvailableRepresentations(files, autoEnable);
         const fileIds = files.map(f => f.id);
 
         const representationsChanged = JSON.stringify(newAvailableRepresentations.map(r => r.key)) !==
@@ -289,13 +290,17 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                     totalStats.plotted += processedData.stats.plotted;
                     totalStats.errors += processedData.stats.errors;
 
+                    const symbolSize = currentState.settings.symbolSize ?? 4;
+                    const arrowLength = currentState.settings.arrowLength ?? 15;
+
                     if (processedData.data.length > 0) {
                         const dataStyle: DataStyle = {
                             color: repr.color,
                             width: 2,
-                            size: 4,
+                            size: symbolSize,
                             opacity: repr.opacity,
-                            arrowSize: 15,
+                            arrowLength,
+                            arrowSize: Math.max(6, arrowLength * 0.55),
                             showLabels: currentState.settings.showLabels
                         };
 
@@ -306,9 +311,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                         const predictedStyle: DataStyle = {
                             color: currentState.settings.predictedColor,
                             width: 2,
-                            size: 4,
+                            size: symbolSize,
                             opacity: repr.opacity,
-                            arrowSize: 15,
+                            arrowLength,
+                            arrowSize: Math.max(6, arrowLength * 0.55),
                             showLabels: false
                         };
 
@@ -317,13 +323,49 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                 });
             });
 
+        // Overlay the principal stress axes (σ1, σ2, σ3) from the inversion, if present.
+        // Treat undefined (old persisted settings) as "show".
+        if (currentState.settings.showStressAxes !== false) {
+            const axesFile = files.find(f => (f as any).stressAxes);
+            const axes = (axesFile as any)?.stressAxes;
+            if (axes) {
+                const specs = [
+                    { key: 'sigma1', label: 'σ1', color: '#dc2626' }, // red
+                    { key: 'sigma2', label: 'σ2', color: '#16a34a' }, // green
+                    { key: 'sigma3', label: 'σ3', color: '#2563eb' }, // blue
+                ];
+                // Stars are drawn a bit larger than data markers so they read clearly.
+                const starSize = (currentState.settings.symbolSize ?? 4) * 2.2;
+                specs.forEach(s => {
+                    const dir = axes[s.key];
+                    if (Array.isArray(dir) && dir.length === 3) {
+                        stereonet.addPole(
+                            { vector: libVec3ToVector3D(dir), id: s.label },
+                            {
+                                color: s.color,
+                                fillColor: s.color,
+                                strokeColor: '#000000',
+                                size: starSize,
+                                opacity: 1,
+                                showLabels: true,
+                            },
+                            'star'
+                        );
+                    }
+                });
+            }
+        }
+
         setDataStats(totalStats);
     }, [
         stereonet,
         currentState.settings.availableRepresentations,
         files,
         currentState.settings.showPredicted,
-        currentState.settings.predictedColor
+        currentState.settings.predictedColor,
+        currentState.settings.showStressAxes,
+        currentState.settings.symbolSize,
+        currentState.settings.arrowLength
     ]);
 
     const processDataForRepresentation = (
@@ -361,9 +403,15 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             const strike = parseFloat(row.strike);
                             const dip = parseFloat(row.dip);
                             if (!isNaN(strike) && !isNaN(dip)) {
-                                const trend = (strike + 90) % 360;
-                                const plunge = 90 - dip;
-                                const vector = trendPlungeToVector(trend, plunge);
+                                // Derive the pole from the plane normal (same source as the
+                                // 'planes' / 'striated_planes' branches) so the azimuth is the
+                                // true anti-dip direction. projectVector() then forces it into
+                                // the lower hemisphere. The former strike+90 / 90−dip shortcut
+                                // placed the pole on the dip side, making it look like an
+                                // upper-hemisphere pole.
+                                const dipDirection = parseDipDirection(row, strike);
+                                const helper = new FaultDataHelper({ strike, dipDirection, dip });
+                                const vector = libVec3ToVector3D(helper.normal);
                                 dataPoint = { vector, id: index + 1 } as PoleData;
                             }
                         }
@@ -789,6 +837,46 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState>> = ({
                             />
                         </label>
                     )}
+
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Stress Axes (σ₁ σ₂ σ₃)</span>
+                        <input
+                            type="checkbox"
+                            checked={currentState.settings.showStressAxes !== false}
+                            onChange={(e) => updateSettings({ showStressAxes: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1">
+                            Symbol size: {currentState.settings.symbolSize ?? 4} px
+                        </label>
+                        <input
+                            type="range"
+                            min="2"
+                            max="16"
+                            step="1"
+                            value={currentState.settings.symbolSize ?? 4}
+                            onChange={(e) => updateSettings({ symbolSize: parseInt(e.target.value) })}
+                            className="w-full"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1">
+                            Arrow length: {currentState.settings.arrowLength ?? 15} px
+                        </label>
+                        <input
+                            type="range"
+                            min="5"
+                            max="40"
+                            step="1"
+                            value={currentState.settings.arrowLength ?? 15}
+                            onChange={(e) => updateSettings({ arrowLength: parseInt(e.target.value) })}
+                            className="w-full"
+                        />
+                    </div>
 
                     <div>
                         <label className="block text-sm font-medium mb-1">

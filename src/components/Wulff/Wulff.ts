@@ -955,6 +955,27 @@ export class Wulff {
                     .attr('stroke-width', 1);
                 break;
             }
+            case 'star': {
+                // Five-pointed star centred at (x, y); outer radius = size.
+                const outer = defaultStyle.size!;
+                const inner = outer * 0.45;
+                const spikes = 5;
+                let path = '';
+                for (let i = 0; i < spikes * 2; i++) {
+                    const r = i % 2 === 0 ? outer : inner;
+                    const ang = (Math.PI / spikes) * i - Math.PI / 2;
+                    const px = x + r * Math.cos(ang);
+                    const py = y + r * Math.sin(ang);
+                    path += `${i === 0 ? 'M' : 'L'}${px},${py} `;
+                }
+                path += 'Z';
+                element = this.svg.append('path')
+                    .attr('d', path)
+                    .attr('fill', defaultStyle.fillColor || defaultStyle.color!)
+                    .attr('stroke', defaultStyle.strokeColor || 'black')
+                    .attr('stroke-width', 1);
+                break;
+            }
             case 'cross': {
                 const g = this.svg.append('g');
                 g.append('line')

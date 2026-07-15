@@ -18,6 +18,8 @@ import { Button, FormControl, InputLabel, MenuItem, Select } from '@mui/material
 import MCMCStatsComponent from './MCMCStats/MCMCStatsComponent';
 import ParameterSpaceLandscapeComponent from './ParameterSpace/ParameterSpaceLandscapeComponent';
 import InversionMohrComponent from './Mohr/InversionMohrComponent';
+import MisfitHistogramComponent from './Histo/MisfitHistogramComponent';
+import WulffComponent from './Wulff/WulffComponent';
 import { useSettings } from './Settings/SettingsContext';
 
 // Configuration interfaces (same as before)
@@ -356,6 +358,17 @@ const RunComponent: React.FC<RunComponentProps> = ({
     const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
     // Misfit criterion (ANGLE = normalized acos in [0,1], DOT = 1−|cos| in [0,1])
     const [misfitStrategy, setMisfitStrategy] = useState<'ANGLE' | 'DOT'>('ANGLE');
+
+    // Which result visualizations to show inline in the results panel
+    const [resultViews, setResultViews] = useState<{
+        histogram: boolean;
+        wulff: boolean;
+        mohr: boolean;
+        landscape: boolean;
+    }>({ histogram: true, wulff: true, mohr: true, landscape: true });
+    const toggleResultView = useCallback((key: keyof typeof resultViews) => {
+        setResultViews(prev => ({ ...prev, [key]: !prev[key] }));
+    }, []);
 
     // Global settings (stress convention, …)
     const { settings } = useSettings();
@@ -979,8 +992,23 @@ const RunComponent: React.FC<RunComponentProps> = ({
     // predict() returns either { normal, striation } (faults) or a Vector3 = predicted normal
     // (joints ∥ σ3, stylolites ∥ σ1); shear fractures return void and are skipped.
     const predictions = useMemo(() => {
-        const map = new Map<string, { normal?: number[]; striation?: number[]; misfitAngle?: number }>();
+        const map = new Map<string, { normal?: number[]; striation?: number[]; misfitAngle?: number; category?: string }>();
         if (!processedData?.data || !solution) return map;
+
+        // Friendly, grouped label for each Data subclass (constructor name) so the misfit
+        // histogram can be split by data type (striations, fractures, stylolites, …).
+        const categoryOf = (d: any): string => {
+            const cls = d?.constructor?.name ?? '';
+            switch (cls) {
+                case 'StriatedPlaneKin': return 'Striated planes';
+                case 'NeoformedStriatedPlane': return 'Neoformed striated planes';
+                case 'ExtensionFracture': return 'Extension fractures';
+                case 'StyloliteInterface': return 'Stylolites';
+                case 'CompactionBand': return 'Compaction bands';
+                case 'DilationBand': return 'Dilation bands';
+                default: return cls || 'Other';
+            }
+        };
 
         const { data, engine } = processedData;
         try {
@@ -1011,17 +1039,19 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 if (!pred) return;
 
                 const key = `${d.filename ?? ''}::${d.id}`;
+                const category = categoryOf(d);
                 if (Array.isArray(pred)) {
                     // Predicted normal (extension fractures / stylolites)
                     if (isNonZero(pred)) {
-                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred) });
+                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred), category });
                     }
                 } else if (pred.striation && isNonZero(pred.striation)) {
                     // Predicted striation (striated planes / faults); zero when shear stress ≈ 0
                     map.set(key, {
                         normal: pred.normal,
                         striation: pred.striation,
-                        misfitAngle: angleDeg(d.striationVector, pred.striation)
+                        misfitAngle: angleDeg(d.striationVector, pred.striation),
+                        category
                     });
                 }
             } catch {
@@ -1031,6 +1061,18 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
         return map;
     }, [processedData, solution]);
+
+    // Flat list of per-datum angular differences (measured vs computed), tagged by data type,
+    // used to draw the misfit histogram in the results panel.
+    const misfits = useMemo(() => {
+        const out: { category: string; angle: number }[] = [];
+        predictions.forEach(p => {
+            if (p.misfitAngle != null && Number.isFinite(p.misfitAngle)) {
+                out.push({ category: p.category ?? 'Other', angle: p.misfitAngle });
+            }
+        });
+        return out;
+    }, [predictions]);
 
     // Create enhanced files with solution data for visualizations
     const enhancedFiles = useMemo(() => {
@@ -1153,14 +1195,23 @@ const RunComponent: React.FC<RunComponentProps> = ({
             layout: { x: 0, y: 0, w: 6, h: 3 }
         };
 
+        // Principal stress axis directions (σ1, σ2, σ3), in the same coordinate frame as the
+        // data normals, so the Wulff can overlay them. Attached to every file below.
+        const stressAxes = solution.analysis
+            ? {
+                sigma1: solution.analysis.principalStresses.sigma1.direction,
+                sigma2: solution.analysis.principalStresses.sigma2.direction,
+                sigma3: solution.analysis.principalStresses.sigma3.direction
+            }
+            : undefined;
+
         // Attach predicted (computed) orientations onto copies of the input rows so the
         // visualizations (e.g. Wulff) can overlay measured vs computed data. Originals are
-        // never mutated.
-        const augmentedFiles = predictions.size === 0
-            ? files
-            : files.map(file => {
-                const rows = file.content || (file as any).data;
-                if (!Array.isArray(rows)) return file;
+        // never mutated. The stress axes are attached to the file object itself.
+        const augmentedFiles = files.map(file => {
+            const rows = file.content || (file as any).data;
+            let newFile: any = file;
+            if (predictions.size > 0 && Array.isArray(rows)) {
                 let touched = false;
                 const newRows = rows.map((row: any) => {
                     const pred = predictions.get(`${file.name}::${row.id}`);
@@ -1173,8 +1224,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         ...(pred.misfitAngle != null ? { misfit_angle: pred.misfitAngle } : {})
                     };
                 });
-                return touched ? { ...file, content: newRows } : file;
-            });
+                if (touched) newFile = { ...file, content: newRows };
+            }
+            return stressAxes ? { ...newFile, stressAxes } : newFile;
+        });
 
         return [...augmentedFiles, resultsFile];
     }, [files, solution, selectedMethod, currentParams, predictions]);
@@ -1290,11 +1343,57 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             );
                         })()}
 
+                        {/* Options: which result views to display */}
+                        <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 border rounded-lg">
+                            <span className="text-sm font-medium text-gray-700">Display:</span>
+                            {([
+                                { key: 'histogram', label: 'Angular misfit histogram' },
+                                { key: 'wulff', label: 'Wulff stereonet' },
+                                { key: 'mohr', label: 'Mohr diagram' },
+                                { key: 'landscape', label: 'Parameter-space landscape' },
+                            ] as const).map(({ key, label }) => (
+                                <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={resultViews[key]}
+                                        onChange={() => toggleResultView(key)}
+                                        className="rounded accent-blue-600"
+                                    />
+                                    <span className="text-sm text-gray-700">{label}</span>
+                                </label>
+                            ))}
+                        </div>
+
+                        {/* Angular misfit histogram (measured vs computed striations / fractures) */}
+                        {resultViews.histogram && misfits.length > 0 && (
+                            <MisfitHistogramComponent
+                                misfits={misfits}
+                                totalData={processedData?.data.length}
+                            />
+                        )}
+
+                        {/* Wulff stereonet — measured data, predicted overlay and σ1/σ2/σ3.
+                            The Wulff fills its parent's height (h-full), so it needs an explicit
+                            height here — unlike the registry it isn't inside a sized grid cell. */}
+                        {resultViews.wulff && processedData && (
+                            <div>
+                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Wulff stereonet</h4>
+                                <div style={{ height: 680 }} className="border rounded-lg bg-white">
+                                    <WulffComponent
+                                        files={enhancedFiles}
+                                        width={600}
+                                        height={600}
+                                        autoEnable={true}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* MCMC / Monte Carlo Posterior Statistics */}
                         <MCMCStatsComponent files={enhancedFiles} inline={true} />
 
                         {/* 4D Parameter Space Landscape */}
-                        {processedData && (
+                        {resultViews.landscape && processedData && (
                             <ParameterSpaceLandscapeComponent
                                 data={processedData.data}
                                 engine={processedData.engine}
@@ -1304,7 +1403,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                         )}
 
                         {/* Mohr Diagram — data normals plotted against inverted stress */}
-                        {processedData && solution.analysis && (
+                        {resultViews.mohr && processedData && solution.analysis && (
                             <InversionMohrComponent
                                 solution={solution}
                                 data={processedData.data}

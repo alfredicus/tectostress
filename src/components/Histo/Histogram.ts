@@ -13,6 +13,9 @@ export type HistogramParameters = {
         left?: number
     },
     bins?: number,
+    // Fixed x-axis domain [min, max]. When set, overrides the data-derived extent and the
+    // bins are laid out as `bins` equal-width intervals over this range.
+    domain?: [number, number],
     draw?: {
         grid?: boolean,
         labels?: boolean,
@@ -211,9 +214,13 @@ export class Histogram {
 
         // Include the overlay series in the x-domain so both fit on shared axes
         const hasOverlay = this.overlayData_ && this.overlayData_.length > 0
-        const domainExtent = hasOverlay
-            ? d3.extent(this.data_.concat(this.overlayData_)) as [number, number]
-            : extent
+        // A caller-supplied domain (e.g. 0 → user-defined max) takes precedence over the
+        // data-derived extent.
+        const domainExtent = this.params.domain
+            ? this.params.domain
+            : hasOverlay
+                ? d3.extent(this.data_.concat(this.overlayData_)) as [number, number]
+                : extent
 
         // Create scales
         const xScale = d3.scaleLinear()
@@ -224,7 +231,14 @@ export class Histogram {
         const histogram = d3.histogram<number, number>()
             .value(d => d)
             .domain(xScale.domain() as [number, number])
-            .thresholds(this.params.bins!)
+        if (this.params.domain && this.params.bins! > 0) {
+            // Exact, equal-width bins over the fixed domain so the bin count is honoured.
+            const [lo, hi] = this.params.domain
+            const step = (hi - lo) / this.params.bins!
+            histogram.thresholds(d3.range(lo + step, hi - step / 2, step))
+        } else {
+            histogram.thresholds(this.params.bins!)
+        }
 
         const bins = histogram(this.data_)
         const overlayBins = hasOverlay ? histogram(this.overlayData_) : []
@@ -329,9 +343,14 @@ export class Histogram {
 
         // Draw density curve if enabled
         if (this.params.draw!.density && mean !== undefined && stdDev !== undefined && stdDev > 0) {
-            const densityData = d3.range(extent[0], extent[1], (extent[1] - extent[0]) / 100)
+            // Keep the curve within the plotted x-range (may be narrower than the data extent).
+            const dLo = Math.max(extent[0], domainExtent[0])
+            const dHi = Math.min(extent[1], domainExtent[1])
+            const densityData = (dHi > dLo
+                ? d3.range(dLo, dHi, (dHi - dLo) / 100)
+                : [])
                 .map(x => {
-                    const density = (1 / (stdDev * Math.sqrt(2 * Math.PI))) * 
+                    const density = (1 / (stdDev * Math.sqrt(2 * Math.PI))) *
                                    Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2))
                     return { x, density }
                 })

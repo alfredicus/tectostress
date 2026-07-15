@@ -150,6 +150,11 @@ export interface WulffSettings {
     // Predicted (computed) data overlay — populated after a stress inversion run
     showPredicted: boolean;
     predictedColor: string;
+    // Principal stress axes (σ1, σ2, σ3) overlay — populated after a stress inversion run
+    showStressAxes: boolean;
+    // Marker size (poles, stars) and striation arrow length, in pixels
+    symbolSize: number;
+    arrowLength: number;
 }
 
 // ============================================================================
@@ -174,6 +179,9 @@ export function createWulffSettings(): WulffSettings {
         availableRepresentations: [],
         zoomLevel: 1.0,
         showPredicted: false,
-        predictedColor: '#0066cc'
+        predictedColor: '#0066cc',
+        showStressAxes: true,
+        symbolSize: 4,
+        arrowLength: 15
     };
 }
