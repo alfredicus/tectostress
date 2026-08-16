@@ -71,6 +71,8 @@ export interface DataStyle {
     arrowSize?: number;
     arrowLength?: number;
     showLabels?: boolean;
+    /** SVG stroke-dasharray for great circles (e.g. '5,4'); solid when absent. */
+    dashArray?: string;
 }
 
 // Configuration options
@@ -574,8 +576,9 @@ export class Wulff {
             .attr('opacity', defaultStyle.opacity!)
             .classed('data-element', true);
 
-        if (dashArray) {
-            path.attr('stroke-dasharray', dashArray);
+        const dash = dashArray ?? defaultStyle.dashArray;
+        if (dash) {
+            path.attr('stroke-dasharray', dash);
         }
 
         return path as any;

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle, Vector3D } from './Wulff';
 import { Layers } from 'lucide-react';
 import { FaultDataHelper, Direction, CDirection, TypeOfMovement, CTypeOfMovement } from '@alfredo-taboada/stress';
@@ -158,6 +158,8 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
     const [dataStats, setDataStats] = useState<any>(null);
     const [showStylePopup, setShowStylePopup] = useState<string | null>(null);
     const [showDataPanel, setShowDataPanel] = useState(false);
+    // Guards the one-shot auto-enabling of the predicted overlay (see effect below).
+    const predictedAutoEnabled = useRef(false);
 
     // ========== UTILISATION DU HOOK useVisualizationState ==========
     const {
@@ -172,7 +174,10 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         getSelectedColumnInfo
     } = useVisualizationState<WulffCompState>(
         'wulff',
-        createWulffSettings(), // ← Utilisation de la factory du WulffParameters
+        // ← Utilisation de la factory du WulffParameters.
+        // In the inversion results panel (autoEnable), measured *and* predicted data are shown
+        // side by side straight away; elsewhere the predicted overlay stays opt-in.
+        createWulffSettings({ showPredicted: autoEnable }),
         files,
         width,
         height,
@@ -192,6 +197,18 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [width, height]);
 
+    // Files that hold something this stereonet can actually draw. Used to keep purely
+    // informational files — such as the synthetic "Stress Inversion Results" file, which holds
+    // metrics rather than measurements — out of the "Files to Plot" list, where they would
+    // otherwise show up as entries that plot nothing when ticked. Computed over *all* files, not
+    // just the selected ones, so unticking a file does not make it disappear from the list.
+    const plottableFileIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (!files || files.length === 0) return ids;
+        getAvailableRepresentations(files).forEach(r => r.availableInFiles.forEach(id => ids.add(id)));
+        return ids;
+    }, [files]);
+
     // Update available representations when files change
     useEffect(() => {
         if (!files || files.length === 0) {
@@ -205,10 +222,22 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             JSON.stringify(currentState.settings.availableRepresentations.map(r => r.key));
         const filesChanged = JSON.stringify(fileIds) !== JSON.stringify(currentState.settings.selectedFiles);
 
-        if (representationsChanged || filesChanged) {
+        // Reveal the computed data as soon as an inversion attaches predictions to the rows —
+        // including in stereonets added from the visualization gallery, which are built before any
+        // run and so cannot rely on the initial `showPredicted` setting. This fires only on the
+        // transition to "predictions available", so unticking "Show Predicted" afterwards sticks.
+        const hasPredictions = files.some(f => {
+            const rows = (f as any).data || f.content;
+            return Array.isArray(rows) && rows.some((r: any) => r?.predicted_striation || r?.predicted_normal);
+        });
+        const enablePredicted = hasPredictions && !predictedAutoEnabled.current;
+        predictedAutoEnabled.current = hasPredictions;
+
+        if (representationsChanged || filesChanged || enablePredicted) {
             updateSettings({
                 selectedFiles: fileIds,
-                availableRepresentations: newAvailableRepresentations
+                availableRepresentations: newAvailableRepresentations,
+                ...(enablePredicted ? { showPredicted: true } : {})
             });
         }
     }, [files]);
@@ -267,7 +296,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         if (!stereonet || !files || files.length === 0) return;
 
         stereonet.clearData();
-        let totalStats = { total: 0, plotted: 0, errors: 0 };
+        let totalStats = { total: 0, plotted: 0, errors: 0, predicted: 0 };
 
         currentState.settings.availableRepresentations
             .filter(repr => repr.enabled)
@@ -315,10 +344,14 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             opacity: repr.opacity,
                             arrowLength,
                             arrowSize: Math.max(6, arrowLength * 0.55),
-                            showLabels: false
+                            showLabels: false,
+                            // Dashed great circles so predicted planes stay distinguishable from
+                            // the measured ones even when the two colours are close.
+                            dashArray: '5,4'
                         };
 
                         plotPredictedOnStereonet(stereonet, processedData.predicted, repr, predictedStyle);
+                        totalStats.predicted += processedData.predicted.length;
                     }
                 });
             });
@@ -386,6 +419,24 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             return result;
         }
 
+        // For planar data the prediction is a single orientation shared by every datum of the
+        // type — the plane ⊥ σ3 for joints, ⊥ σ1 for stylolites — so hundreds of coincident great
+        // circles would be stacked on the exact same spot. Keep one entry per distinct predicted
+        // orientation; a position-dependent stress field still yields one per distinct plane.
+        const seenPredicted = new Set<string>();
+        const isNewPredictedNormal = (v: number[]): boolean => {
+            const len = Math.hypot(v[0], v[1], v[2]);
+            if (!len) return false;
+            let [x, y, z] = [v[0] / len, v[1] / len, v[2] / len];
+            // A normal and its opposite describe the same plane (and project to the same pole,
+            // since projectVector forces the lower hemisphere) — canonicalise the sign.
+            if (x < 0 || (x === 0 && (y < 0 || (y === 0 && z < 0)))) { x = -x; y = -y; z = -z; }
+            const key = `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
+            if (seenPredicted.has(key)) return false;
+            seenPredicted.add(key);
+            return true;
+        };
+
         data.forEach((row, index) => {
             if (TypeSynonyms.isSameType(repr.dataType, row.type)) {
                 try {
@@ -416,7 +467,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             }
                         }
                         // Predicted pole = predicted plane normal (∥ σ3 for joints, σ1 for stylolites)
-                        if (row.predicted_normal) {
+                        if (row.predicted_normal && isNewPredictedNormal(row.predicted_normal)) {
                             result.predicted.push({ vector: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as PoleData);
                         }
                     } else if (representationType === 'planes') {
@@ -438,7 +489,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             }
                         }
                         // Predicted plane = great circle of the predicted normal
-                        if (row.predicted_normal) {
+                        if (row.predicted_normal && isNewPredictedNormal(row.predicted_normal)) {
                             result.predicted.push({ normal: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as ExtensionFractureData);
                         }
                     } else if (representationType === 'striated_planes') {
@@ -561,7 +612,19 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             : [...currentState.settings.selectedFiles, fileId];
 
         const selectedFiles = files.filter(f => newSelectedFiles.includes(f.id));
-        const newAvailableRepresentations = getAvailableRepresentations(selectedFiles);
+        // Recomputing the representations resets them to the "enableByDefault" value, which would
+        // blank the whole stereonet every time a file is ticked. Carry over what the user already
+        // chose for each representation that is still available.
+        const previous = new Map(
+            currentState.settings.availableRepresentations.map(r => [r.key, r])
+        );
+        const newAvailableRepresentations = getAvailableRepresentations(selectedFiles, autoEnable)
+            .map(repr => {
+                const prev = previous.get(repr.key);
+                return prev
+                    ? { ...repr, enabled: prev.enabled, color: prev.color, opacity: prev.opacity }
+                    : repr;
+            });
 
         updateSettings({
             selectedFiles: newSelectedFiles,
@@ -656,7 +719,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             <div>
                 <h4 className="font-medium text-gray-800 mb-2">Files to Plot</h4>
                 <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                    {files && files.map(file => (
+                    {files && files.filter(file => plottableFileIds.has(file.id)).map(file => (
                         <label key={file.id} className="flex items-center justify-between py-1">
                             <div className="flex items-center">
                                 <input
@@ -671,6 +734,9 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             </div>
                         </label>
                     ))}
+                    {plottableFileIds.size === 0 && (
+                        <p className="text-sm text-gray-500 italic">No file contains data this stereonet can plot</p>
+                    )}
                 </div>
             </div>
 
@@ -728,7 +794,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                         <Layers className="w-4 h-4 text-blue-600" />
                         <h4 className="font-semibold text-sm">Data Summary</h4>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                         <div>
                             <span className="font-medium">Total:</span> {dataStats.total}
                         </div>
@@ -738,6 +804,17 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                         <div>
                             <span className="font-medium">Errors:</span> {dataStats.errors}
                         </div>
+                        {dataStats.predicted > 0 && (
+                            <div className="flex items-center gap-1">
+                                <span
+                                    className="inline-block w-3 h-0.5"
+                                    style={{
+                                        borderTop: `2px dashed ${currentState.settings.predictedColor}`
+                                    }}
+                                />
+                                <span className="font-medium">Predicted:</span> {dataStats.predicted}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

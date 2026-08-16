@@ -89,6 +89,50 @@ export const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
             }
         ]
     },
+    'dilation band': {
+        displayName: 'Dilation Band',
+        columns: [
+            { required: ['trend', 'plunge'] },
+            { required: ['strike', 'dip'] },
+            { required: ['dip', 'strike', 'dip direction'] },
+        ],
+        representations: [
+            {
+                name: 'poles',
+                displayName: 'Dilation Band Poles',
+                symbol: '●',
+                defaultColor: '#8e44ad'
+            },
+            {
+                name: 'planes',
+                displayName: 'Dilation Band Planes',
+                symbol: '──',
+                defaultColor: '#6c3483'
+            }
+        ]
+    },
+    'compaction band': {
+        displayName: 'Compaction Band',
+        columns: [
+            { required: ['trend', 'plunge'] },
+            { required: ['strike', 'dip'] },
+            { required: ['dip', 'strike', 'dip direction'] },
+        ],
+        representations: [
+            {
+                name: 'poles',
+                displayName: 'Compaction Band Poles',
+                symbol: '●',
+                defaultColor: '#0097a7'
+            },
+            {
+                name: 'planes',
+                displayName: 'Compaction Band Planes',
+                symbol: '──',
+                defaultColor: '#00695c'
+            }
+        ]
+    },
     fault: {
         displayName: 'Fault',
         columns: [
@@ -162,9 +206,11 @@ export interface WulffSettings {
 // ============================================================================
 
 /**
- * Créer les settings par défaut pour le Wulff Stereonet
+ * Créer les settings par défaut pour le Wulff Stereonet.
+ * `overrides` permet d'adapter les valeurs initiales au contexte (par exemple afficher
+ * d'emblée les données prédites dans le panneau de résultats d'une inversion).
  */
-export function createWulffSettings(): WulffSettings {
+export function createWulffSettings(overrides: Partial<WulffSettings> = {}): WulffSettings {
     return {
         showGrid: true,
         showDirections: true,
@@ -182,6 +228,7 @@ export function createWulffSettings(): WulffSettings {
         predictedColor: '#0066cc',
         showStressAxes: true,
         symbolSize: 4,
-        arrowLength: 15
+        arrowLength: 15,
+        ...overrides
     };
 }

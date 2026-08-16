@@ -12,6 +12,7 @@ import { HistogramDescriptor } from './Histo/HistogramDescriptor';
 import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
+import { StressSphereDescriptor } from './Sphere/SphereDescriptor';
 
 // ============================================================================
 // ICON COMPONENTS
@@ -156,6 +157,12 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Rose Diagram',
         icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
+    },
+    {
+        id: 'sphere',
+        title: 'Stress Sphere',
+        icon: StressSphereDescriptor.icon,
+        defaultLayout: { w: 6, h: 5 }
     }
     // ,{
     //     id: 'fractureMap2D',
