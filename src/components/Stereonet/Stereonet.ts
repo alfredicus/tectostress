@@ -50,7 +50,7 @@ export interface LineData {
 }
 
 // Styling options
-export interface WulffStyle {
+export interface StereonetStyle {
     gridColor?: string;
     gridWidth?: number;
     gridDashArray?: string;
@@ -75,8 +75,40 @@ export interface DataStyle {
     dashArray?: string;
 }
 
+/**
+ * Projection of the lower hemisphere onto the horizontal plane:
+ * - 'wulff'  : stereographic, equal-angle  — r = R·tan(θ/2). Preserves angles; circles stay circles.
+ * - 'schmidt': Lambert azimuthal, equal-area — r = R·√2·sin(θ/2). Preserves areas; used for densities.
+ * θ is the angle between the projected direction and the downward vertical.
+ */
+export type ProjectionType = 'wulff' | 'schmidt';
+
+/** Options for pole density contouring (see Stereonet.addDensityContours) */
+export interface DensityContourOptions {
+    /** Contour line colour, and end colour of the fill ramp */
+    color: string;
+    /** Approximate number of contour levels; actual levels are rounded to nice MUD values */
+    levels?: number;
+    /** Kamb sigma: smoothing in standard deviations of a uniform distribution (Vollmer 1995) */
+    sigma?: number;
+    /** Fill the bands between contours with a white → colour ramp */
+    fill?: boolean;
+    /** Legend text (e.g. data type name) */
+    label?: string;
+    /** Raster resolution used to evaluate the density (cells per side) */
+    gridSize?: number;
+}
+
+export interface DensityContourResult {
+    count: number;
+    /** Maximum density, in multiples of uniform density (MUD) */
+    max: number;
+    thresholds: number[];
+}
+
 // Configuration options
-export interface WulffOptions {
+export interface StereonetOptions {
+    projection?: ProjectionType;
     width?: number;
     height?: number;
     margin?: number;
@@ -84,12 +116,12 @@ export interface WulffOptions {
     showGrid?: boolean;
     showDirections?: boolean;
     showLabels?: boolean;
-    stereonetStyle?: WulffStyle;
+    stereonetStyle?: StereonetStyle;
     defaultDataStyle?: DataStyle;
 }
 
 /**
- * WulffStereonet class for plotting geological data on a stereographic projection
+ * Stereonet class for plotting geological data on a stereographic (Wulff, equal-angle) or Lambert (Schmidt, equal-area) projection
  * Uses vector-based input for planes and lines
  *
  * Coordinate system:
@@ -97,7 +129,7 @@ export interface WulffOptions {
  * - y: North
  * - z: Up (vertical)
  */
-export class Wulff {
+export class Stereonet {
     private svg!: d3.Selection<SVGGElement, unknown, null, undefined>;
     private container!: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     private width: number;
@@ -105,15 +137,17 @@ export class Wulff {
     private radius: number;
     private centerX: number;
     private centerY: number;
-    private options: WulffOptions;
+    private options: StereonetOptions;
     private labelPositions: { x: number; y: number; radius: number }[] = [];
     private storedLabelPositions: Map<string | number, { x: number; y: number }> = new Map();
+    private densityLegendCount = 0;
 
-    constructor(containerId: string, options: WulffOptions = {}) {
+    constructor(containerId: string, options: StereonetOptions = {}) {
         this.options = {
             width: 600,
             height: 600,
             margin: 50,
+            projection: 'wulff',
             gridInterval: 10,
             showGrid: true,
             showDirections: true,
@@ -260,17 +294,100 @@ export class Wulff {
     }
 
     /**
+     * Contour the density of a set of poles (axial data: v and -v are the same pole).
+     *
+     * Density is estimated with the exponential Kamb kernel (Vollmer 1995), i.e. a Fisher kernel
+     * of concentration k = 2(1 + n/σ²), and expressed in multiples of uniform density (MUD).
+     * It is computed on the sphere and only then projected, so contours are correct for both the
+     * Wulff and the Schmidt net. Drawn under the grid and the data.
+     */
+    public addDensityContours(vectors: Vector3D[], opts: DensityContourOptions): DensityContourResult | null {
+        const n = vectors.length;
+        if (n === 0) return null;
+
+        const sigma = opts.sigma ?? 3;
+        const k = 2 * (1 + n / (sigma * sigma));
+        // Axial Fisher kernel normalised to the uniform density:
+        //   k·cosh(k·c)/sinh(k) = k·(e^{k(c-1)} + e^{-k(c+1)}) / (1 - e^{-2k}),  c = |cos(angle)|
+        const norm = k / ((1 - Math.exp(-2 * k)) * n);
+        const poles = vectors.map(normalize);
+        // The antipodal term is < e^-20 relative to the main one once k > 20 (about n > 80)
+        const withAntipode = k <= 20;
+
+        const N = opts.gridSize ?? 100;
+        const R = this.radius;
+        const cell = 2 * R / N;
+        const values = new Array<number>(N * N);
+        let max = 0;
+        for (let j = 0; j < N; j++) {
+            for (let i = 0; i < N; i++) {
+                const X = (-R + (i + 0.5) * cell) / R;
+                const Y = -(-R + (j + 0.5) * cell) / R;   // screen y points down
+                const v = this.inverseProject(X, Y);
+                let d = 0;
+                for (const p of poles) {
+                    const c = Math.abs(p.x * v.x + p.y * v.y + p.z * v.z);
+                    d += Math.exp(k * (c - 1));
+                    if (withAntipode) d += Math.exp(-k * (c + 1));
+                }
+                d *= norm;
+                values[j * N + i] = d;
+                // Cells beyond the primitive are the antipodes of lower-hemisphere points, which
+                // keeps the field continuous across the edge; only the inside counts for the max.
+                if (X * X + Y * Y <= 1 && d > max) max = d;
+            }
+        }
+
+        const thresholds = d3.ticks(0, max, opts.levels ?? 5).filter(t => t > 0 && t < max);
+
+        const group = this.svg.insert('g', ':first-child').classed('data-element density', true);
+        const clipId = `density-clip-${Math.random().toString(36).slice(2, 9)}`;
+        group.append('defs').append('clipPath').attr('id', clipId)
+            .append('circle').attr('r', R);
+        const content = group.append('g').attr('clip-path', `url(#${clipId})`);
+
+        const path = d3.geoPath(d3.geoTransform({
+            point(x, y) { this.stream.point(-R + x * cell, -R + y * cell); }
+        }));
+        const contours = d3.contours().size([N, N]).thresholds(thresholds)(values);
+        const ramp = d3.interpolateRgb('#ffffff', opts.color);
+
+        contours.forEach((c, i) => {
+            content.append('path')
+                .attr('d', path(c as any)!)
+                .attr('fill', opts.fill ? ramp((i + 1) / contours.length) : 'none')
+                .attr('fill-opacity', opts.fill ? 0.75 : 0)
+                .attr('stroke', opts.color)
+                .attr('stroke-width', 1)
+                .attr('stroke-opacity', 0.9);
+        });
+
+        // Legend line in the top-left corner (kept in the SVG so it survives an export)
+        const fmt = d3.format('~g');
+        group.append('text')
+            .attr('x', -this.centerX + 6)
+            .attr('y', -this.centerY + 14 + 14 * this.densityLegendCount++)
+            .attr('font-size', '11px')
+            .attr('fill', opts.color)
+            .text(`${opts.label ?? 'Poles'} (n=${n}) · max ${max.toFixed(1)} MUD · ` +
+                  (thresholds.length ? `contours ${thresholds.map(fmt).join(', ')}` : 'no contour'));
+
+        return { count: n, max, thresholds };
+    }
+
+    /**
      * Clear all data from the stereonet (keeping the base grid)
      */
     public clearData(): void {
         this.svg.selectAll('.data-element').remove();
         this.labelPositions = [];
+        this.densityLegendCount = 0;
     }
 
     /**
      * Update stereonet options
      */
-    public updateOptions(newOptions: Partial<WulffOptions>): void {
+    public updateOptions(newOptions: Partial<StereonetOptions>): void {
         this.options = { ...this.options, ...newOptions };
         this.container.remove();
         this.initializeSVG(this.container.node()!.parentElement!.id);
@@ -350,9 +467,12 @@ export class Wulff {
         const style = this.options.stereonetStyle!;
         const interval = this.options.gridInterval!;
 
-        // Draw latitude lines (small circles)
+        // Draw latitude lines (small circles about the vertical: lines of constant plunge)
         for (let lat = interval; lat < 90; lat += interval) {
-            const r = this.radius * Math.tan(Math.PI * lat / 360);
+            const half = Math.PI * lat / 360;
+            const r = this.options.projection === 'schmidt'
+                ? this.radius * Math.SQRT2 * Math.sin(half)
+                : this.radius * Math.tan(half);
             if (r <= this.radius) {
                 this.svg.append('circle')
                     .attr('r', r)
@@ -408,7 +528,7 @@ export class Wulff {
     }
 
     /**
-     * Project a 3D point to stereographic coordinates
+     * Project a 3D point onto the net (Wulff or Schmidt, see ProjectionType)
      * Lower hemisphere projection: if z > 0, we flip the point
      */
     private projectVector(v: Vector3D): [number, number] {
@@ -421,9 +541,11 @@ export class Wulff {
             z = -z;
         }
 
-        // Stereographic projection from lower hemisphere
-        // Formula: (x', y') = R * (x, y) / (1 - z) for lower hemisphere
-        const denom = 1 - z;
+        // Lower hemisphere projections, written in terms of the unit vector (z <= 0):
+        // - Wulff   (equal-angle): (x', y') = R * (x, y) / (1 - z)
+        // - Schmidt (equal-area) : (x', y') = R * (x, y) / sqrt(1 - z)
+        // Both map the vertical to the centre and the horizontal (z = 0) to the primitive circle.
+        const denom = this.options.projection === 'schmidt' ? Math.sqrt(1 - z) : 1 - z;
         if (denom === 0) {
             return [0, 0];
         }
@@ -434,6 +556,20 @@ export class Wulff {
         // Transform to screen coordinates (y points up in geology, down on screen)
         // x: East (right), y: North (up on stereonet = down in SVG)
         return [projX, -projY];
+    }
+
+    /**
+     * Inverse of projectVector, from net coordinates normalised by the radius (Y = North).
+     * Valid beyond the primitive too: those points map to the upper hemisphere.
+     */
+    private inverseProject(X: number, Y: number): Vector3D {
+        const rho2 = X * X + Y * Y;
+        if (this.options.projection === 'schmidt') {
+            const s = Math.sqrt(Math.max(0, 2 - rho2));
+            return { x: X * s, y: Y * s, z: Math.min(1, rho2 - 1) };
+        }
+        const d = 1 + rho2;
+        return { x: 2 * X / d, y: 2 * Y / d, z: -(1 - rho2) / d };
     }
 
     /**

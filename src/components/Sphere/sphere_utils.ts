@@ -2039,6 +2039,39 @@ export function generatePrincipalAxes(
 // ============================================================================
 
 /**
+ * Mohr coordinates (Fn, Ftau) of a direction on the sphere.
+ *
+ * With the traction F = T·n on the plane of normal n, expressed in the principal frame,
+ *     Fn   = lambda_x nx² + lambda_y ny² + lambda_z nz²
+ *     |F|² = lambda_x² nx² + lambda_y² ny² + lambda_z² nz²
+ *     Ftau = sqrt(|F|² - Fn²)
+ * This is the projection used in Taboada (1993), fig. 8b: it sends every point of the sphere into
+ * the region bounded by the three Mohr circles, iso-Fn curves onto vertical lines and integral
+ * curves onto the curves that cross them.
+ */
+export function getMohrPoint(
+    point: Point3D,
+    lambda_x: number,
+    lambda_y: number,
+    lambda_z: number
+): { sigma_n: number; tau: number } {
+    const r = Math.sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+    if (r < 1e-10) return { sigma_n: 0, tau: 0 };
+
+    const nx = point.x / r;
+    const ny = point.y / r;
+    const nz = point.z / r;
+
+    const sigma_n = lambda_x * nx * nx + lambda_y * ny * ny + lambda_z * nz * nz;
+    const f2 =
+        lambda_x * lambda_x * nx * nx +
+        lambda_y * lambda_y * ny * ny +
+        lambda_z * lambda_z * nz * nz;
+
+    return { sigma_n, tau: Math.sqrt(Math.max(0, f2 - sigma_n * sigma_n)) };
+}
+
+/**
  * Calculate normal stress at a point on the sphere surface (for coloring)
  * Converts Cartesian to spherical and computes stress value
  */

@@ -73,6 +73,20 @@ export interface SphereSettings {
     /** Pole of each measured plane, coloured by data type. */
     showPoles: boolean;
     poleSize: number;
+    /** Numéro de la donnée (colonne `id` si elle existe, sinon rang dans le fichier). */
+    showDataNumbers: boolean;
+
+    // ── Les deux faces de la sphère ──────────────────────────────────────────
+    // La normale d'un plan pointe des deux côtés (n et −n décrivent le même plan) : chaque donnée
+    // peut donc être tracée aux deux extrémités d'un même diamètre, ou ramenée d'un seul côté.
+    /**
+     * Tracer chaque donnée des deux côtés de la sphère (strie renversée sur la copie opposée,
+     * donc sens conservé). Activé par défaut : une copie de chaque donnée reste visible quelle
+     * que soit la rotation de la sphère.
+     */
+    plotDataBothSides: boolean;
+    /** Sinon, ramener chaque donnée dans le demi-espace σ2 > 0. */
+    foldToPositiveSigma2: boolean;
 
     // ── Stries ───────────────────────────────────────────────────────────────
     // Drawn as short great-circle arcs tangent to the sphere at the plane's pole: the
@@ -106,8 +120,19 @@ export interface SphereSettings {
     /** Black iso-lines of σn traced on the surface (marching triangles). */
     showNormalStressIsoLines: boolean;
 
+    // ── Diagramme de Mohr associé (Taboada 1993, fig. 8b) ───────────────────
+    /** Panneau de Mohr à droite de la sphère : mêmes familles de courbes, projetées. */
+    showMohrPanel: boolean;
+    /** Rayon (px) des points de données dans le diagramme de Mohr. */
+    mohrPointRadius: number;
+
     // ── Axes et apparence ────────────────────────────────────────────────────
     showStressAxes: boolean;
+    /** Repère géographique (N/S, E/W, Up/Down), en pointillés à côté des axes principaux. */
+    showGeoAxes: boolean;
+    geoAxesColor: string;
+    /** Étiquettes (σ₁ σ₂ σ₃, N S E W Up Down) au bout des axes. */
+    showAxisLabels: boolean;
     sphereColor: string;
     backgroundColor: string;
     autoRotate: boolean;
@@ -129,6 +154,10 @@ export function createSphereSettings(overrides: Partial<SphereSettings> = {}): S
         typeColors: {},
         showPoles: true,
         poleSize: 0.025,
+        showDataNumbers: false,
+
+        plotDataBothSides: true,
+        foldToPositiveSigma2: false,
 
         showMeasuredStriations: true,
         measuredStriationColor: '#111111',
@@ -152,7 +181,13 @@ export function createSphereSettings(overrides: Partial<SphereSettings> = {}): S
         colorTableName: 'Rainbow',
         showNormalStressIsoLines: false,
 
+        showMohrPanel: true,
+        mohrPointRadius: 3.5,
+
         showStressAxes: true,
+        showGeoAxes: true,
+        geoAxesColor: '#444444',
+        showAxisLabels: true,
         sphereColor: '#dddddd',
         backgroundColor: '#f0f0f0',
         autoRotate: false,

@@ -19,7 +19,7 @@ import MCMCStatsComponent from './MCMCStats/MCMCStatsComponent';
 import ParameterSpaceLandscapeComponent from './ParameterSpace/ParameterSpaceLandscapeComponent';
 import InversionMohrComponent from './Mohr/InversionMohrComponent';
 import MisfitHistogramComponent from './Histo/MisfitHistogramComponent';
-import WulffComponent from './Wulff/WulffComponent';
+import StereonetComponent from './Stereonet/StereonetComponent';
 import SphereComponent from './Sphere/SphereComponent';
 import { useSettings } from './Settings/SettingsContext';
 
@@ -1217,7 +1217,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
         };
 
         // Principal stress axis directions (σ1, σ2, σ3), in the same coordinate frame as the
-        // data normals, so the Wulff can overlay them. Attached to every file below.
+        // data normals, so the stereonet can overlay them. Attached to every file below.
         const stressAxes = solution.analysis
             ? {
                 sigma1: solution.analysis.principalStresses.sigma1.direction,
@@ -1227,7 +1227,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             : undefined;
 
         // Attach predicted (computed) orientations onto copies of the input rows so the
-        // visualizations (e.g. Wulff) can overlay measured vs computed data. Originals are
+        // visualizations (e.g. Stereonet) can overlay measured vs computed data. Originals are
         // never mutated. The stress axes are attached to the file object itself.
         const augmentedFiles = files.map(file => {
             const rows = file.content || (file as any).data;
@@ -1369,7 +1369,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             <span className="text-sm font-medium text-gray-700">Display:</span>
                             {([
                                 { key: 'histogram', label: 'Angular misfit histogram' },
-                                { key: 'wulff', label: 'Wulff stereonet' },
+                                { key: 'wulff', label: 'Stereonet' },
                                 { key: 'mohr', label: 'Mohr diagram' },
                                 { key: 'landscape', label: 'Parameter-space landscape' },
                                 { key: 'sphere', label: 'Stress sphere' },
@@ -1386,14 +1386,14 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             ))}
                         </div>
 
-                        {/* Wulff stereonet — measured data, predicted overlay and σ1/σ2/σ3.
-                            The Wulff fills its parent's height (h-full), so it needs an explicit
+                        {/* Stereonet — measured data, predicted overlay and σ1/σ2/σ3.
+                            The stereonet fills its parent's height (h-full), so it needs an explicit
                             height here — unlike the registry it isn't inside a sized grid cell. */}
                         {resultViews.wulff && processedData && (
                             <div>
-                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Wulff stereonet</h4>
+                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Stereonet</h4>
                                 <div style={{ height: 680 }} className="border rounded-lg bg-white">
-                                    <WulffComponent
+                                    <StereonetComponent
                                         files={enhancedFiles}
                                         width={600}
                                         height={600}
@@ -1434,7 +1434,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
 
                         {/* Stress sphere — data normals in the principal frame, with the shear-stress
                             trajectories and normal-stress equipotentials of the inverted tensor.
-                            Like the Wulff it fills its parent's height, so it needs an explicit one. */}
+                            Like the stereonet it fills its parent's height, so it needs an explicit one. */}
                         {resultViews.sphere && processedData && (
                             <div>
                                 <h4 className="text-xl font-semibold text-indigo-800 mb-3">Stress sphere</h4>

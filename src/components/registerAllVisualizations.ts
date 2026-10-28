@@ -8,8 +8,8 @@ import { getVisualizationRegistry } from './VisualizationRegistry';
 import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
 import { RoseCompState } from './Rose/RoseParameters';
 
-import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
-import { WulffStereonetCompState } from './Wulff/WulffParameters';
+import { StereonetDescriptor } from './Stereonet/StereonetDescriptor';
+import { StereonetCompState } from './Stereonet/StereonetParameters';
 
 import { HistogramDescriptor } from './Histo/HistogramDescriptor';
 import { HistogramCompState } from './Histo/HistogramParameters';
@@ -39,7 +39,7 @@ import { SphereCompState } from './Sphere/SphereParameters';
  * NE PAS modifier d'autres fichiers !
  */
 
-export type VisualizationCompState = RoseCompState | WulffStereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState | MCMCStatsCompState | SphereCompState
+export type VisualizationCompState = RoseCompState | StereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState | MCMCStatsCompState | SphereCompState
 
 export function registerAllVisualizations(): void {
     const registry = getVisualizationRegistry();
@@ -48,7 +48,7 @@ export function registerAllVisualizations(): void {
 
     // ========== VISUALISATIONS STRUCTURALES ==========
     registry.register(RoseDiagramDescriptor);
-    registry.register(WulffStereonetDescriptor);
+    registry.register(StereonetDescriptor);
     registry.register(FractureMap2DDescriptor);
     // ========== VISUALISATIONS STATISTIQUES ==========
     registry.register(HistogramDescriptor);

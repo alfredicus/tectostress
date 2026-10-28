@@ -15,6 +15,10 @@
 // Three.js display uses the slip-lines convention (X, Y, Z) = (frame.y, frame.z, frame.x),
 // i.e. σ3 to the right, σ2 up, σ1 towards the viewer.
 //
+// Both reference frames are drawn: the principal axes (solid, coloured, σ₁/σ₂/σ₃) and the
+// geographic triad (dashed, N/S — E/W — Up/Down) obtained by pushing (1,0,0), (0,1,0), (0,0,1)
+// through the same mapping, which is what shows how the tensor sits relative to the ground.
+//
 // A striation is tangent to the sphere at the pole of its plane, so it is drawn as a short
 // great-circle arc from that pole — directly comparable with the slip lines it should follow.
 
@@ -35,9 +39,11 @@ import {
     generateSpecialEquipotentialMeridian,
     generatePrincipalAxes,
     getEquipotentialPoint,
+    getMohrPoint,
     EquipotentialCurve,
     SlipLineCurve,
-    PrincipalAxis
+    PrincipalAxis,
+    Point3D
 } from './sphere_utils';
 import {
     BufferGeometry as KBufferGeometry,
@@ -48,6 +54,7 @@ import { colorMapNames, createLut } from './keplerlit/colorMap';
 import { createIsoContoursFilled } from './keplerlit/IsoContoursFilled';
 import { createIsoContourLines } from './keplerlit/IsoContoursLines';
 import StablePlotWithSettings from '../PlotWithSettings';
+import { useSettings } from '../Settings/SettingsContext';
 import {
     BaseVisualizationProps,
     useVisualizationState
@@ -195,11 +202,24 @@ function dot3(a: number[], b: number[]): number {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
+function cross3(a: number[], b: number[]): number[] {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ];
+}
+
 /**
  * Principal frame of the solution, read from what RunComponent attaches to the files:
  * the σ1/σ2/σ3 directions on each file, and the matching eigenvalues in the synthetic
  * "Stress Inversion Results" file. Eigen pairs are sorted by |value| descending so e1 is the most
  * compressive axis whichever sign convention the library used — same logic as the Mohr diagram.
+ *
+ * The eigenvectors come out of `math.eigs` with arbitrary signs, so the basis the sphere projects
+ * onto — (e1, e3, e2), the library's principal-frame order — is right-handed only by luck. A
+ * left-handed one mirrors the whole picture (East and West swap, striation senses reverse), so one
+ * axis is flipped here when needed. A principal axis has no sense of direction, so this is free.
  */
 function readStressFrame(files: any[]): { e1: number[]; e2: number[]; e3: number[]; R: number } | null {
     if (!files || files.length === 0) return null;
@@ -231,10 +251,19 @@ function readStressFrame(files: any[]): { e1: number[]; e2: number[]; e3: number
     const range = sorted[0].value - sorted[2].value;
     if (Math.abs(range) < 1e-10) return null;   // degenerate / isotropic
 
+    const e1 = sorted[0].vec;
+    let e2 = sorted[1].vec;
+    const e3 = sorted[2].vec;
+
+    // (e1, e3, e2) must satisfy e1 × e3 = e2 for the projection to be a rotation.
+    if (dot3(cross3(e1, e3), e2) < 0) {
+        e2 = e2.map(c => -c);
+    }
+
     return {
-        e1: sorted[0].vec,
-        e2: sorted[1].vec,
-        e3: sorted[2].vec,
+        e1,
+        e2,
+        e3,
         R: (sorted[1].value - sorted[2].value) / range,
     };
 }
@@ -243,6 +272,27 @@ function readStressFrame(files: any[]): { e1: number[]; e2: number[]; e3: number
 function hexToInt(color: string): number {
     return parseInt(color.replace('#', ''), 16);
 }
+
+// ============================================================================
+// MOHR PANEL
+// ============================================================================
+
+/**
+ * What the sphere hands to the Mohr diagram beside it — the projection of fig. 8b in
+ * Taboada (1993): the same equipotentials (vertical lines, Fn being constant along them), the
+ * same integral curves, and one point per measured plane.
+ */
+interface MohrData {
+    /** (σ1, σ2, σ3) on the sphere's own arbitrary scale, normalised for display. */
+    sigmaRef: [number, number, number];
+    isoLines: Array<{ sigma: number; tauMin: number; tauMax: number }>;
+    slipCurves: Array<Array<[number, number]>>;
+    points: Array<{ sigma: number; tau: number; color: string; label: string }>;
+}
+
+/** Layout of the Mohr SVG, in its own user units (aspect kept, the panel scales it). */
+const MOHR_SCALE = 520;      // px for the whole normalised σn range (|σ1 − σ3| = 1)
+const MOHR_MARGIN = { left: 40, right: 48, top: 22, bottom: 30 };
 
 // ============================================================================
 // STRESS SPHERE COMPONENT
@@ -269,6 +319,15 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
     const [stats, setStats] = useState<{ total: number; poles: number; measured: number; predicted: number } | null>(null);
     /** σn range of the coloured field, for the legend. */
     const [fieldRange, setFieldRange] = useState<{ min: number; max: number } | null>(null);
+    /** Curves and points of the companion Mohr diagram, filled while the sphere is built. */
+    const [mohr, setMohr] = useState<MohrData | null>(null);
+    // Several spheres can share a page, so the region clip-path needs an id of its own.
+    // useId's colons are legal in an id but awkward inside url(...), hence the scrub.
+    const mohrClipId = React.useId().replace(/[^a-zA-Z0-9_-]/g, '-');
+    // Application-wide principal-stress convention (geologist / engineer), as used by the
+    // inversion's Mohr diagram — it decides which end of the σn axis σ1 sits at.
+    const { settings: appSettings } = useSettings();
+    const isEngineer = appSettings.stressConvention === 'engineer';
     // Guards the one-shot auto-enabling of the predicted overlay (see effect below).
     const predictedAutoEnabled = useRef(false);
 
@@ -289,7 +348,15 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         onStateChange
     );
 
-    const settings = currentState.settings;
+    // Defaults underneath, so a state saved before a setting existed still gets a value for it.
+    // Memoised: the content effect keys on this object's identity.
+    const settings = useMemo(
+        () => ({
+            ...createSphereSettings({ showPredictedStriations: autoEnable }),
+            ...currentState.settings
+        }),
+        [currentState.settings, autoEnable]
+    );
 
     // Sync dimensions from props - only update if actually changed
     useEffect(() => {
@@ -467,14 +534,18 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         content.traverse(obj => {
             const any = obj as any;
             any.geometry?.dispose?.();
-            if (Array.isArray(any.material)) any.material.forEach((m: any) => m.dispose?.());
-            else any.material?.dispose?.();
+            const materials = Array.isArray(any.material) ? any.material : [any.material];
+            materials.forEach((m: any) => {
+                m?.map?.dispose?.();   // label sprites own a canvas texture
+                m?.dispose?.();
+            });
         });
         content.clear();
 
         if (!stressFrame) {
             setStats(null);
             setFieldRange(null);
+            setMohr(null);
             if (surfaceRef.current) surfaceRef.current.visible = true;
             return;
         }
@@ -485,10 +556,15 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         /** Frame coordinates → three.js display coordinates, as in the slip-lines app. */
         const toDisplay = (v: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(v.y, v.z, v.x);
 
-        /** Geographic (E, N, Up) → principal frame (σ1, σ3, σ2), then to display coordinates. */
+        /** Geographic (E, N, Up) → principal frame (σ1, σ3, σ2), the frame sphere_utils works in. */
         const { e1, e2, e3, R } = stressFrame;
-        const toSphere = (n: number[]): THREE.Vector3 =>
-            toDisplay(new THREE.Vector3(dot3(n, e1), dot3(n, e3), dot3(n, e2))).normalize();
+        const toFrame = (n: number[]): Point3D => ({ x: dot3(n, e1), y: dot3(n, e3), z: dot3(n, e2) });
+
+        /** …and on to display coordinates. */
+        const toSphere = (n: number[]): THREE.Vector3 => {
+            const f = toFrame(n);
+            return toDisplay(new THREE.Vector3(f.x, f.y, f.z)).normalize();
+        };
 
         const addFatLine = (points: THREE.Vector3[], color: string, lineWidth: number) => {
             if (points.length < 2) return;
@@ -501,6 +577,44 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                 resolution: new THREE.Vector2(pixelW, pixelH)
             });
             content.add(new LineSegments2(geometry, material));
+        };
+
+        /**
+         * Camera-facing text sprite — axis names and data numbers.
+         *
+         * Depth-tested, so a label whose anchor is behind the sphere is hidden by it: an axis
+         * pointing away from the viewer must not read as one pointing towards them. The canvas is
+         * cut to the text so the glyphs keep their aspect ratio whatever the label's length.
+         */
+        const addLabel = (position: THREE.Vector3, text: string, color: string, height = 0.18) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            const fontSize = 64;
+            const font = `bold ${fontSize}px sans-serif`;
+            ctx.font = font;
+            canvas.width = Math.ceil(ctx.measureText(text).width) + 20;
+            canvas.height = Math.round(fontSize * 1.5);
+
+            // Re-applied: resizing the canvas resets the context.
+            ctx.font = font;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Halo, so a dark label stays readable over the coloured field.
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+            ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+            ctx.fillStyle = color;
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: new THREE.CanvasTexture(canvas),
+                transparent: true,
+                depthWrite: false
+            }));
+            sprite.position.copy(position);
+            sprite.scale.set((height * canvas.width) / canvas.height, height, 1);
+            content.add(sprite);
         };
 
         /** Curves from sphere_utils come as parallel x/y/z arrays in frame coordinates. */
@@ -604,12 +718,44 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         }
 
         // ── Slip lines, equipotentials and principal axes ────────────────────
+        //
+        // The same curves are projected into the Mohr diagram as they are built (Taboada 1993,
+        // fig. 8b), rather than regenerated for the side panel: generating them is the expensive
+        // part, and this way the two views cannot disagree.
+        const mohrIso: MohrData['isoLines'] = [];
+        const mohrSlip: MohrData['slipCurves'] = [];
+        const mohrPoints: MohrData['points'] = [];
+
+        /** Frame point → (Fn, Fτ), with the λ order the curve generators were given. */
+        const toMohr = (p: Point3D) => getMohrPoint(p, S1_REF, S3_REF, S2);
 
         if (settings.showEquipotential) {
             const equipotentials = settings.useParametricEquipotentials
                 ? generateEquipotentialsParametric(S1_REF, S3_REF, S2, config)
                 : generateEquipotentialsBinary(S1_REF, S3_REF, S2, config);
             addCurves(equipotentials, settings.equipotentialColor, settings.curveLineWidth);
+
+            // Fn is constant along an equipotential, so each one collapses to a vertical segment;
+            // only its τ extent has to be carried over. Curves reflected into the other octants
+            // land on the same segment, hence the dedup.
+            const seen = new Set<string>();
+            equipotentials.forEach(curve => {
+                let sigma = NaN;
+                let tauMin = Infinity;
+                let tauMax = -Infinity;
+                for (let i = 0; i < curve.x.length; i++) {
+                    const { sigma_n, tau } = toMohr({ x: curve.x[i], y: curve.y[i], z: curve.z[i] });
+                    if (!isFinite(sigma_n) || !isFinite(tau)) continue;
+                    sigma = sigma_n;
+                    if (tau < tauMin) tauMin = tau;
+                    if (tau > tauMax) tauMax = tau;
+                }
+                if (!isFinite(sigma) || tauMax <= tauMin) return;
+                const key = `${sigma.toFixed(4)}|${tauMin.toFixed(4)}|${tauMax.toFixed(4)}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                mohrIso.push({ sigma, tauMin, tauMax });
+            });
         }
 
         if (settings.showSpecialEquipotential) {
@@ -620,6 +766,15 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         if (settings.showSlipLines) {
             const slipLines = generateSlipLines(S1_REF, S3_REF, S2, config);
             addCurves(slipLines, settings.slipLineColor, settings.curveLineWidth);
+
+            slipLines.forEach(curve => {
+                const pts: Array<[number, number]> = [];
+                for (let i = 0; i < curve.x.length; i++) {
+                    const { sigma_n, tau } = toMohr({ x: curve.x[i], y: curve.y[i], z: curve.z[i] });
+                    if (isFinite(sigma_n) && isFinite(tau)) pts.push([sigma_n, tau]);
+                }
+                if (pts.length > 1) mohrSlip.push(pts);
+            });
         }
 
         if (settings.showStressAxes) {
@@ -627,6 +782,10 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
             axes.forEach(axis => {
                 const dir = toDisplay(new THREE.Vector3(axis.axis.x, axis.axis.y, axis.axis.z));
                 const material = new THREE.LineBasicMaterial({ color: axis.colorHex });
+                // The frame axes are (x, y, z) = (σ1, σ3, σ2). A principal axis has no sense of
+                // direction, so both of its ends carry the same name.
+                const name = axis.axis.x ? 'σ₁' : axis.axis.y ? 'σ₃' : 'σ₂';
+                const color = `#${axis.colorHex.toString(16).padStart(6, '0')}`;
                 [1, -1].forEach(sign => {
                     const end = dir.clone().multiplyScalar(1.45 * sign);
                     const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), end]);
@@ -641,6 +800,41 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                         dir.clone().multiplyScalar(sign).normalize()
                     );
                     content.add(head);
+
+                    if (settings.showAxisLabels) {
+                        addLabel(dir.clone().multiplyScalar(1.62 * sign), name, color);
+                    }
+                });
+            });
+        }
+
+        // ── Geographic reference frame ───────────────────────────────────────
+        //
+        // The same N/S, E/W, Up/Down triad the data is measured in, rotated into the principal
+        // frame of the solution: it shows how the inverted tensor sits with respect to the
+        // ground. Dashed, so it reads as a second frame rather than more stress axes.
+        if (settings.showGeoAxes) {
+            const geoAxes = [
+                { vec: [0, 1, 0], positive: 'N',  negative: 'S' },      // geographic (E, N, Up)
+                { vec: [1, 0, 0], positive: 'E',  negative: 'W' },
+                { vec: [0, 0, 1], positive: 'Up', negative: 'Down' },
+            ];
+            const material = new THREE.LineDashedMaterial({
+                color: hexToInt(settings.geoAxesColor),
+                dashSize: 0.07,
+                gapSize: 0.05
+            });
+            geoAxes.forEach(({ vec, positive, negative }) => {
+                const dir = toSphere(vec);
+                ([[1, positive], [-1, negative]] as Array<[number, string]>).forEach(([sign, text]) => {
+                    const end = dir.clone().multiplyScalar(1.3 * sign);
+                    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), end]);
+                    const line = new THREE.Line(geometry, material);
+                    line.computeLineDistances();
+                    content.add(line);
+                    if (settings.showAxisLabels) {
+                        addLabel(end.clone().multiplyScalar(1.09), text, settings.geoAxesColor);
+                    }
                 });
             });
         }
@@ -696,7 +890,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
             const rows = file?.content || file?.data;
             if (!Array.isArray(rows)) return;
 
-            rows.forEach((row: any) => {
+            rows.forEach((row: any, rowIndex: number) => {
                 if (row?.type == null) return;
                 const normal = normalFromRow(row);
                 if (!normal) return;
@@ -706,33 +900,84 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                 if (settings.hiddenTypes[group]) return;
 
                 const pole = toSphere(normal);
+                const label = row.id != null && String(row.id).trim() !== ''
+                    ? String(row.id)
+                    : String(rowIndex + 1);
 
-                if (settings.showPoles) {
-                    const marker = new THREE.Mesh(
-                        new THREE.SphereGeometry(settings.poleSize, 12, 12),
-                        new THREE.MeshPhongMaterial({ color: hexToInt(colorFor(group)) })
-                    );
-                    marker.position.copy(pole.clone().multiplyScalar(SURFACE_OFFSET));
-                    content.add(marker);
-                    poles++;
+                // Same plane, seen in the Mohr diagram: one point per measured orientation.
+                // n and −n give the same (σn, τ), so the antipodal copy would land on top of it.
+                const { sigma_n, tau } = toMohr(toFrame(normal));
+                if (isFinite(sigma_n) && isFinite(tau)) {
+                    mohrPoints.push({ sigma: sigma_n, tau, color: colorFor(group), label });
                 }
 
-                if (settings.showMeasuredStriations) {
-                    const striation = striationFromRow(row, normal);
-                    if (striation && addStriation(pole, toSphere(striation), settings.measuredStriationColor)) {
-                        measured++;
+                // A plane's normal points both ways — n and −n describe the same plane — so each
+                // datum is drawn at both ends of its diameter by default, which keeps a copy of
+                // everything in view whichever way the sphere is turned. Failing that it can be
+                // folded into the σ2 > 0 half-space (display Y is the σ2 axis: toDisplay maps
+                // frame z → Y).
+                //
+                // The traction is linear in n, hence F_τ(−n) = −F_τ(n): the striation of the far
+                // copy has to be reversed too, which is what keeps its sense of movement
+                // consistent with the slip lines running past it there.
+                const folded = settings.foldToPositiveSigma2 && pole.y < 0 ? -1 : 1;
+                const copies = settings.plotDataBothSides ? [1, -1] : [folded];
+
+                const measuredRaw = settings.showMeasuredStriations
+                    ? striationFromRow(row, normal)
+                    : null;
+                const measuredDir = measuredRaw ? toSphere(measuredRaw) : null;
+                const predictedDir = settings.showPredictedStriations && Array.isArray(row.predicted_striation)
+                    ? toSphere(row.predicted_striation)
+                    : null;
+
+                copies.forEach((sign, copyIndex) => {
+                    const primary = copyIndex === 0;
+                    const p = pole.clone().multiplyScalar(sign);
+
+                    if (settings.showPoles) {
+                        const marker = new THREE.Mesh(
+                            new THREE.SphereGeometry(settings.poleSize, 12, 12),
+                            new THREE.MeshPhongMaterial({ color: hexToInt(colorFor(group)) })
+                        );
+                        marker.position.copy(p.clone().multiplyScalar(SURFACE_OFFSET));
+                        content.add(marker);
+                        if (primary) poles++;
                     }
-                }
 
-                if (settings.showPredictedStriations && Array.isArray(row.predicted_striation)) {
-                    if (addStriation(pole, toSphere(row.predicted_striation), settings.predictedStriationColor)) {
-                        predicted++;
+                    if (settings.showDataNumbers) {
+                        addLabel(
+                            p.clone().multiplyScalar(SURFACE_OFFSET + settings.poleSize + 0.055),
+                            label,
+                            colorFor(group),
+                            0.1
+                        );
                     }
-                }
+
+                    if (measuredDir) {
+                        const dir = measuredDir.clone().multiplyScalar(sign);
+                        if (addStriation(p, dir, settings.measuredStriationColor) && primary) {
+                            measured++;
+                        }
+                    }
+
+                    if (predictedDir) {
+                        const dir = predictedDir.clone().multiplyScalar(sign);
+                        if (addStriation(p, dir, settings.predictedStriationColor) && primary) {
+                            predicted++;
+                        }
+                    }
+                });
             });
         });
 
         setStats({ total, poles, measured, predicted });
+        setMohr({
+            sigmaRef: [S1_REF, S2, S3_REF],
+            isoLines: mohrIso,
+            slipCurves: mohrSlip,
+            points: mohrPoints
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [files, stressFrame, settings]);
 
@@ -911,16 +1156,28 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                                     className="w-10 h-6 rounded"
                                 />
                             </label>
+                            {/* The generator seeds curves at θ = i/nCurves × 90° for i in [1, nCurves),
+                                so it draws one fewer than the number it is given; the slider is the
+                                count actually drawn and adds the one back on the way in.
+                                At 0 no curve of the family is seeded and only the principal circles
+                                are left — the great circles through pairs of principal axes, which
+                                the generator always emits and which are themselves slip lines. */}
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    Count: {settings.nCurves}
+                                    Count: {settings.nCurves - 1}
                                 </label>
                                 <input
-                                    type="range" min="2" max="24" step="1"
-                                    value={settings.nCurves}
-                                    onChange={e => updateSettings({ nCurves: parseInt(e.target.value) })}
+                                    type="range" min="0" max="23" step="1"
+                                    value={settings.nCurves - 1}
+                                    onChange={e => updateSettings({ nCurves: parseInt(e.target.value) + 1 })}
                                     className="w-full"
                                 />
+                                {settings.nCurves <= 1 && (
+                                    <p className="text-xs text-gray-500">
+                                        Principal circles only: σ₁σ₃, plus σ₁σ₂ when σ₂ ≠ σ₁ and
+                                        σ₂σ₃ when σ₂ ≠ σ₃.
+                                    </p>
+                                )}
                             </div>
                         </>
                     )}
@@ -950,14 +1207,15 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                                     className="w-10 h-6 rounded"
                                 />
                             </label>
+                            {/* Same off-by-one as the slip lines: the generator draws nIsoCurves−1. */}
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    Count: {settings.nIsoCurves}
+                                    Count: {settings.nIsoCurves - 1}
                                 </label>
                                 <input
-                                    type="range" min="2" max="24" step="1"
-                                    value={settings.nIsoCurves}
-                                    onChange={e => updateSettings({ nIsoCurves: parseInt(e.target.value) })}
+                                    type="range" min="1" max="23" step="1"
+                                    value={settings.nIsoCurves - 1}
+                                    onChange={e => updateSettings({ nIsoCurves: parseInt(e.target.value) + 1 })}
                                     className="w-full"
                                 />
                             </div>
@@ -1080,6 +1338,41 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                         />
                     </div>
                     <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Data Numbers</span>
+                        <input
+                            type="checkbox"
+                            checked={settings.showDataNumbers}
+                            onChange={e => updateSettings({ showDataNumbers: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Plot Data on Both Sides</span>
+                        <input
+                            type="checkbox"
+                            checked={settings.plotDataBothSides}
+                            onChange={e => updateSettings({ plotDataBothSides: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+                    <p className="text-xs text-gray-500">
+                        A plane's normal points both ways, so each datum can be drawn at both ends
+                        of its diameter — front and back of the sphere. Every datum then stays in
+                        view whichever way the sphere is turned. The striation is reversed on the
+                        far copy, so its sense still follows the slip lines running past it there.
+                    </p>
+                    {!settings.plotDataBothSides && (
+                        <label className="flex items-center justify-between">
+                            <span className="text-sm">Keep Data in the σ₂ &gt; 0 Half</span>
+                            <input
+                                type="checkbox"
+                                checked={settings.foldToPositiveSigma2}
+                                onChange={e => updateSettings({ foldToPositiveSigma2: e.target.checked })}
+                                className="rounded"
+                            />
+                        </label>
+                    )}
+                    <label className="flex items-center justify-between">
                         <span className="text-sm">Show Stress Axes (σ₁ σ₂ σ₃)</span>
                         <input
                             type="checkbox"
@@ -1088,6 +1381,70 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                             className="rounded"
                         />
                     </label>
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Geographic Axes (N/S, E/W, Up/Down)</span>
+                        <input
+                            type="checkbox"
+                            checked={settings.showGeoAxes}
+                            onChange={e => updateSettings({ showGeoAxes: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+                    {settings.showGeoAxes && (
+                        <label className="flex items-center justify-between">
+                            <span className="text-sm">Geographic Axes Colour</span>
+                            <input
+                                type="color"
+                                value={settings.geoAxesColor}
+                                onChange={e => updateSettings({ geoAxesColor: e.target.value })}
+                                className="w-10 h-6 rounded"
+                            />
+                        </label>
+                    )}
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Axis Labels</span>
+                        <input
+                            type="checkbox"
+                            checked={settings.showAxisLabels}
+                            onChange={e => updateSettings({ showAxisLabels: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+                </div>
+            </div>
+
+            <div className="pb-4 border-b">
+                <h5 className="font-medium text-gray-800 mb-3">Mohr Diagram</h5>
+                <div className="space-y-3">
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Show Mohr Panel</span>
+                        <input
+                            type="checkbox"
+                            checked={settings.showMohrPanel}
+                            onChange={e => updateSettings({ showMohrPanel: e.target.checked })}
+                            className="rounded"
+                        />
+                    </label>
+                    {settings.showMohrPanel && (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    Data point radius: {settings.mohrPointRadius.toFixed(1)}
+                                </label>
+                                <input
+                                    type="range" min="1" max="8" step="0.5"
+                                    value={settings.mohrPointRadius}
+                                    onChange={e => updateSettings({ mohrPointRadius: parseFloat(e.target.value) })}
+                                    className="w-full"
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500">
+                                Shows the same two families as the sphere — equipotentials become
+                                vertical lines, slip lines the curves crossing them — so it follows
+                                the toggles above.
+                            </p>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1183,6 +1540,13 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
         }
     }, [settings.colorTableName]);
 
+    // The sphere's own scale is arbitrary, so the legend is graduated like the Mohr axis beside
+    // it: normalised, in the selected convention (σ1 = +1 geologist, −1 engineer; σ3 = 0).
+    const sigmaNorm = (s: number) => {
+        const u = (s - S1_REF) / (S3_REF - S1_REF);
+        return isEngineer ? u - 1 : 1 - u;
+    };
+
     const legend = fieldRange && (
         <div className="absolute top-3 left-3 flex items-center gap-2 bg-white/85 rounded px-2 py-1.5 shadow-sm pointer-events-none">
             <div
@@ -1190,18 +1554,212 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                 style={{ background: `linear-gradient(to top, ${legendGradient})` }}
             />
             <div className="flex flex-col justify-between h-24 text-[10px] text-gray-700 leading-none">
-                <span>{fieldRange.max.toFixed(2)}</span>
+                <span>{sigmaNorm(fieldRange.max).toFixed(2)}</span>
                 <span className="font-medium">σn</span>
-                <span>{fieldRange.min.toFixed(2)}</span>
+                <span>{sigmaNorm(fieldRange.min).toFixed(2)}</span>
             </div>
         </div>
     );
 
+    // ── Companion Mohr diagram (Taboada 1993, fig. 8b) ───────────────────────
+    //
+    // Everything is already in Mohr coordinates by the time it gets here; this only lays it out.
+    // The three bounding circles come from (σ1, σ2, σ3), the vertical lines are the equipotentials
+    // and the curves crossing them are the integral curves.
+    //
+    // Axes follow the application-wide convention, exactly as the inversion's own Mohr diagram:
+    //   geologist (compression +): σ1 = +1, σ2 = +R, σ3 = 0  →  σ1 on the right
+    //   engineer  (tension +):     σ1 = −1, σ2 = −R, σ3 = 0  →  σ1 on the left
+    // The sphere works on its own arbitrary scale (σ1 = 1, σ3 = 3, tension-positive ordering), so
+    // everything is normalised through sigmaN()/tauN() on the way in; τ is convention-invariant.
+    const mohrPanel = useMemo(() => {
+        if (!mohr) return null;
+        const [s1Ref, s2Ref, s3Ref] = mohr.sigmaRef;
+        const span = s3Ref - s1Ref;
+        if (!(span > 0)) return null;
+
+        /** Sphere scale → normalised σn of the selected convention. */
+        const sigmaN = (s: number) => {
+            const u = (s - s1Ref) / span;        // 0 at σ1, 1 at σ3
+            return isEngineer ? u - 1 : 1 - u;
+        };
+        /** τ on the same normalised scale — same in both conventions. */
+        const tauN = (t: number) => t / span;    // max 0.5
+
+        const xMin = isEngineer ? -1 : 0;
+        const W = MOHR_MARGIN.left + MOHR_SCALE + MOHR_MARGIN.right;
+        const H = MOHR_MARGIN.top + 0.5 * MOHR_SCALE + MOHR_MARGIN.bottom;
+        const X = (sigma: number) => MOHR_MARGIN.left + (sigmaN(sigma) - xMin) * MOHR_SCALE;
+        const Y = (tau: number) => MOHR_MARGIN.top + (0.5 - tauN(tau)) * MOHR_SCALE;
+
+        // Ends of the σn axis, whichever way round the convention puts them.
+        const xLeft = MOHR_MARGIN.left;
+        const xRight = MOHR_MARGIN.left + MOHR_SCALE;
+        const yBase = Y(0);
+        const yTop = Y(span / 2);
+
+        /** Upper half-circle spanning [a, b] of the σn axis. */
+        const semicircle = (a: number, b: number) => {
+            const lo = Math.min(X(a), X(b));
+            const hi = Math.max(X(a), X(b));
+            const r = (hi - lo) / 2;
+            return `M ${lo} ${yBase} A ${r} ${r} 0 0 1 ${hi} ${yBase}`;
+        };
+
+        const polyline = (pts: Array<[number, number]>) =>
+            pts.map(([s, t], i) => `${i === 0 ? 'M' : 'L'} ${X(s).toFixed(2)} ${Y(t).toFixed(2)}`).join(' ');
+
+        // The admissible region: outer half-disc with the two inner ones punched out (even-odd).
+        const regionPath = [semicircle(s1Ref, s3Ref), 'Z', semicircle(s1Ref, s2Ref), 'Z',
+            semicircle(s2Ref, s3Ref), 'Z'].join(' ');
+
+        // σn colour bands — the very field the sphere's surface is painted with, which here comes
+        // out as vertical bands since σn is the horizontal axis. Same LUT, same range, same band
+        // count, so the two views read as one figure.
+        let bands: Array<{ from: number; to: number; color: string }> = [];
+        if (settings.showNormalStressField && fieldRange && fieldRange.max > fieldRange.min) {
+            try {
+                const lut = createLut(settings.colorTableName, 128);
+                lut.setMin(0);
+                lut.setMax(1);
+                const nBands = settings.nIsoCurves + 1;
+                const level = (i: number) =>
+                    fieldRange.min + (i / (nBands - 1)) * (fieldRange.max - fieldRange.min);
+                const to255 = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+                for (let i = 0; i < nBands - 1; i++) {
+                    const c = lut.getColor((level(i) - fieldRange.min) / (fieldRange.max - fieldRange.min));
+                    const a = X(level(i));
+                    const b = X(level(i + 1));
+                    bands.push({
+                        from: Math.min(a, b),
+                        to: Math.max(a, b),
+                        color: `rgb(${to255(c.r)},${to255(c.g)},${to255(c.b)})`
+                    });
+                }
+                bands.sort((p, q) => p.from - q.from);
+            } catch {
+                bands = [];
+            }
+        }
+
+        const clipId = `mohr-region-${mohrClipId}`;
+
+        return (
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <clipPath id={clipId}>
+                        <path d={regionPath} clipRule="evenodd" />
+                    </clipPath>
+                </defs>
+
+                {/* σn field, clipped to the Mohr region */}
+                {bands.length > 0 && (
+                    <g clipPath={`url(#${clipId})`}>
+                        {bands.map((b, i) => (
+                            <rect
+                                key={`band-${i}`}
+                                x={b.from} y={yTop} width={Math.max(0, b.to - b.from)} height={yBase - yTop}
+                                fill={b.color}
+                            />
+                        ))}
+                    </g>
+                )}
+
+                {/* Axes */}
+                <line x1={xLeft} y1={yBase} x2={xRight + 14} y2={yBase} stroke="#333" strokeWidth={1.2} />
+                <polygon points={`${xRight + 22},${yBase} ${xRight + 13},${yBase - 4} ${xRight + 13},${yBase + 4}`} fill="#333" />
+                <line x1={xLeft} y1={yBase} x2={xLeft} y2={yTop - 14} stroke="#333" strokeWidth={1.2} />
+                <polygon points={`${xLeft},${yTop - 22} ${xLeft - 4},${yTop - 13} ${xLeft + 4},${yTop - 13}`} fill="#333" />
+                <text x={xRight + 20} y={yBase + 18} fontSize={13} fill="#333">σn</text>
+                <text x={xLeft - 30} y={yTop - 16} fontSize={13} fill="#333">τ</text>
+
+                {/* Mohr region: outer circle (σ1, σ3) and the two inner ones */}
+                <path d={semicircle(s1Ref, s3Ref)} fill="none" stroke="#333" strokeWidth={1.4} />
+                <path d={semicircle(s1Ref, s2Ref)} fill="none" stroke="#333" strokeWidth={1.2} />
+                <path d={semicircle(s2Ref, s3Ref)} fill="none" stroke="#333" strokeWidth={1.2} />
+
+                {/* Equipotentials — vertical, σn being constant along each of them */}
+                {mohr.isoLines.map((iso, i) => (
+                    <line
+                        key={`iso-${i}`}
+                        x1={X(iso.sigma)} y1={Y(iso.tauMin)}
+                        x2={X(iso.sigma)} y2={Y(iso.tauMax)}
+                        stroke={settings.equipotentialColor}
+                        strokeWidth={0.9}
+                    />
+                ))}
+
+                {/* Integral curves */}
+                {mohr.slipCurves.map((curve, i) => (
+                    <path
+                        key={`slip-${i}`}
+                        d={polyline(curve)}
+                        fill="none"
+                        stroke={settings.slipLineColor}
+                        strokeWidth={0.9}
+                        opacity={0.9}
+                    />
+                ))}
+
+                {/* Measured planes, in their data-type colours — the same ones the poles carry */}
+                {mohr.points.map((p, i) => (
+                    <circle
+                        key={`pt-${i}`}
+                        cx={X(p.sigma)} cy={Y(p.tau)} r={settings.mohrPointRadius}
+                        fill={p.color} stroke="#fff" strokeWidth={0.8}
+                    />
+                ))}
+                {settings.showDataNumbers && mohr.points.map((p, i) => (
+                    <text
+                        key={`lbl-${i}`}
+                        x={X(p.sigma) + settings.mohrPointRadius + 2}
+                        y={Y(p.tau) - settings.mohrPointRadius}
+                        fontSize={11} fill={p.color}
+                        stroke="#fff" strokeWidth={2.5} paintOrder="stroke"
+                    >
+                        {p.label}
+                    </text>
+                ))}
+
+                {/* σ ticks. σ2 runs into its neighbours as R approaches 0 or 1; drop its label then. */}
+                {([[s1Ref, 'σ₁'], [s2Ref, 'σ₂'], [s3Ref, 'σ₃']] as Array<[number, string]>).map(([v, name]) => (
+                    <g key={name}>
+                        <line x1={X(v)} y1={yBase} x2={X(v)} y2={yBase + 5} stroke="#333" strokeWidth={1.2} />
+                        {(name !== 'σ₂' || Math.min(s2Ref - s1Ref, s3Ref - s2Ref) / span * MOHR_SCALE > 26) && (
+                            <text x={X(v)} y={yBase + 20} fontSize={13} fill="#333" textAnchor="middle">{name}</text>
+                        )}
+                    </g>
+                ))}
+            </svg>
+        );
+    }, [
+        mohr, isEngineer, fieldRange, mohrClipId,
+        settings.equipotentialColor, settings.slipLineColor, settings.mohrPointRadius,
+        settings.showNormalStressField, settings.colorTableName, settings.nIsoCurves,
+        settings.showDataNumbers
+    ]);
+
     const plotContent = (
         <div className="flex flex-col h-full w-full overflow-hidden">
-            <div className="relative flex-1 min-h-0 w-full">
-                <div ref={mountRef} className="w-full h-full border rounded-lg bg-white" />
-                {legend}
+            <div className="relative flex-1 min-h-0 w-full flex gap-2">
+                <div className="relative flex-1 min-w-0">
+                    <div ref={mountRef} className="w-full h-full border rounded-lg bg-white" />
+                    {legend}
+                </div>
+                {settings.showMohrPanel && mohrPanel && (
+                    <div
+                        className="border rounded-lg bg-white p-2 flex flex-col justify-center overflow-hidden"
+                        style={{ width: '38%', minWidth: 200, maxWidth: 560 }}
+                    >
+                        {mohrPanel}
+                        <div className="text-[10px] text-gray-500 text-center mt-1">
+                            Mohr diagram — equipotentials (vertical) and integral curves
+                            <span className="block">
+                                normalised, {isEngineer ? 'engineer (tension +)' : 'geologist (compression +)'}
+                            </span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {stats && (
