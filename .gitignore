@@ -4,3 +4,4 @@ data/pebble/python_env
 .DS_Store
 ios/
 android/
+tmp/

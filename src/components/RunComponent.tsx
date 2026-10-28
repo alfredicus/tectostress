@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Play, Settings, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { DataFile } from './DataFile';
-import { SearchMethodFactory, SearchMethod, InverseMethod, DataFactory, Data, FractureStrategy } from '@alfredo-taboada/stress';
-import { decomposeStressTensor, eulerAnglesToDegrees, calculateStressRatio, extractEulerAnglesFromWrot } from '../math/tensor_analysis';
+import { Data } from '@alfredo-taboada/stress';
+import {
+    runInversion,
+    computePredictions,
+    misfitsFromPredictions,
+    enrichFiles,
+    buildResultsFile,
+    Predictions
+} from '../inversion/InversionService';
+import { CONFIG_DATA } from '../inversion/methods';
 import ErrorModal from './ErrorModal';
 import LoadingOverlay from './LoadingOverlay';
 import { Download, FileText } from 'lucide-react';
@@ -22,29 +30,6 @@ import MisfitHistogramComponent from './Histo/MisfitHistogramComponent';
 import StereonetComponent from './Stereonet/StereonetComponent';
 import SphereComponent from './Sphere/SphereComponent';
 import { useSettings } from './Settings/SettingsContext';
-
-// Configuration interfaces (same as before)
-interface ParamConfig {
-    name: string;
-    display: string;
-    value: number;
-    min: number;
-    max: number;
-}
-
-interface SearchMethodConfig {
-    name: string;
-    active: boolean;
-    params: ParamConfig[];
-}
-
-interface ConfigData {
-    search: {
-        display: string;
-        type: string;
-        list: SearchMethodConfig[];
-    };
-}
 
 interface SimulationStatus {
     status: string;
@@ -79,254 +64,7 @@ interface RunComponentProps {
     onNavigateToHelp?: (docPath: string) => void;
 }
 
-// Configuration data (same as before)
-const CONFIG_DATA: ConfigData = {
-    search: {
-        display: "Search method",
-        type: "combobox",
-        list: [
-            {
-                name: "Monte Carlo (Euler)",
-                active: true,
-                params: [
-                    {
-                        name: "rotAngleHalfInterval",
-                        display: "Rotation angle interval",
-                        value: 90,
-                        min: 0,
-                        max: 90
-                    },
-                    {
-                        name: "nbRandomTrials",
-                        display: "Nb simulations",
-                        value: 20000,
-                        min: 10,
-                        max: 1e6
-                    },
-                    {
-                        name: "stressRatio",
-                        display: "Stress ratio",
-                        value: 0.5,
-                        min: 0,
-                        max: 1
-                    },
-                    {
-                        name: "stressRatioHalfInterval",
-                        display: "Stress ratio interval",
-                        value: 1,
-                        min: 0,
-                        max: 1
-                    }
-                ]
-            },
-            {
-                name: "Monte Carlo (Quaternion)",
-                active: true,
-                params: [
-                    {
-                        name: "nbRandomTrials",
-                        display: "Nb simulations",
-                        value: 20000,
-                        min: 10,
-                        max: 1e6
-                    },
-                    {
-                        name: "topFraction",
-                        display: "Top fraction kept",
-                        value: 0.05,
-                        min: 0.001,
-                        max: 0.5
-                    }
-                ]
-            },
-            {
-                name: "MCMC (Euler)",
-                active: true,
-                params: [
-                    {
-                        name: "nbIterations",
-                        display: "Nb iterations",
-                        value: 50000,
-                        min: 1000,
-                        max: 85000
-                    },
-                    {
-                        name: "burnIn",
-                        display: "Burn-in fraction",
-                        value: 0.2,
-                        min: 0,
-                        max: 0.5
-                    },
-                    {
-                        name: "temperature",
-                        display: "Temperature",
-                        value: 0.05,
-                        min: 0.001,
-                        max: 1
-                    },
-                    {
-                        name: "rotAngleStepSize",
-                        display: "Rotation step (deg)",
-                        value: 5,
-                        min: 0.1,
-                        max: 45
-                    },
-                    {
-                        name: "stressRatioStepSize",
-                        display: "Stress ratio step",
-                        value: 0.05,
-                        min: 0.001,
-                        max: 0.5
-                    },
-                    {
-                        name: "stressRatio",
-                        display: "Stress ratio",
-                        value: 0.5,
-                        min: 0,
-                        max: 1
-                    }
-                ]
-            },
-            {
-                name: "MCMC (Quaternion)",
-                active: true,
-                params: [
-                    {
-                        name: "nbIterations",
-                        display: "Nb iterations",
-                        value: 50000,
-                        min: 1000,
-                        max: 500000
-                    },
-                    {
-                        name: "burnIn",
-                        display: "Burn-in fraction",
-                        value: 0.2,
-                        min: 0,
-                        max: 0.5
-                    },
-                    {
-                        name: "sigmaNoise",
-                        display: "σ noise (rad)",
-                        value: parseFloat((Math.PI / 18).toFixed(4)),
-                        min: 0.01,
-                        max: 0.5
-                    },
-                    {
-                        name: "sigmaRot",
-                        display: "σ rot (rad)",
-                        value: 0.1,
-                        min: 0.01,
-                        max: 0.5
-                    },
-                    {
-                        name: "sigmaR",
-                        display: "σ R",
-                        value: 0.05,
-                        min: 0.001,
-                        max: 0.5
-                    },
-                    {
-                        name: "stressRatio",
-                        display: "Stress ratio",
-                        value: 0.5,
-                        min: 0,
-                        max: 1
-                    }
-                ]
-            },
-            {
-                name: "Grid Search",
-                active: false,
-                params: [
-                    {
-                        name: "dimension",
-                        display: "Dimension (2/3/4)",
-                        value: 4,
-                        min: 2,
-                        max: 4
-                    },
-                    {
-                        name: "deltaGridAngle",
-                        display: "Grid angle delta (°)",
-                        value: 2,
-                        min: 0.01,
-                        max: 90
-                    },
-                    {
-                        name: "GridAngleHalfIntervalS",
-                        display: "Angle half-interval (°)",
-                        value: 30,
-                        min: 1,
-                        max: 180
-                    },
-                    {
-                        name: "deltaStressRatio",
-                        display: "Stress ratio delta",
-                        value: 0.01,
-                        min: 0.001,
-                        max: 0.5
-                    },
-                    {
-                        name: "stressRatioHalfInterval",
-                        display: "Stress ratio half-interval",
-                        value: 0.2,
-                        min: 0,
-                        max: 1
-                    },
-                    {
-                        name: "sweepPhi",
-                        display: "Sweep φ (0=fix, 1=free)",
-                        value: 1,
-                        min: 0,
-                        max: 1
-                    },
-                    {
-                        name: "sweepTheta",
-                        display: "Sweep θ (0=fix, 1=free)",
-                        value: 1,
-                        min: 0,
-                        max: 1
-                    },
-                    {
-                        name: "sweepAlpha",
-                        display: "Sweep α (0=fix, 1=free)",
-                        value: 1,
-                        min: 0,
-                        max: 1
-                    },
-                    {
-                        name: "sweepR",
-                        display: "Sweep R (0=fix, 1=free)",
-                        value: 1,
-                        min: 0,
-                        max: 1
-                    }
-                ]
-            },
-            {
-                name: "Manually",
-                active: false,
-                params: []
-            }
-        ]
-    }
-};
 
-
-// Observer class for simulation progress
-class SimulationObserver {
-    private updateCallback: (message: string) => void;
-
-    constructor(updateCallback: (message: string) => void) {
-        this.updateCallback = updateCallback;
-    }
-
-    update(message: string) {
-        const progress = parseInt(message);
-        this.updateCallback(message);
-    }
-}
 
 const RunComponent: React.FC<RunComponentProps> = ({
     files,
@@ -545,20 +283,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
         return new Promise(resolve => setTimeout(resolve, ms));
     };
 
-    const runInversionAsync = (inv: any): Promise<any> => {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                try {
-                    const result = inv.run();
-                    resolve(result);
-                } catch (error) {
-                    reject(error);
-                }
-            }, 10);
-        });
-    };
 
-    // Main simulation function (same as before, but with additional visualization data preparation)
+    // Main simulation function: runs the inversion service and feeds its result to the UI
     const startSimulation = useCallback(async () => {
         if (selectedFiles.length === 0) return;
 
@@ -569,218 +295,37 @@ const RunComponent: React.FC<RunComponentProps> = ({
         try {
             setConsoleMessages([]);
             setIsComputing(true);
-            setComputingMessage('Initializing computation...');
-            setComputingProgress(0);
             setSimulationStatus({ status: 'Computing...', progress: 0 });
             setSolution(null);
             setShowResultsPanel(false);
 
-            addConsoleMessage('info', 'Starting stress inversion simulation...');
-            addConsoleMessage('info', `Selected method: ${selectedMethod}`);
-            addConsoleMessage('info', `Processing ${selectedFilesData.length} file(s): ${selectedFilesData.map(f => f.name).join(', ')}`);
-
-            await delay(50);
-
-            // Setup inversion method
-            setComputingMessage('Setting up inversion method...');
-            setComputingProgress(10);
-            addConsoleMessage('info', 'Setting up inversion method...');
-            await delay(50);
-
-            const inv = new InverseMethod();
-            // For Grid Search, convert 0/1 slider values to booleans for sweep flags
-            let methodParams: Record<string, any> = { ...currentParams };
-            if (selectedMethod === 'Grid Search') {
-                for (const key of ['sweepPhi', 'sweepTheta', 'sweepAlpha', 'sweepR']) {
-                    if (key in methodParams) methodParams[key] = methodParams[key] !== 0;
+            const run = await runInversion(
+                {
+                    files: selectedFilesData,
+                    method: selectedMethod,
+                    params: currentParams,
+                    misfitCriterion: misfitStrategy
+                },
+                {
+                    onStep: async (message, progress) => {
+                        setComputingMessage(message);
+                        setComputingProgress(progress);
+                        // Let the loading overlay repaint before the next (blocking) stage
+                        await delay(progress === 100 ? 100 : 50);
+                    },
+                    onLog: addConsoleMessage,
+                    onSearchProgress: handleSimulationProgress
                 }
-                if ('dimension' in methodParams) methodParams.dimension = Math.round(methodParams.dimension) as 2 | 3 | 4;
-            }
-            const searchMethod: SearchMethod = SearchMethodFactory.create(
-                selectedMethod,
-                methodParams
             );
 
-            if (!searchMethod) {
-                throw new Error(`Unknown search method: "${selectedMethod}". Check that the stress library is up to date.`);
-            }
-
-            const paramDetails = Object.entries(currentParams)
-                .map(([key, value]) => `${key}: ${value}`)
-                .join('\n');
-            addConsoleMessage('info', 'Using parameters:', paramDetails);
-
-            const observer = new SimulationObserver(handleSimulationProgress);
-            searchMethod.addObserver(observer);
-            inv.setSearchMethod(searchMethod);
-
-            // Process data
-            setComputingMessage('Processing input data...');
-            setComputingProgress(30);
-            addConsoleMessage('info', 'Processing input data...');
-            await delay(50);
-
-            const processingStats = {
-                total: 0,
-                processed: 0,
-                errors: [] as string[],
-                unsupportedTypes: new Set<string>()
-            };
-
-            // Source row of every datum added to the inversion, in insertion order — i.e. exactly
-            // parallel to `inv.data`. Rows are matched by position rather than by an `id` column,
-            // which not every input file provides.
-            const dataOrigins: { fileId: string; rowIndex: number }[] = [];
-
-            selectedFilesData.forEach(file => {
-                file.content.forEach((dataParams: any, index: number) => {
-                    processingStats.total++;
-
-                    try {
-                        const dataType = dataParams['type'];
-                        const data = DataFactory.create(dataType);
-
-                        if (!data) {
-                            processingStats.unsupportedTypes.add(dataType);
-                            processingStats.errors.push(
-                                `File "${file.name}", row ${index + 1}: Unsupported data type "${dataType}"`
-                            );
-                            addConsoleMessage('warning', `Unsupported data type: ${dataType}`, `File: ${file.name}, Row: ${index + 1}`);
-                            return;
-                        }
-
-                        data.initialize(dataParams);
-                        (data as any).setStrategy?.(
-                            misfitStrategy === 'DOT' ? FractureStrategy.DOT : FractureStrategy.ANGLE
-                        );
-
-                        // Tag the datum with its source file (used by the library in messages).
-                        try { (data as any).filename = file.name; } catch { /* setter may be absent */ }
-
-                        inv.addData(data);
-                        dataOrigins.push({ fileId: file.id, rowIndex: index });
-                        processingStats.processed++;
-
-                    } catch (error) {
-                        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-                        processingStats.errors.push(
-                            `File "${file.name}", row ${index + 1}: ${errorMsg}`
-                        );
-                        addConsoleMessage('error', `Data processing error in ${file.name}`, `Row ${index + 1}: ${errorMsg}`);
-                    }
-                });
-            });
-
-            addConsoleMessage('info', `Data processing completed: ${processingStats.processed}/${processingStats.total} items processed successfully`);
-
-            if (processingStats.errors.length > 0) {
-                addConsoleMessage('warning', `${processingStats.errors.length} items were skipped due to errors`);
-
-                if (processingStats.unsupportedTypes.size > 0) {
-                    addConsoleMessage('warning', `Unsupported data types found: ${Array.from(processingStats.unsupportedTypes).join(', ')}`);
-                }
-            }
-
-            if (processingStats.processed === 0) {
-                const errorMsg = `No valid data could be processed. Found unsupported types: ${Array.from(processingStats.unsupportedTypes).join(', ')}`;
-                addConsoleMessage('error', 'No valid data to process', errorMsg);
-                throw new Error(errorMsg);
-            }
-
-            if (processingStats.processed < 3) {
-                addConsoleMessage('warning', `Only ${processingStats.processed} data items were processed. Results may not be reliable.`);
-            }
-
-            // Run inversion
-            setComputingMessage('Running stress inversion...');
-            setComputingProgress(60);
-            addConsoleMessage('info', 'Running stress inversion algorithm...');
-            await delay(50);
-
-            const t0 = performance.now();
-            const sol = await runInversionAsync(inv);
-            const elapsedMs = performance.now() - t0;
-
-            // Process results
-            setComputingMessage('Processing results...');
-            setComputingProgress(90);
-            addConsoleMessage('info', 'Processing inversion results...');
-            await delay(50);
-
-            const stressTensor = sol.stressTensorSolution;
-            const analysis = decomposeStressTensor(stressTensor);
-            const eulerAngles = extractEulerAnglesFromWrot(sol.rotationMatrixW as number[][]);
-            const eulerDegrees = eulerAnglesToDegrees(eulerAngles);
-            const calculatedStressRatio = calculateStressRatio(analysis.eigenvalues);
-
-            // Log key results
-            addConsoleMessage('success', 'Stress inversion completed successfully!');
-            const elapsedStr = elapsedMs < 1000
-                ? `${Math.round(elapsedMs)} ms`
-                : `${(elapsedMs / 1000).toFixed(2)} s`;
-            addConsoleMessage('info', `Running time: ${elapsedStr}`);
-            addConsoleMessage('info', `Stress ratio: ${sol.stressRatio.toFixed(3)}`);
-            addConsoleMessage('info', `Fit: ${((1 - sol.misfit) * 100).toFixed(1)}%`);
-            addConsoleMessage('info', `Misfit: ${
-                misfitStrategy === 'DOT'
-                    ? sol.misfit.toFixed(4)
-                    : `${(sol.misfit * 180).toFixed(1)}°`
-            }`);
-
-            // Extract MCMC posterior stats if applicable
-            let mcmcStats: StressSolution['mcmcStats'] = undefined;
-            const isMCMCMethod = selectedMethod === 'MCMC' || selectedMethod === 'MCMC Quaternion';
-            const isMCMethod   = selectedMethod === 'Monte Carlo' || selectedMethod === 'Monte Carlo Quaternion';
-            if (isMCMCMethod || isMCMethod) {
-                const sm = inv.searchMethod;
-                const stats = (sm as any).getStats?.();
-                if (stats) {
-                    mcmcStats = stats;
-                    const label = isMCMethod ? `${selectedMethod} top-5%` : selectedMethod;
-                    addConsoleMessage('info', `${label} acceptance rate: ${stats.acceptanceRate.toFixed(1)}%`);
-                    addConsoleMessage('info', `${label} chain length: ${stats.chainLength} samples`);
-                    addConsoleMessage('info',
-                        `Stress ratio posterior: ${stats.stressRatio.mean.toFixed(3)} ± ${stats.stressRatio.std.toFixed(3)} ` +
-                        `[${stats.stressRatio.q05.toFixed(3)}, ${stats.stressRatio.q95.toFixed(3)}]`
-                    );
-                }
-            }
-
-            // Finalize
-            setComputingMessage('Finalizing...');
-            setComputingProgress(100);
-            await delay(100);
-
-            // Set final results with enhanced data for visualizations
-            const enhancedSolution: StressSolution = {
-                ...sol,
-                elapsedMs,
-                misfitCriterion: misfitStrategy,
-                mcmcStats,
-                rotationMatrixW: sol.rotationMatrixW as number[][],
-                analysis: {
-                    ...analysis,
-                    eulerAngles,
-                    eulerAnglesDegrees: eulerDegrees,
-                    calculatedStressRatio
-                },
-                // Add visualization-ready data
-                visualizationData: {
-                    inputData: selectedFilesData,
-                    processedDataCount: processingStats.processed,
-                    methodParameters: currentParams,
-                    processingStatistics: processingStats
-                }
-            };
-
-            setSolution(enhancedSolution);
-            setProcessedData({ data: [...inv.data], engine: inv.engine, origins: dataOrigins });
+            setSolution(run.solution);
+            setProcessedData({ data: run.data, engine: run.engine, origins: run.origins });
             setSimulationStatus({ status: 'Completed', progress: 100 });
             setShowResultsPanel(true);
 
             if (onSolutionChange) {
                 // Strip large distribution arrays before persisting to localStorage
-                const persistableSolution = { ...enhancedSolution };
+                const persistableSolution = { ...run.solution };
                 if (persistableSolution.mcmcStats?.distributions) {
                     persistableSolution.mcmcStats = {
                         ...persistableSolution.mcmcStats,
@@ -811,7 +356,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             setComputingMessage('');
             setComputingProgress(0);
         }
-    }, [selectedFiles, files, selectedMethod, currentParams, handleSimulationProgress, addConsoleMessage, persistedVisualizations, persistedSelectedFile, persistedLayout]);
+    }, [selectedFiles, files, selectedMethod, currentParams, misfitStrategy, handleSimulationProgress, addConsoleMessage, onSolutionChange, persistedVisualizations, persistedSelectedFile, persistedLayout]);
 
     // Cet effet s'assure que si les fichiers changent drastiquement 
     // (ex: changement de modèle), la solution basée sur les anciens fichiers
@@ -1002,255 +547,23 @@ const RunComponent: React.FC<RunComponentProps> = ({
     // can be matched back to the exact source row.
     // predict() returns either { normal, striation } (faults) or a Vector3 = predicted normal
     // (joints ∥ σ3, stylolites ∥ σ1); shear fractures throw and are skipped.
-    const predictions = useMemo(() => {
-        const map = new Map<string, { normal?: number[]; striation?: number[]; misfitAngle?: number; category?: string }>();
-        if (!processedData?.data || !solution) return map;
+    // After a run: predicted (ideal) orientation of each datum, keyed by source row
+    const predictions = useMemo<Predictions>(
+        () => processedData?.data && solution ? computePredictions(processedData, solution) : new Map(),
+        [processedData, solution]
+    );
 
-        // Friendly, grouped label for each Data subclass (constructor name) so the misfit
-        // histogram can be split by data type (striations, fractures, stylolites, …).
-        const categoryOf = (d: any): string => {
-            const cls = d?.constructor?.name ?? '';
-            switch (cls) {
-                case 'StriatedPlaneKin': return 'Striated planes';
-                case 'NeoformedStriatedPlane': return 'Neoformed striated planes';
-                case 'ExtensionFracture': return 'Extension fractures';
-                case 'StyloliteInterface': return 'Stylolites';
-                case 'CompactionBand': return 'Compaction bands';
-                case 'DilationBand': return 'Dilation bands';
-                default: return cls || 'Other';
-            }
-        };
+    // Per-datum angular differences (measured vs computed), for the misfit histogram
+    const misfits = useMemo(() => misfitsFromPredictions(predictions), [predictions]);
 
-        const { data, engine, origins } = processedData;
-        try {
-            // The search leaves the engine on the last candidate evaluated, so reset it to the
-            // best solution before predicting (mirrors the lib's own Runner).
-            engine?.setHypotheticalStress?.(solution.rotationMatrixW, solution.stressRatio);
-        } catch (e) {
-            console.warn('Could not reset engine to solution for prediction', e);
-            return map;
-        }
-
-        const isNonZero = (v: number[]) => Array.isArray(v) && v.some(c => Math.abs(c) > 1e-9);
-        /**
-         * Angle in degrees between the measured and the predicted vector, using the same
-         * convention as the library's cost functions:
-         *   oriented = false → the vector is an axis with no sense (a plane normal, or a
-         *                      striation whose movement sense is unknown) ⇒ angle in [0, 90]
-         *   oriented = true  → the sense matters (an oriented striation) ⇒ angle in [0, 180]
-         */
-        const angleDeg = (a: number[], b: number[], oriented: boolean): number | undefined => {
-            if (!Array.isArray(a) || !Array.isArray(b)) return undefined;
-            const na = Math.hypot(a[0], a[1], a[2]);
-            const nb = Math.hypot(b[0], b[1], b[2]);
-            if (na === 0 || nb === 0) return undefined;
-            const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
-            const cc = oriented ? c : Math.abs(c);
-            return Math.acos(Math.min(1, Math.max(-1, cc))) * 180 / Math.PI;
-        };
-
-        data.forEach((d: any, i: number) => {
-            const origin = origins?.[i];
-            if (!origin || typeof d?.predict !== 'function') return;
-            try {
-                const stress = engine.stress(d.position);
-                const pred = d.predict(engine, { stress });
-                if (!pred) return;
-
-                const key = `${origin.fileId}::${origin.rowIndex}`;
-                const category = categoryOf(d);
-                if (Array.isArray(pred)) {
-                    // Predicted normal (extension fractures ∥ σ3, stylolites ∥ σ1). A plane normal
-                    // has no sense, so the misfit is the acute angle.
-                    if (isNonZero(pred)) {
-                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred, false), category });
-                    }
-                } else if (pred.striation && isNonZero(pred.striation)) {
-                    // Predicted striation (striated planes / faults); zero when shear stress ≈ 0.
-                    // pred.normal is the measured plane normal — predict() leaves the plane
-                    // unchanged — so only the striation is worth overlaying.
-                    map.set(key, {
-                        striation: pred.striation,
-                        misfitAngle: angleDeg(d.striationVector, pred.striation, d.oriented !== false),
-                        category
-                    });
-                }
-            } catch {
-                // Skip data that cannot be predicted (e.g. shear stress ≈ 0)
-            }
-        });
-
-        return map;
-    }, [processedData, solution]);
-
-    // Flat list of per-datum angular differences (measured vs computed), tagged by data type,
-    // used to draw the misfit histogram in the results panel.
-    const misfits = useMemo(() => {
-        const out: { category: string; angle: number }[] = [];
-        predictions.forEach(p => {
-            if (p.misfitAngle != null && Number.isFinite(p.misfitAngle)) {
-                out.push({ category: p.category ?? 'Other', angle: p.misfitAngle });
-            }
-        });
-        return out;
-    }, [predictions]);
-
-    // Create enhanced files with solution data for visualizations
+    // Files enriched with the solution for the visualizations: the input rows carry their
+    // predictions, every file carries the stress axes, plus a virtual "results" file
     const enhancedFiles = useMemo(() => {
         if (!solution) return files;
-
-        // Create a virtual "results" file with the solution data
-        const resultsFile: DataFile = {
-            id: 'stress-inversion-results',
-            name: 'Stress Inversion Results',
-            headers: ['parameter', 'value', 'unit'],
-            content: [
-                { parameter: 'stress_ratio', value: solution.stressRatio, unit: '' },
-                { parameter: 'fit_percentage', value: (1 - solution.misfit) * 100, unit: '%' },
-                { parameter: 'misfit_degrees', value: solution.misfit * 180 / Math.PI, unit: 'degrees' },
-                ...(solution.analysis ? [
-                    { parameter: 'sigma1', value: solution.analysis.principalStresses.sigma1.value, unit: '' },
-                    { parameter: 'sigma2', value: solution.analysis.principalStresses.sigma2.value, unit: '' },
-                    { parameter: 'sigma3', value: solution.analysis.principalStresses.sigma3.value, unit: '' },
-                    { parameter: 'phi_degrees', value: solution.analysis.eulerAnglesDegrees.phi, unit: 'degrees' },
-                    { parameter: 'theta_degrees', value: solution.analysis.eulerAnglesDegrees.theta, unit: 'degrees' },
-                    { parameter: 'psi_degrees', value: solution.analysis.eulerAnglesDegrees.psi, unit: 'degrees' }
-                ] : []),
-                ...(solution.elapsedMs != null ? [
-                    { parameter: 'elapsed_ms', value: solution.elapsedMs, unit: 'ms' }
-                ] : []),
-                ...(solution.mcmcStats ? [
-                    { parameter: 'mcmc_acceptance_rate', value: solution.mcmcStats.acceptanceRate, unit: '%' },
-                    { parameter: 'mcmc_chain_length', value: solution.mcmcStats.chainLength, unit: 'samples' },
-                    { parameter: 'mcmc_stress_ratio_mean', value: solution.mcmcStats.stressRatio.mean, unit: '' },
-                    { parameter: 'mcmc_stress_ratio_std', value: solution.mcmcStats.stressRatio.std, unit: '' },
-                    { parameter: 'mcmc_stress_ratio_q05', value: solution.mcmcStats.stressRatio.q05, unit: '' },
-                    { parameter: 'mcmc_stress_ratio_q95', value: solution.mcmcStats.stressRatio.q95, unit: '' },
-                    { parameter: 'mcmc_misfit_mean', value: solution.mcmcStats.misfit.mean, unit: '' },
-                    { parameter: 'mcmc_misfit_std', value: solution.mcmcStats.misfit.std, unit: '' },
-                    { parameter: 'mcmc_misfit_min', value: solution.mcmcStats.misfit.min, unit: '' },
-                    // Euler angle posterior stats (degrees) — guarded for old persisted solutions
-                    ...(solution.mcmcStats.eulerAngles ? [
-                        { parameter: 'mcmc_phi_mean', value: solution.mcmcStats.eulerAngles.phi.mean, unit: 'degrees' },
-                        { parameter: 'mcmc_phi_std', value: solution.mcmcStats.eulerAngles.phi.std, unit: 'degrees' },
-                        { parameter: 'mcmc_phi_q05', value: solution.mcmcStats.eulerAngles.phi.q05, unit: 'degrees' },
-                        { parameter: 'mcmc_phi_q95', value: solution.mcmcStats.eulerAngles.phi.q95, unit: 'degrees' },
-                        { parameter: 'mcmc_theta_mean', value: solution.mcmcStats.eulerAngles.theta.mean, unit: 'degrees' },
-                        { parameter: 'mcmc_theta_std', value: solution.mcmcStats.eulerAngles.theta.std, unit: 'degrees' },
-                        { parameter: 'mcmc_theta_q05', value: solution.mcmcStats.eulerAngles.theta.q05, unit: 'degrees' },
-                        { parameter: 'mcmc_theta_q95', value: solution.mcmcStats.eulerAngles.theta.q95, unit: 'degrees' },
-                        { parameter: 'mcmc_psi_mean', value: solution.mcmcStats.eulerAngles.psi.mean, unit: 'degrees' },
-                        { parameter: 'mcmc_psi_std', value: solution.mcmcStats.eulerAngles.psi.std, unit: 'degrees' },
-                        { parameter: 'mcmc_psi_q05', value: solution.mcmcStats.eulerAngles.psi.q05, unit: 'degrees' },
-                        { parameter: 'mcmc_psi_q95', value: solution.mcmcStats.eulerAngles.psi.q95, unit: 'degrees' },
-                    ] : []),
-                    // Distribution arrays (JSON-encoded) — guarded for old persisted solutions
-                    ...(solution.mcmcStats.distributions ? (() => {
-                        const dist = solution.mcmcStats!.distributions!;
-                        const quantile = (sorted: number[], q: number) => {
-                            const pos = q * (sorted.length - 1);
-                            const lo = Math.floor(pos);
-                            const hi = Math.ceil(pos);
-                            return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-                        };
-                        const q25 = (arr: number[]) => quantile([...arr].sort((a, b) => a - b), 0.25);
-                        const q75 = (arr: number[]) => quantile([...arr].sort((a, b) => a - b), 0.75);
-                        return [
-                            { parameter: 'mcmc_dist_stress_ratio', value: JSON.stringify(dist.stressRatio), unit: 'json' },
-                            { parameter: 'mcmc_dist_phi', value: JSON.stringify(dist.phi), unit: 'json' },
-                            { parameter: 'mcmc_dist_theta', value: JSON.stringify(dist.theta), unit: 'json' },
-                            { parameter: 'mcmc_dist_psi', value: JSON.stringify(dist.psi), unit: 'json' },
-                            // Q25/Q75 for 50% credible intervals
-                            { parameter: 'mcmc_stress_ratio_q25', value: q25(dist.stressRatio), unit: '' },
-                            { parameter: 'mcmc_stress_ratio_q75', value: q75(dist.stressRatio), unit: '' },
-                            { parameter: 'mcmc_phi_q25', value: q25(dist.phi), unit: 'degrees' },
-                            { parameter: 'mcmc_phi_q75', value: q75(dist.phi), unit: 'degrees' },
-                            { parameter: 'mcmc_theta_q25', value: q25(dist.theta), unit: 'degrees' },
-                            { parameter: 'mcmc_theta_q75', value: q75(dist.theta), unit: 'degrees' },
-                            { parameter: 'mcmc_psi_q25', value: q25(dist.psi), unit: 'degrees' },
-                            { parameter: 'mcmc_psi_q75', value: q75(dist.psi), unit: 'degrees' },
-                        ];
-                    })() : []),
-                    // Monte Carlo specific info
-                    ...((selectedMethod === 'Monte Carlo' || selectedMethod === 'Monte Carlo Quaternion') ? [
-                        { parameter: 'mc_total_samples', value: currentParams.nbRandomTrials ?? Math.round(solution.mcmcStats.chainLength / (currentParams.topFraction ?? 0.05)), unit: '' },
-                        { parameter: 'mc_accepted_count', value: solution.mcmcStats.chainLength, unit: '' },
-                        { parameter: 'mc_acceptance_threshold', value: (currentParams.topFraction ?? 0.05) * 100, unit: '%' },
-                        { parameter: 'mc_threshold_type', value: 'top_pct', unit: '' },
-                    ] : []),
-                    // MCMC tuning parameters (derived from run params)
-                    ...(selectedMethod === 'MCMC' && Object.keys(currentParams).length > 0 ? [
-                        { parameter: 'mcmc_n_burn', value: Math.floor((currentParams.nbIterations ?? 50000) * (currentParams.burnIn ?? 0.2)), unit: 'samples' },
-                        { parameter: 'mcmc_sigma_rot', value: (currentParams.rotAngleStepSize ?? 5) * Math.PI / 180, unit: 'radians' },
-                        { parameter: 'mcmc_sigma_R', value: currentParams.stressRatioStepSize ?? 0.05, unit: '' },
-                    ] : []),
-                    // MCMC Quaternion tuning parameters
-                    ...(selectedMethod === 'MCMC Quaternion' && Object.keys(currentParams).length > 0 ? [
-                        { parameter: 'mcmc_n_burn', value: Math.floor((currentParams.nbIterations ?? 50000) * (currentParams.burnIn ?? 0.2)), unit: 'samples' },
-                        { parameter: 'mcmc_sigma_rot', value: currentParams.sigmaRot ?? 0.1, unit: 'radians' },
-                        { parameter: 'mcmc_sigma_R', value: currentParams.sigmaR ?? 0.05, unit: '' },
-                        { parameter: 'mcmc_sigma_noise', value: currentParams.sigmaNoise ?? (Math.PI / 18), unit: 'radians' },
-                    ] : []),
-                    // Stress axis orientation statistics (sigma1, sigma2, sigma3)
-                    ...(solution.mcmcStats.axesStats ? (() => {
-                        const ax = solution.mcmcStats.axesStats!;
-                        const axisKeys = (name: string, s: typeof ax.sigma1) => [
-                            { parameter: `mcmc_${name}_trend`, value: s.trend, unit: 'degrees' },
-                            { parameter: `mcmc_${name}_plunge`, value: s.plunge, unit: 'degrees' },
-                            { parameter: `mcmc_${name}_mean_resultant_length`, value: s.meanResultantLength, unit: '' },
-                            { parameter: `mcmc_${name}_fisher95`, value: s.fisherCone95, unit: 'degrees' },
-                            { parameter: `mcmc_${name}_fisher68`, value: s.fisherCone68, unit: 'degrees' },
-                        ];
-                        return [
-                            ...axisKeys('sigma1', ax.sigma1),
-                            ...axisKeys('sigma2', ax.sigma2),
-                            ...axisKeys('sigma3', ax.sigma3),
-                            { parameter: 'mcmc_rotation_angle_mean', value: ax.rotationAngle.mean, unit: 'degrees' },
-                            { parameter: 'mcmc_rotation_angle_std', value: ax.rotationAngle.std, unit: 'degrees' },
-                            { parameter: 'mcmc_rotation_angle_q05', value: ax.rotationAngle.q05, unit: 'degrees' },
-                            { parameter: 'mcmc_rotation_angle_q95', value: ax.rotationAngle.q95, unit: 'degrees' },
-                        ];
-                    })() : []),
-                ] : [])
-            ],
-            layout: { x: 0, y: 0, w: 6, h: 3 }
-        };
-
-        // Principal stress axis directions (σ1, σ2, σ3), in the same coordinate frame as the
-        // data normals, so the stereonet can overlay them. Attached to every file below.
-        const stressAxes = solution.analysis
-            ? {
-                sigma1: solution.analysis.principalStresses.sigma1.direction,
-                sigma2: solution.analysis.principalStresses.sigma2.direction,
-                sigma3: solution.analysis.principalStresses.sigma3.direction
-            }
-            : undefined;
-
-        // Attach predicted (computed) orientations onto copies of the input rows so the
-        // visualizations (e.g. Stereonet) can overlay measured vs computed data. Originals are
-        // never mutated. The stress axes are attached to the file object itself.
-        const augmentedFiles = files.map(file => {
-            const rows = file.content || (file as any).data;
-            let newFile: any = file;
-            if (predictions.size > 0 && Array.isArray(rows)) {
-                let touched = false;
-                const newRows = rows.map((row: any, rowIndex: number) => {
-                    const pred = predictions.get(`${file.id}::${rowIndex}`);
-                    if (!pred) return row;
-                    touched = true;
-                    return {
-                        ...row,
-                        ...(pred.normal ? { predicted_normal: pred.normal } : {}),
-                        ...(pred.striation ? { predicted_striation: pred.striation } : {}),
-                        ...(pred.misfitAngle != null ? { misfit_angle: pred.misfitAngle } : {})
-                    };
-                });
-                if (touched) newFile = { ...file, content: newRows };
-            }
-            return stressAxes ? { ...newFile, stressAxes } : newFile;
-        });
-
-        return [...augmentedFiles, resultsFile];
+        return [
+            ...enrichFiles(files, solution, predictions),
+            buildResultsFile(solution, selectedMethod, currentParams)
+        ];
     }, [files, solution, selectedMethod, currentParams, predictions]);
 
     // Results panel — inline JSX (not a nested component, to avoid remount flicker)

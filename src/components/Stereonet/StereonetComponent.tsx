@@ -464,7 +464,7 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
                 .flatMap(r => r.availableInFiles));
             const repr: AvailableRepresentation = {
                 key: `${dataType}_poles`, dataType, representation: polesRepr,
-                availableInFiles: [...fileIds], enabled: true, color: '', opacity: 1
+                availableInFiles: Array.from(fileIds), enabled: true, color: '', opacity: 1
             };
             const vectors: Vector3D[] = [];
             files.filter(f => fileIds.has(f.id)).forEach(file => {

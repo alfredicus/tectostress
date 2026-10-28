@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Play, HelpCircle, Database, Settings, MapPin, SlidersHorizontal } from 'lucide-react';
+import { Play, HelpCircle, Database, Settings, MapPin, SlidersHorizontal, Workflow } from 'lucide-react';
 import HelpComponent from './HelpComponent';
 import RunComponent from './RunComponent';
+import WorkflowTab from './Workflow/WorkflowTab';
 import DataComponent from './DataComponent';
 import FieldRecordTab from './Field/FieldRecordTab';
 import ConfigTab from './Settings/ConfigTab';
@@ -270,6 +271,7 @@ const MainInterfaceContent = () => {
     const data_name   = "data";
     const doc_name    = "doc";
     const run_name    = "inversion";
+    const workflow_name = "workflow";
     const field_name  = "field";
     const config_name = "config";
 
@@ -392,7 +394,7 @@ const MainInterfaceContent = () => {
                     <div className={tabClasses}>
                         <nav className="flex -mb-px overflow-x-auto">
                             {/* Main tabs (left-aligned) */}
-                            {[data_name, field_name, run_name, doc_name].map((tab) => (
+                            {[data_name, field_name, run_name, workflow_name, doc_name].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
@@ -404,6 +406,7 @@ const MainInterfaceContent = () => {
                                     <div className="flex items-center gap-2">
                                         {tab === data_name  && <Database      className="w-4 h-4" />}
                                         {tab === run_name   && <Play          className="w-4 h-4" />}
+                                        {tab === workflow_name && <Workflow   className="w-4 h-4" />}
                                         {tab === field_name && <MapPin        className="w-4 h-4" />}
                                         {tab === doc_name   && <HelpCircle    className="w-4 h-4" />}
                                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -460,6 +463,11 @@ const MainInterfaceContent = () => {
                                 onSolutionChange={handleStressAnalysisChange}
                                 onNavigateToHelp={handleNavigateToHelp}
                             />
+                        </div>
+
+                        {/* Workflows: alongside the other tabs (doc/workflow-spec.md) */}
+                        <div className="p-6" style={{ display: activeTab === workflow_name ? 'block' : 'none' }}>
+                            <WorkflowTab files={loadedFiles} />
                         </div>
 
                         <div style={{ display: activeTab === doc_name ? 'block' : 'none' }}>
