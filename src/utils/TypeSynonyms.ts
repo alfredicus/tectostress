@@ -7,6 +7,11 @@ export class TypeSynonyms {
         ['joint', ['extension fracture', 'tension fracture', 'tensile fracture', 'open fracture', 'vein', 'tension gash', 'joint', 'dike', 'dyke']],
         ['fault', ['shear fracture', 'fault', 'brittle shear fracture', 'brittle fault', 'striated fault plane', 'striated plane']],
         ['stylolite', ['stylolite', 'pressure solution seam', 'pressure solution surface', 'stylolite plane', 'stylolite interface']],
+        // Bands are planar data of their own: a dilation band opens ⊥ σ3 (like a joint) and a
+        // compaction band closes ⊥ σ1 (like a stylolite), but they are kept as distinct types so
+        // they keep their own name and styling on the stereonet.
+        ['dilation band', ['dilation band', 'dilational band', 'dilatant band']],
+        ['compaction band', ['compaction band', 'compactional band']],
 
         // Comumn names
         ['dip', ['dip', 'dip angle', 'slope', 'slope angle']],

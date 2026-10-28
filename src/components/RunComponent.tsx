@@ -19,7 +19,8 @@ import MCMCStatsComponent from './MCMCStats/MCMCStatsComponent';
 import ParameterSpaceLandscapeComponent from './ParameterSpace/ParameterSpaceLandscapeComponent';
 import InversionMohrComponent from './Mohr/InversionMohrComponent';
 import MisfitHistogramComponent from './Histo/MisfitHistogramComponent';
-import WulffComponent from './Wulff/WulffComponent';
+import StereonetComponent from './Stereonet/StereonetComponent';
+import SphereComponent from './Sphere/SphereComponent';
 import { useSettings } from './Settings/SettingsContext';
 
 // Configuration interfaces (same as before)
@@ -349,7 +350,11 @@ const RunComponent: React.FC<RunComponentProps> = ({
     });
     const [solution, setSolution] = useState<StressSolution | null>(persistedSolution || null);
     // const [solution, setSolution] = useState<StressSolution | null>(null);
-    const [processedData, setProcessedData] = useState<{ data: Data[]; engine: any } | null>(null);
+    // Data actually handed to the inversion, the engine holding the solution, and — parallel to
+    // `data` — the source row each datum came from, so predictions can be matched back exactly.
+    const [processedData, setProcessedData] = useState<
+        { data: Data[]; engine: any; origins: { fileId: string; rowIndex: number }[] } | null
+    >(null);
     const [showResultsPanel, setShowResultsPanel] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isComputing, setIsComputing] = useState<boolean>(false);
@@ -365,7 +370,8 @@ const RunComponent: React.FC<RunComponentProps> = ({
         wulff: boolean;
         mohr: boolean;
         landscape: boolean;
-    }>({ histogram: true, wulff: true, mohr: true, landscape: true });
+        sphere: boolean;
+    }>({ histogram: true, wulff: true, mohr: true, landscape: true, sphere: true });
     const toggleResultView = useCallback((key: keyof typeof resultViews) => {
         setResultViews(prev => ({ ...prev, [key]: !prev[key] }));
     }, []);
@@ -621,6 +627,11 @@ const RunComponent: React.FC<RunComponentProps> = ({
                 unsupportedTypes: new Set<string>()
             };
 
+            // Source row of every datum added to the inversion, in insertion order — i.e. exactly
+            // parallel to `inv.data`. Rows are matched by position rather than by an `id` column,
+            // which not every input file provides.
+            const dataOrigins: { fileId: string; rowIndex: number }[] = [];
+
             selectedFilesData.forEach(file => {
                 file.content.forEach((dataParams: any, index: number) => {
                     processingStats.total++;
@@ -643,11 +654,11 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             misfitStrategy === 'DOT' ? FractureStrategy.DOT : FractureStrategy.ANGLE
                         );
 
-                        // Tag the datum with its source file so predicted results can be
-                        // matched back to the right rows (id is only unique within a file).
+                        // Tag the datum with its source file (used by the library in messages).
                         try { (data as any).filename = file.name; } catch { /* setter may be absent */ }
 
                         inv.addData(data);
+                        dataOrigins.push({ fileId: file.id, rowIndex: index });
                         processingStats.processed++;
 
                     } catch (error) {
@@ -763,7 +774,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             };
 
             setSolution(enhancedSolution);
-            setProcessedData({ data: [...inv.data], engine: inv.engine });
+            setProcessedData({ data: [...inv.data], engine: inv.engine, origins: dataOrigins });
             setSimulationStatus({ status: 'Completed', progress: 100 });
             setShowResultsPanel(true);
 
@@ -987,10 +998,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
     };
 
     // After a run, compute the predicted (ideal) orientation for each datum from the inverted
-    // stress tensor via each Data's predict() method. Keyed by `${filename}::${id}` so results
-    // can be matched back to the right rows (id is only unique within a file).
+    // stress tensor via each Data's predict() method. Keyed by `${fileId}::${rowIndex}` so results
+    // can be matched back to the exact source row.
     // predict() returns either { normal, striation } (faults) or a Vector3 = predicted normal
-    // (joints ∥ σ3, stylolites ∥ σ1); shear fractures return void and are skipped.
+    // (joints ∥ σ3, stylolites ∥ σ1); shear fractures throw and are skipped.
     const predictions = useMemo(() => {
         const map = new Map<string, { normal?: number[]; striation?: number[]; misfitAngle?: number; category?: string }>();
         if (!processedData?.data || !solution) return map;
@@ -1010,7 +1021,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
             }
         };
 
-        const { data, engine } = processedData;
+        const { data, engine, origins } = processedData;
         try {
             // The search leaves the engine on the last candidate evaluated, so reset it to the
             // best solution before predicting (mirrors the lib's own Runner).
@@ -1021,36 +1032,46 @@ const RunComponent: React.FC<RunComponentProps> = ({
         }
 
         const isNonZero = (v: number[]) => Array.isArray(v) && v.some(c => Math.abs(c) > 1e-9);
-        // Acute angle (0–90°) between two vectors; sense-independent, suitable as a misfit metric.
-        const angleDeg = (a: number[], b: number[]): number | undefined => {
+        /**
+         * Angle in degrees between the measured and the predicted vector, using the same
+         * convention as the library's cost functions:
+         *   oriented = false → the vector is an axis with no sense (a plane normal, or a
+         *                      striation whose movement sense is unknown) ⇒ angle in [0, 90]
+         *   oriented = true  → the sense matters (an oriented striation) ⇒ angle in [0, 180]
+         */
+        const angleDeg = (a: number[], b: number[], oriented: boolean): number | undefined => {
             if (!Array.isArray(a) || !Array.isArray(b)) return undefined;
             const na = Math.hypot(a[0], a[1], a[2]);
             const nb = Math.hypot(b[0], b[1], b[2]);
             if (na === 0 || nb === 0) return undefined;
             const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
-            return Math.acos(Math.min(1, Math.max(-1, Math.abs(c)))) * 180 / Math.PI;
+            const cc = oriented ? c : Math.abs(c);
+            return Math.acos(Math.min(1, Math.max(-1, cc))) * 180 / Math.PI;
         };
 
-        data.forEach((d: any) => {
-            if (typeof d?.predict !== 'function') return;
+        data.forEach((d: any, i: number) => {
+            const origin = origins?.[i];
+            if (!origin || typeof d?.predict !== 'function') return;
             try {
                 const stress = engine.stress(d.position);
                 const pred = d.predict(engine, { stress });
                 if (!pred) return;
 
-                const key = `${d.filename ?? ''}::${d.id}`;
+                const key = `${origin.fileId}::${origin.rowIndex}`;
                 const category = categoryOf(d);
                 if (Array.isArray(pred)) {
-                    // Predicted normal (extension fractures / stylolites)
+                    // Predicted normal (extension fractures ∥ σ3, stylolites ∥ σ1). A plane normal
+                    // has no sense, so the misfit is the acute angle.
                     if (isNonZero(pred)) {
-                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred), category });
+                        map.set(key, { normal: pred, misfitAngle: angleDeg(d.normal, pred, false), category });
                     }
                 } else if (pred.striation && isNonZero(pred.striation)) {
-                    // Predicted striation (striated planes / faults); zero when shear stress ≈ 0
+                    // Predicted striation (striated planes / faults); zero when shear stress ≈ 0.
+                    // pred.normal is the measured plane normal — predict() leaves the plane
+                    // unchanged — so only the striation is worth overlaying.
                     map.set(key, {
-                        normal: pred.normal,
                         striation: pred.striation,
-                        misfitAngle: angleDeg(d.striationVector, pred.striation),
+                        misfitAngle: angleDeg(d.striationVector, pred.striation, d.oriented !== false),
                         category
                     });
                 }
@@ -1196,7 +1217,7 @@ const RunComponent: React.FC<RunComponentProps> = ({
         };
 
         // Principal stress axis directions (σ1, σ2, σ3), in the same coordinate frame as the
-        // data normals, so the Wulff can overlay them. Attached to every file below.
+        // data normals, so the stereonet can overlay them. Attached to every file below.
         const stressAxes = solution.analysis
             ? {
                 sigma1: solution.analysis.principalStresses.sigma1.direction,
@@ -1206,15 +1227,15 @@ const RunComponent: React.FC<RunComponentProps> = ({
             : undefined;
 
         // Attach predicted (computed) orientations onto copies of the input rows so the
-        // visualizations (e.g. Wulff) can overlay measured vs computed data. Originals are
+        // visualizations (e.g. Stereonet) can overlay measured vs computed data. Originals are
         // never mutated. The stress axes are attached to the file object itself.
         const augmentedFiles = files.map(file => {
             const rows = file.content || (file as any).data;
             let newFile: any = file;
             if (predictions.size > 0 && Array.isArray(rows)) {
                 let touched = false;
-                const newRows = rows.map((row: any) => {
-                    const pred = predictions.get(`${file.name}::${row.id}`);
+                const newRows = rows.map((row: any, rowIndex: number) => {
+                    const pred = predictions.get(`${file.id}::${rowIndex}`);
                     if (!pred) return row;
                     touched = true;
                     return {
@@ -1348,9 +1369,10 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             <span className="text-sm font-medium text-gray-700">Display:</span>
                             {([
                                 { key: 'histogram', label: 'Angular misfit histogram' },
-                                { key: 'wulff', label: 'Wulff stereonet' },
+                                { key: 'wulff', label: 'Stereonet' },
                                 { key: 'mohr', label: 'Mohr diagram' },
                                 { key: 'landscape', label: 'Parameter-space landscape' },
+                                { key: 'sphere', label: 'Stress sphere' },
                             ] as const).map(({ key, label }) => (
                                 <label key={key} className="flex items-center gap-1.5 cursor-pointer">
                                     <input
@@ -1364,22 +1386,14 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             ))}
                         </div>
 
-                        {/* Angular misfit histogram (measured vs computed striations / fractures) */}
-                        {resultViews.histogram && misfits.length > 0 && (
-                            <MisfitHistogramComponent
-                                misfits={misfits}
-                                totalData={processedData?.data.length}
-                            />
-                        )}
-
-                        {/* Wulff stereonet — measured data, predicted overlay and σ1/σ2/σ3.
-                            The Wulff fills its parent's height (h-full), so it needs an explicit
+                        {/* Stereonet — measured data, predicted overlay and σ1/σ2/σ3.
+                            The stereonet fills its parent's height (h-full), so it needs an explicit
                             height here — unlike the registry it isn't inside a sized grid cell. */}
                         {resultViews.wulff && processedData && (
                             <div>
-                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Wulff stereonet</h4>
+                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Stereonet</h4>
                                 <div style={{ height: 680 }} className="border rounded-lg bg-white">
-                                    <WulffComponent
+                                    <StereonetComponent
                                         files={enhancedFiles}
                                         width={600}
                                         height={600}
@@ -1387,6 +1401,22 @@ const RunComponent: React.FC<RunComponentProps> = ({
                                     />
                                 </div>
                             </div>
+                        )}
+
+                        {/* Mohr Diagram — data normals plotted against inverted stress */}
+                        {resultViews.mohr && processedData && solution.analysis && (
+                            <InversionMohrComponent
+                                solution={solution}
+                                data={processedData.data}
+                            />
+                        )}
+
+                        {/* Angular misfit histogram (measured vs computed striations / fractures) */}
+                        {resultViews.histogram && misfits.length > 0 && (
+                            <MisfitHistogramComponent
+                                misfits={misfits}
+                                totalData={processedData?.data.length}
+                            />
                         )}
 
                         {/* MCMC / Monte Carlo Posterior Statistics */}
@@ -1402,13 +1432,24 @@ const RunComponent: React.FC<RunComponentProps> = ({
                             />
                         )}
 
-                        {/* Mohr Diagram — data normals plotted against inverted stress */}
-                        {resultViews.mohr && processedData && solution.analysis && (
-                            <InversionMohrComponent
-                                solution={solution}
-                                data={processedData.data}
-                            />
+                        {/* Stress sphere — data normals in the principal frame, with the shear-stress
+                            trajectories and normal-stress equipotentials of the inverted tensor.
+                            Like the stereonet it fills its parent's height, so it needs an explicit one. */}
+                        {resultViews.sphere && processedData && (
+                            <div>
+                                <h4 className="text-xl font-semibold text-indigo-800 mb-3">Stress sphere</h4>
+                                <div style={{ height: 680 }} className="border rounded-lg bg-white">
+                                    <SphereComponent
+                                        files={enhancedFiles}
+                                        width={600}
+                                        height={600}
+                                        autoEnable={true}
+                                    />
+                                </div>
+                            </div>
                         )}
+
+
 
                         {/* Integration notice */}
                         {/* <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-200">

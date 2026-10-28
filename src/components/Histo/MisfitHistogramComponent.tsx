@@ -4,7 +4,8 @@ import { Histogram } from './Histogram';
 /**
  * One measured-vs-computed angular difference for a single datum.
  *   category — friendly data-type label (e.g. "Striated planes", "Extension fractures")
- *   angle    — misfit angle in degrees (0–90), acute angle between measured and predicted vector
+ *   angle    — misfit angle in degrees between the measured and the predicted vector: 0–90 for
+ *              axes without a sense (plane normals), 0–180 for oriented striations
  */
 export interface MisfitEntry {
     category: string;
@@ -44,9 +45,22 @@ const MisfitHistogramComponent: React.FC<MisfitHistogramComponentProps> = ({ mis
     }, [misfits]);
 
     const [selected, setSelected] = useState<string>('All');
+
+    // Oriented striations can miss by more than 90°, plane normals cannot; size the axis to
+    // whichever kind of data is present so nothing falls off the right-hand edge.
+    const suggestedMax = useMemo(
+        () => (misfits.some(m => m.angle > 90) ? 180 : 90),
+        [misfits]
+    );
+
     // User-controlled x-axis upper bound (0 → xMax) and bin width in degrees.
-    const [xMax, setXMax] = useState<number>(90);
+    const [xMax, setXMax] = useState<number>(suggestedMax);
     const [binWidth, setBinWidth] = useState<number>(5);
+
+    // Re-fit the axis when the data range changes (i.e. on a new run), not on every render.
+    useEffect(() => {
+        setXMax(suggestedMax);
+    }, [suggestedMax]);
 
     // If the available categories change (new run), fall back to "All".
     useEffect(() => {

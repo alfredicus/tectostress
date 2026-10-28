@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Wulff, WulffOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle, Vector3D } from './Wulff';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Stereonet, StereonetOptions, StriatedPlaneData, ExtensionFractureData, PoleData, DataStyle, Vector3D } from './Stereonet';
 import { Layers } from 'lucide-react';
 import { FaultDataHelper, Direction, CDirection, TypeOfMovement, CTypeOfMovement } from '@alfredo-taboada/stress';
 
@@ -44,7 +44,7 @@ function parseStrikeDirection(row: any): Direction {
     return Direction.UND;
 }
 
-/** Convert a library Vector3 ([E, N, Up]) to a Wulff Vector3D ({x, y, z}). */
+/** Convert a library Vector3 ([E, N, Up]) to a Stereonet Vector3D ({x, y, z}). */
 function libVec3ToVector3D(v: number[]): Vector3D {
     return { x: v[0], y: v[1], z: v[2] };
 }
@@ -90,12 +90,14 @@ import {
 } from '../VisualizationStateSystem';
 import { beautifyName, TypeSynonyms } from '@/utils';
 import {
-    WulffSettings,
-    WulffCompState,
+    StereonetSettings,
+    StereonetCompState,
     DATA_TYPE_CONFIGS,
     AvailableRepresentation,
-    createWulffSettings
-} from './WulffParameters';
+    createStereonetSettings,
+    DENSITY_ALL,
+    DENSITY_ALL_COLOR
+} from './StereonetParameters';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -143,21 +145,25 @@ function getAvailableRepresentations(files: any[], enableByDefault = false): Ava
 // WULFF STEREONET COMPONENT
 // ============================================================================
 
-const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEnable?: boolean }> = ({
+const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & { autoEnable?: boolean }> = ({
     files,
     width = 600,
     height = 600,
-    title = "Wulff Stereonet",
+    title = "Stereonet",
     state,
     onStateChange,
     onDimensionChange,
     autoEnable = false
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [stereonet, setStereonet] = useState<Wulff | null>(null);
+    // Unique radio-group name, since several stereonets can be on screen at once
+    const projectionRadioName = `stereonet-projection-${useId()}`;
+    const [stereonet, setStereonet] = useState<Stereonet | null>(null);
     const [dataStats, setDataStats] = useState<any>(null);
     const [showStylePopup, setShowStylePopup] = useState<string | null>(null);
     const [showDataPanel, setShowDataPanel] = useState(false);
+    // Guards the one-shot auto-enabling of the predicted overlay (see effect below).
+    const predictedAutoEnabled = useRef(false);
 
     // ========== UTILISATION DU HOOK useVisualizationState ==========
     const {
@@ -170,9 +176,12 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         resetToDefaults,
         getSelectedColumnData,
         getSelectedColumnInfo
-    } = useVisualizationState<WulffCompState>(
+    } = useVisualizationState<StereonetCompState>(
         'wulff',
-        createWulffSettings(), // ← Utilisation de la factory du WulffParameters
+        // ← Utilisation de la factory du StereonetParameters.
+        // In the inversion results panel (autoEnable), measured *and* predicted data are shown
+        // side by side straight away; elsewhere the predicted overlay stays opt-in.
+        createStereonetSettings({ showPredicted: autoEnable }),
         files,
         width,
         height,
@@ -192,6 +201,18 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [width, height]);
 
+    // Files that hold something this stereonet can actually draw. Used to keep purely
+    // informational files — such as the synthetic "Stress Inversion Results" file, which holds
+    // metrics rather than measurements — out of the "Files to Plot" list, where they would
+    // otherwise show up as entries that plot nothing when ticked. Computed over *all* files, not
+    // just the selected ones, so unticking a file does not make it disappear from the list.
+    const plottableFileIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (!files || files.length === 0) return ids;
+        getAvailableRepresentations(files).forEach(r => r.availableInFiles.forEach(id => ids.add(id)));
+        return ids;
+    }, [files]);
+
     // Update available representations when files change
     useEffect(() => {
         if (!files || files.length === 0) {
@@ -205,10 +226,22 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             JSON.stringify(currentState.settings.availableRepresentations.map(r => r.key));
         const filesChanged = JSON.stringify(fileIds) !== JSON.stringify(currentState.settings.selectedFiles);
 
-        if (representationsChanged || filesChanged) {
+        // Reveal the computed data as soon as an inversion attaches predictions to the rows —
+        // including in stereonets added from the visualization gallery, which are built before any
+        // run and so cannot rely on the initial `showPredicted` setting. This fires only on the
+        // transition to "predictions available", so unticking "Show Predicted" afterwards sticks.
+        const hasPredictions = files.some(f => {
+            const rows = (f as any).data || f.content;
+            return Array.isArray(rows) && rows.some((r: any) => r?.predicted_striation || r?.predicted_normal);
+        });
+        const enablePredicted = hasPredictions && !predictedAutoEnabled.current;
+        predictedAutoEnabled.current = hasPredictions;
+
+        if (representationsChanged || filesChanged || enablePredicted) {
             updateSettings({
                 selectedFiles: fileIds,
-                availableRepresentations: newAvailableRepresentations
+                availableRepresentations: newAvailableRepresentations,
+                ...(enablePredicted ? { showPredicted: true } : {})
             });
         }
     }, [files]);
@@ -229,10 +262,12 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         const zoomedSize = baseSize * currentState.settings.zoomLevel;
         const labelSize = 14 * currentState.settings.zoomLevel;
 
-        const options: WulffOptions = {
+        const options: StereonetOptions = {
             width: zoomedSize,
             height: zoomedSize,
             margin: 50,
+            // Older saved states predate this setting: default to the original Wulff net
+            projection: currentState.settings.projection ?? 'wulff',
             gridInterval: currentState.settings.gridInterval,
             showGrid: currentState.settings.showGrid,
             showDirections: currentState.settings.showDirections,
@@ -248,10 +283,11 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             }
         };
 
-        const newStereonet = new Wulff(containerId, options);
+        const newStereonet = new Stereonet(containerId, options);
         setStereonet(newStereonet);
     }, [
         currentState.plotDimensions,
+        currentState.settings.projection,
         currentState.settings.showGrid,
         currentState.settings.showDirections,
         currentState.settings.showLabels,
@@ -267,7 +303,25 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         if (!stereonet || !files || files.length === 0) return;
 
         stereonet.clearData();
-        let totalStats = { total: 0, plotted: 0, errors: 0 };
+        let totalStats = { total: 0, plotted: 0, errors: 0, predicted: 0 };
+
+        // Pole density contours, one set per target (a data type, or all of them together)
+        const densityTargets = currentState.settings.densityTargets ?? [];
+        if (densityTargets.length > 0) {
+            const polesByType = collectPolesByDataType();
+            densityTargets.forEach(target => {
+                const vectors = target === DENSITY_ALL
+                    ? Array.from(polesByType.values()).flat()
+                    : polesByType.get(target) ?? [];
+                stereonet.addDensityContours(vectors, {
+                    color: densityColor(target),
+                    label: densityLabel(target),
+                    levels: currentState.settings.densityLevels ?? 5,
+                    sigma: currentState.settings.densitySigma ?? 3,
+                    fill: currentState.settings.densityFill ?? true
+                });
+            });
+        }
 
         currentState.settings.availableRepresentations
             .filter(repr => repr.enabled)
@@ -315,10 +369,14 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             opacity: repr.opacity,
                             arrowLength,
                             arrowSize: Math.max(6, arrowLength * 0.55),
-                            showLabels: false
+                            showLabels: false,
+                            // Dashed great circles so predicted planes stay distinguishable from
+                            // the measured ones even when the two colours are close.
+                            dashArray: '5,4'
                         };
 
                         plotPredictedOnStereonet(stereonet, processedData.predicted, repr, predictedStyle);
+                        totalStats.predicted += processedData.predicted.length;
                     }
                 });
             });
@@ -365,8 +423,69 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
         currentState.settings.predictedColor,
         currentState.settings.showStressAxes,
         currentState.settings.symbolSize,
-        currentState.settings.arrowLength
+        currentState.settings.arrowLength,
+        currentState.settings.densityTargets,
+        currentState.settings.densityLevels,
+        currentState.settings.densitySigma,
+        currentState.settings.densityFill
     ]);
+
+    // Data types present in the selected files, in DATA_TYPE_CONFIGS order
+    const presentDataTypes = useMemo(
+        () => Array.from(new Set(currentState.settings.availableRepresentations.map(r => r.dataType))),
+        [currentState.settings.availableRepresentations]
+    );
+
+    // Contours of a data type follow the colour of its poles, so they can be told apart
+    const densityColor = (target: string): string => {
+        if (target === DENSITY_ALL) return DENSITY_ALL_COLOR;
+        const poles = currentState.settings.availableRepresentations
+            .find(r => r.dataType === target && r.representation.name === 'poles');
+        return poles?.color
+            ?? DATA_TYPE_CONFIGS[target]?.representations.find(r => r.name === 'poles')?.defaultColor
+            ?? DENSITY_ALL_COLOR;
+    };
+
+    const densityLabel = (target: string): string =>
+        target === DENSITY_ALL ? 'All poles' : `${DATA_TYPE_CONFIGS[target]?.displayName ?? target} poles`;
+
+    /**
+     * Pole vectors of every data type present, whether or not its poles are currently drawn.
+     * Reuses the 'poles' branch of processDataForRepresentation so contours match the markers.
+     */
+    const collectPolesByDataType = (): Map<string, Vector3D[]> => {
+        const result = new Map<string, Vector3D[]>();
+        presentDataTypes.forEach(dataType => {
+            const config = DATA_TYPE_CONFIGS[dataType];
+            const polesRepr = config?.representations.find(r => r.name === 'poles');
+            if (!polesRepr) return;
+            const fileIds = new Set(currentState.settings.availableRepresentations
+                .filter(r => r.dataType === dataType)
+                .flatMap(r => r.availableInFiles));
+            const repr: AvailableRepresentation = {
+                key: `${dataType}_poles`, dataType, representation: polesRepr,
+                availableInFiles: [...fileIds], enabled: true, color: '', opacity: 1
+            };
+            const vectors: Vector3D[] = [];
+            files.filter(f => fileIds.has(f.id)).forEach(file => {
+                const fileData = file.data || file.content;
+                if (!fileData || fileData.length === 0) return;
+                processDataForRepresentation(fileData, config, repr, file.headers)
+                    .data.forEach((p: PoleData) => vectors.push(p.vector));
+            });
+            if (vectors.length > 0) result.set(dataType, vectors);
+        });
+        return result;
+    };
+
+    const toggleDensityTarget = (target: string) => {
+        const current = currentState.settings.densityTargets ?? [];
+        updateSettings({
+            densityTargets: current.includes(target)
+                ? current.filter(t => t !== target)
+                : [...current, target]
+        });
+    };
 
     const processDataForRepresentation = (
         data: any[],
@@ -385,6 +504,24 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             result.stats.errors = data.length;
             return result;
         }
+
+        // For planar data the prediction is a single orientation shared by every datum of the
+        // type — the plane ⊥ σ3 for joints, ⊥ σ1 for stylolites — so hundreds of coincident great
+        // circles would be stacked on the exact same spot. Keep one entry per distinct predicted
+        // orientation; a position-dependent stress field still yields one per distinct plane.
+        const seenPredicted = new Set<string>();
+        const isNewPredictedNormal = (v: number[]): boolean => {
+            const len = Math.hypot(v[0], v[1], v[2]);
+            if (!len) return false;
+            let [x, y, z] = [v[0] / len, v[1] / len, v[2] / len];
+            // A normal and its opposite describe the same plane (and project to the same pole,
+            // since projectVector forces the lower hemisphere) — canonicalise the sign.
+            if (x < 0 || (x === 0 && (y < 0 || (y === 0 && z < 0)))) { x = -x; y = -y; z = -z; }
+            const key = `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
+            if (seenPredicted.has(key)) return false;
+            seenPredicted.add(key);
+            return true;
+        };
 
         data.forEach((row, index) => {
             if (TypeSynonyms.isSameType(repr.dataType, row.type)) {
@@ -416,7 +553,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             }
                         }
                         // Predicted pole = predicted plane normal (∥ σ3 for joints, σ1 for stylolites)
-                        if (row.predicted_normal) {
+                        if (row.predicted_normal && isNewPredictedNormal(row.predicted_normal)) {
                             result.predicted.push({ vector: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as PoleData);
                         }
                     } else if (representationType === 'planes') {
@@ -438,7 +575,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             }
                         }
                         // Predicted plane = great circle of the predicted normal
-                        if (row.predicted_normal) {
+                        if (row.predicted_normal && isNewPredictedNormal(row.predicted_normal)) {
                             result.predicted.push({ normal: libVec3ToVector3D(row.predicted_normal), id: index + 1 } as ExtensionFractureData);
                         }
                     } else if (representationType === 'striated_planes') {
@@ -499,7 +636,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
     };
 
     const plotDataOnStereonet = (
-        stereonet: Wulff,
+        stereonet: Stereonet,
         data: any[],
         repr: AvailableRepresentation,
         style: DataStyle
@@ -525,7 +662,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
     // only the striation arrow (the measured great circle is already drawn) so measured and
     // computed slip directions can be compared on the same plane.
     const plotPredictedOnStereonet = (
-        stereonet: Wulff,
+        stereonet: Stereonet,
         predicted: any[],
         repr: AvailableRepresentation,
         style: DataStyle
@@ -561,7 +698,19 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             : [...currentState.settings.selectedFiles, fileId];
 
         const selectedFiles = files.filter(f => newSelectedFiles.includes(f.id));
-        const newAvailableRepresentations = getAvailableRepresentations(selectedFiles);
+        // Recomputing the representations resets them to the "enableByDefault" value, which would
+        // blank the whole stereonet every time a file is ticked. Carry over what the user already
+        // chose for each representation that is still available.
+        const previous = new Map(
+            currentState.settings.availableRepresentations.map(r => [r.key, r])
+        );
+        const newAvailableRepresentations = getAvailableRepresentations(selectedFiles, autoEnable)
+            .map(repr => {
+                const prev = previous.get(repr.key);
+                return prev
+                    ? { ...repr, enabled: prev.enabled, color: prev.color, opacity: prev.opacity }
+                    : repr;
+            });
 
         updateSettings({
             selectedFiles: newSelectedFiles,
@@ -656,7 +805,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             <div>
                 <h4 className="font-medium text-gray-800 mb-2">Files to Plot</h4>
                 <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                    {files && files.map(file => (
+                    {files && files.filter(file => plottableFileIds.has(file.id)).map(file => (
                         <label key={file.id} className="flex items-center justify-between py-1">
                             <div className="flex items-center">
                                 <input
@@ -671,6 +820,9 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                             </div>
                         </label>
                     ))}
+                    {plottableFileIds.size === 0 && (
+                        <p className="text-sm text-gray-500 italic">No file contains data this stereonet can plot</p>
+                    )}
                 </div>
             </div>
 
@@ -708,6 +860,68 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                     )}
                 </div>
             </div>
+
+            {presentDataTypes.length > 0 && (
+                <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Pole Density Contours</h4>
+                    <div className="border rounded-lg p-3 space-y-2">
+                        {[...(presentDataTypes.length > 1 ? [DENSITY_ALL] : []), ...presentDataTypes].map(target => (
+                            <label key={target} className="flex items-center py-1">
+                                <input
+                                    type="checkbox"
+                                    checked={(currentState.settings.densityTargets ?? []).includes(target)}
+                                    onChange={() => toggleDensityTarget(target)}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm mr-2">
+                                    {target === DENSITY_ALL ? 'All data' : DATA_TYPE_CONFIGS[target]?.displayName ?? target}
+                                </span>
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: densityColor(target) }} />
+                            </label>
+                        ))}
+
+                        {(currentState.settings.densityTargets ?? []).length > 0 && (
+                            <div className="pt-2 border-t space-y-2">
+                                <div>
+                                    <label className="block text-sm mb-1">
+                                        Levels: ~{currentState.settings.densityLevels ?? 5}
+                                    </label>
+                                    <input
+                                        type="range" min="2" max="12" step="1"
+                                        value={currentState.settings.densityLevels ?? 5}
+                                        onChange={(e) => updateSettings({ densityLevels: parseInt(e.target.value) })}
+                                        className="w-full"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm mb-1"
+                                        title="Kamb sigma: larger values smooth more">
+                                        Smoothing (σ): {currentState.settings.densitySigma ?? 3}
+                                    </label>
+                                    <input
+                                        type="range" min="1" max="6" step="0.5"
+                                        value={currentState.settings.densitySigma ?? 3}
+                                        onChange={(e) => updateSettings({ densitySigma: parseFloat(e.target.value) })}
+                                        className="w-full"
+                                    />
+                                </div>
+                                <label className="flex items-center justify-between">
+                                    <span className="text-sm">Fill</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={currentState.settings.densityFill ?? true}
+                                        onChange={(e) => updateSettings({ densityFill: e.target.checked })}
+                                        className="rounded"
+                                    />
+                                </label>
+                                <p className="text-xs text-gray-500">
+                                    Exponential Kamb density, in multiples of uniform density (MUD).
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -728,7 +942,7 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                         <Layers className="w-4 h-4 text-blue-600" />
                         <h4 className="font-semibold text-sm">Data Summary</h4>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                         <div>
                             <span className="font-medium">Total:</span> {dataStats.total}
                         </div>
@@ -738,6 +952,17 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
                         <div>
                             <span className="font-medium">Errors:</span> {dataStats.errors}
                         </div>
+                        {dataStats.predicted > 0 && (
+                            <div className="flex items-center gap-1">
+                                <span
+                                    className="inline-block w-3 h-0.5"
+                                    style={{
+                                        borderTop: `2px dashed ${currentState.settings.predictedColor}`
+                                    }}
+                                />
+                                <span className="font-medium">Predicted:</span> {dataStats.predicted}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -786,6 +1011,24 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
             <div>
                 <h5 className="font-medium text-gray-800 mb-3">Stereonet Display</h5>
                 <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm">Projection</span>
+                        <div className="flex gap-3">
+                            {([['wulff', 'Wulff'], ['schmidt', 'Schmidt']] as const).map(([value, label]) => (
+                                <label key={value} className="flex items-center gap-1 text-sm"
+                                    title={value === 'wulff' ? 'Equal-angle (stereographic)' : 'Equal-area (Lambert)'}>
+                                    <input
+                                        type="radio"
+                                        name={projectionRadioName}
+                                        checked={(currentState.settings.projection ?? 'wulff') === value}
+                                        onChange={() => updateSettings({ projection: value })}
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
                     <label className="flex items-center justify-between">
                         <span className="text-sm">Show Grid</span>
                         <input
@@ -977,4 +1220,4 @@ const WulffComponent: React.FC<BaseVisualizationProps<WulffCompState> & { autoEn
     );
 };
 
-export default WulffComponent;
+export default StereonetComponent;

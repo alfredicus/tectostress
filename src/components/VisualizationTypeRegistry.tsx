@@ -9,9 +9,10 @@ import { AddVisualizationDialog, VisualizationGrid } from './VisualizationManage
 import { Eye } from 'lucide-react'; // Example icon, replace with actual icons as needed
 import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
 import { HistogramDescriptor } from './Histo/HistogramDescriptor';
-import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { StereonetDescriptor } from './Stereonet/StereonetDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 import { FractureMap2DDescriptor } from './Map2D/FractureMap2DDescriptor';
+import { StressSphereDescriptor } from './Sphere/SphereDescriptor';
 
 // ============================================================================
 // ICON COMPONENTS
@@ -93,8 +94,8 @@ export const DATA_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
     },
     {
         id: 'wulff',
-        title: 'Wulff Stereonet',
-        icon: WulffStereonetDescriptor.icon,
+        title: 'Stereonet',
+        icon: StereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
@@ -147,8 +148,8 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
     // }
     {
         id: 'wulff',
-        title: 'Wulff Stereonet',
-        icon: WulffStereonetDescriptor.icon,
+        title: 'Stereonet',
+        icon: StereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
@@ -156,6 +157,12 @@ export const RUN_ANALYSIS_VISUALIZATIONS: VisualizationType[] = [
         title: 'Rose Diagram',
         icon: RoseDiagramDescriptor.icon,
         defaultLayout: { w: 4, h: 4 }
+    },
+    {
+        id: 'sphere',
+        title: 'Stress Sphere',
+        icon: StressSphereDescriptor.icon,
+        defaultLayout: { w: 6, h: 5 }
     }
     // ,{
     //     id: 'fractureMap2D',

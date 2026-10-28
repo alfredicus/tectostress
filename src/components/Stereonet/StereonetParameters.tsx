@@ -1,20 +1,22 @@
-// WulffParameters.tsx
-// Définitions des types et configurations pour le Wulff Stereonet
+// StereonetParameters.tsx
+// Définitions des types et configurations pour le Stereonet
 
 import { TCompState } from "../VisualizationStateSystem";
+
+import { ProjectionType } from "./Stereonet";
 
 // ============================================================================
 // CONFIGURATION DES TYPES DE DONNÉES GÉOLOGIQUES
 // ============================================================================
 
 /**
- * State complet pour le Wulff Stereonet
+ * State complet pour le Stereonet
  */
-export interface WulffCompState extends TCompState<WulffSettings> {
+export interface StereonetCompState extends TCompState<StereonetSettings> {
     type: 'wulff';
 }
 
-export const WulffIcon: React.FC<{ size?: number; className?: string }> = ({
+export const StereonetIcon: React.FC<{ size?: number; className?: string }> = ({
     size = 24,
     className = ""
 }) => (
@@ -89,6 +91,50 @@ export const DATA_TYPE_CONFIGS: Record<string, DataTypeConfig> = {
             }
         ]
     },
+    'dilation band': {
+        displayName: 'Dilation Band',
+        columns: [
+            { required: ['trend', 'plunge'] },
+            { required: ['strike', 'dip'] },
+            { required: ['dip', 'strike', 'dip direction'] },
+        ],
+        representations: [
+            {
+                name: 'poles',
+                displayName: 'Dilation Band Poles',
+                symbol: '●',
+                defaultColor: '#8e44ad'
+            },
+            {
+                name: 'planes',
+                displayName: 'Dilation Band Planes',
+                symbol: '──',
+                defaultColor: '#6c3483'
+            }
+        ]
+    },
+    'compaction band': {
+        displayName: 'Compaction Band',
+        columns: [
+            { required: ['trend', 'plunge'] },
+            { required: ['strike', 'dip'] },
+            { required: ['dip', 'strike', 'dip direction'] },
+        ],
+        representations: [
+            {
+                name: 'poles',
+                displayName: 'Compaction Band Poles',
+                symbol: '●',
+                defaultColor: '#0097a7'
+            },
+            {
+                name: 'planes',
+                displayName: 'Compaction Band Planes',
+                symbol: '──',
+                defaultColor: '#00695c'
+            }
+        ]
+    },
     fault: {
         displayName: 'Fault',
         columns: [
@@ -131,10 +177,12 @@ export interface AvailableRepresentation {
 // ============================================================================
 
 /**
- * Settings complets pour le Wulff 
+ * Settings complets pour le Stereonet
  * C'est la version RÉELLE utilisée par le composant
  */
-export interface WulffSettings {
+export interface StereonetSettings {
+    /** Wulff (equal-angle) or Schmidt (equal-area) net */
+    projection: ProjectionType;
     showGrid: boolean;
     showDirections: boolean;
     showLabels: boolean;
@@ -155,17 +203,30 @@ export interface WulffSettings {
     // Marker size (poles, stars) and striation arrow length, in pixels
     symbolSize: number;
     arrowLength: number;
+    // Pole density contours: data types to contour (keys of DATA_TYPE_CONFIGS) and/or
+    // DENSITY_ALL for every pole together; each target is contoured separately
+    densityTargets: string[];
+    densityLevels: number;
+    densitySigma: number;
+    densityFill: boolean;
 }
+
+/** Density target meaning "the poles of every data type together" */
+export const DENSITY_ALL = '__all__';
+export const DENSITY_ALL_COLOR = '#374151';
 
 // ============================================================================
 // FACTORY POUR CRÉER LES SETTINGS PAR DÉFAUT
 // ============================================================================
 
 /**
- * Créer les settings par défaut pour le Wulff Stereonet
+ * Créer les settings par défaut pour le Stereonet.
+ * `overrides` permet d'adapter les valeurs initiales au contexte (par exemple afficher
+ * d'emblée les données prédites dans le panneau de résultats d'une inversion).
  */
-export function createWulffSettings(): WulffSettings {
+export function createStereonetSettings(overrides: Partial<StereonetSettings> = {}): StereonetSettings {
     return {
+        projection: 'wulff',
         showGrid: true,
         showDirections: true,
         showLabels: true,
@@ -182,6 +243,11 @@ export function createWulffSettings(): WulffSettings {
         predictedColor: '#0066cc',
         showStressAxes: true,
         symbolSize: 4,
-        arrowLength: 15
+        arrowLength: 15,
+        densityTargets: [],
+        densityLevels: 5,
+        densitySigma: 3,
+        densityFill: true,
+        ...overrides
     };
 }

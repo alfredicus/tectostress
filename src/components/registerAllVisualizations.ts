@@ -8,8 +8,8 @@ import { getVisualizationRegistry } from './VisualizationRegistry';
 import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
 import { RoseCompState } from './Rose/RoseParameters';
 
-import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
-import { WulffStereonetCompState } from './Wulff/WulffParameters';
+import { StereonetDescriptor } from './Stereonet/StereonetDescriptor';
+import { StereonetCompState } from './Stereonet/StereonetParameters';
 
 import { HistogramDescriptor } from './Histo/HistogramDescriptor';
 import { HistogramCompState } from './Histo/HistogramParameters';
@@ -22,6 +22,9 @@ import { FractureMap2DCompState } from './Map2D/FractureMap2DParameters';
 
 import { MCMCStatsDescriptor } from './MCMCStats/MCMCStatsDescriptor';
 import { MCMCStatsCompState } from './MCMCStats/MCMCStatsParameters';
+
+import { StressSphereDescriptor } from './Sphere/SphereDescriptor';
+import { SphereCompState } from './Sphere/SphereParameters';
 
 /*
  * Enregistrer toutes les visualisations de l'application
@@ -36,7 +39,7 @@ import { MCMCStatsCompState } from './MCMCStats/MCMCStatsParameters';
  * NE PAS modifier d'autres fichiers !
  */
 
-export type VisualizationCompState = RoseCompState | WulffStereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState | MCMCStatsCompState
+export type VisualizationCompState = RoseCompState | StereonetCompState | HistogramCompState | MohrCompState | FractureMap2DCompState | MCMCStatsCompState | SphereCompState
 
 export function registerAllVisualizations(): void {
     const registry = getVisualizationRegistry();
@@ -45,13 +48,14 @@ export function registerAllVisualizations(): void {
 
     // ========== VISUALISATIONS STRUCTURALES ==========
     registry.register(RoseDiagramDescriptor);
-    registry.register(WulffStereonetDescriptor);
+    registry.register(StereonetDescriptor);
     registry.register(FractureMap2DDescriptor);
     // ========== VISUALISATIONS STATISTIQUES ==========
     registry.register(HistogramDescriptor);
 
     // ========== VISUALISATIONS DE CONTRAINTES ==========
     registry.register(MohrCircleDescriptor);
+    registry.register(StressSphereDescriptor);
     // ========== MCMC ANALYSIS ==========
     registry.register(MCMCStatsDescriptor);
 

@@ -10,7 +10,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { RoseIcon } from './Rose/RoseParameters';
 import { HistogramDescriptor, HistogramIcon } from './Histo/HistogramDescriptor';
-import { WulffStereonetDescriptor } from './Wulff/WulffDescriptor';
+import { StereonetDescriptor } from './Stereonet/StereonetDescriptor';
 import { RoseDiagramDescriptor } from './Rose/RoseDiagramDescriptor';
 import { MohrCircleDescriptor } from './Mohr/MohrCircleDescriptor';
 import { FractureMap2D } from './Map2D/FractureMap2D';
@@ -96,8 +96,8 @@ export const DATA_VISUALIZATIONS: VisualizationType[] = [
     },
     {
         id: 'wulff',
-        title: 'Wulff Stereonet',
-        icon: WulffStereonetDescriptor.icon,
+        title: 'Stereonet',
+        icon: StereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     },
     {
@@ -130,7 +130,7 @@ export const RUN_VISUALIZATIONS: VisualizationType[] = [
     {
         id: 'wulff',
         title: 'Data Plot (Stereonet)',
-        icon: WulffStereonetDescriptor.icon,
+        icon: StereonetDescriptor.icon,
         defaultLayout: { w: 6, h: 4 }
     }
 ];

@@ -30,7 +30,9 @@ export type MohrParameters = {
         labels?: boolean,
         axes?: boolean,
         coloredArea?: boolean,
-        stressPoint?: boolean
+        stressPoint?: boolean,
+        /** Text next to each (σn, τ) point. Independent of `labels`, which also covers the axes. */
+        pointLabels?: boolean
     },
     colors?: {
         circle1?: string,      // σ1-σ3 circle
@@ -41,6 +43,10 @@ export type MohrParameters = {
         principalPoints?: string
     },
     strokeWidth?: number,
+    /** Radius, in px, of each (σn, τ) point. */
+    pointRadius?: number,
+    /** Opacity, 0–1, of each (σn, τ) point. */
+    pointOpacity?: number,
     xAxisLabel?: string,
     yAxisLabel?: string,
     title?: string,
@@ -67,7 +73,8 @@ export const DefaultMohrParameters: MohrParameters = {
         labels: true,
         axes: true,
         coloredArea: true,
-        stressPoint: true
+        stressPoint: true,
+        pointLabels: true
     },
     colors: {
         circle1: '#0066cc',    // Blue for σ1-σ3
@@ -78,6 +85,8 @@ export const DefaultMohrParameters: MohrParameters = {
         principalPoints: '#333333'
     },
     strokeWidth: 2,
+    pointRadius: 5,
+    pointOpacity: 1,
     xAxisLabel: 'Normal Stress (σ)',
     yAxisLabel: 'Shear Stress (τ)',
     title: ''
@@ -546,8 +555,9 @@ export class MohrCircle {
                         this.chartGroup_.append('circle')
                             .attr('cx', xScale(sigma_n))
                             .attr('cy', yScale(tau))
-                            .attr('r', 5)
+                            .attr('r', this.params.pointRadius ?? 5)
                             .attr('fill', color)
+                            .attr('fill-opacity', this.params.pointOpacity ?? 1)
                             .attr('stroke', 'white')
                             .attr('stroke-width', 1)
                             .on('mouseover', (event) => {
@@ -570,7 +580,7 @@ export class MohrCircle {
                             })
 
                         // Add label for stress point
-                        if (this.params.draw!.labels) {
+                        if (this.params.draw!.labels && this.params.draw!.pointLabels !== false) {
                             this.chartGroup_.append('text')
                                 .attr('x', xScale(sigma_n) + 10)
                                 .attr('y', yScale(tau) - 10)

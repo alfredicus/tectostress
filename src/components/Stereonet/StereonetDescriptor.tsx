@@ -1,21 +1,21 @@
-// WulffDescriptor.ts
-// Descripteur pour le Wulff Stereonet
+// StereonetDescriptor.tsx
+// Descripteur pour le Stereonet
 
 import React from 'react';
 import { 
     VisualizationDescriptor, 
     VisualizationContext 
 } from '../VisualizationDescriptor';
-import WulffComponent from './WulffComponent';
-import { createWulffSettings, WulffCompState, WulffIcon, WulffSettings } from './WulffParameters';
+import StereonetComponent from './StereonetComponent';
+import { createStereonetSettings, StereonetCompState, StereonetIcon, StereonetSettings } from './StereonetParameters';
 
 /**
- * Descripteur du Wulff Stereonet
+ * Descripteur du Stereonet
  */
-export const WulffStereonetDescriptor: VisualizationDescriptor<WulffSettings, WulffCompState> = {
+export const StereonetDescriptor: VisualizationDescriptor<StereonetSettings, StereonetCompState> = {
     // ========== IDENTIFICATION ==========
     id: 'wulff',
-    title: 'Wulff Stereonet',
+    title: 'Stereonet',
     description: 'Stereographic projection for structural geology analysis',
     
     // ========== CONTEXTES ==========
@@ -25,24 +25,24 @@ export const WulffStereonetDescriptor: VisualizationDescriptor<WulffSettings, Wu
     ],
     
     // ========== UI ==========
-    icon: WulffIcon, // Utilisation d'une icône Lucide existante
+    icon: StereonetIcon, // Utilisation d'une icône Lucide existante
     defaultLayout: { w: 6, h: 4 },
     
     // ========== STATE & SETTINGS ==========
     stateType: 'wulff',
     
-    defaultSettings: createWulffSettings(),
+    defaultSettings: createStereonetSettings(),
     
-    createInitialState: (width = 400, height = 400): WulffCompState => ({
+    createInitialState: (width = 400, height = 400): StereonetCompState => ({
         type: 'wulff',
         open: false,
-        settings: createWulffSettings(),
+        settings: createStereonetSettings(),
         selectedColumn: '',
         plotDimensions: { width, height }
     }),
     
     // ========== COMPOSANT ==========
-    component: WulffComponent,
+    component: StereonetComponent,
     
     // ========== METADATA ==========
     version: '1.0.0',
