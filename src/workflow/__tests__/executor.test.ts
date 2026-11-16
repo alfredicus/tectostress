@@ -255,6 +255,17 @@ describe('inactive blocks, errors and partial runs', () => {
         expect(calls.inversion).toBe(1);
     });
 
+    test('"run to here" on a view runs what it displays, and nothing of the other branches', async () => {
+        const files = synthetic2Files();
+        const { registry, calls } = countingRegistry();
+        const report = await runWorkflow(templateWorkflow(files), registry, env(files), { targetNodeId: 'outliers-stereonet' });
+        expect(Object.keys(report.nodes).sort()).toEqual(['data', 'inversion-1', 'misfit-filter', 'outliers-stereonet', 'tag-outliers']);
+        expect(report.nodes['outliers-stereonet'].status).toBe('done');
+        expect(report.nodes['outliers-stereonet'].inputs.in[0]).toBe(report.nodes['tag-outliers'].outputs.out);
+        // The other branch (Inversion 2 → dashboard) is not run
+        expect(calls.inversion).toBe(1);
+    });
+
     test('an invalid workflow is refused', async () => {
         const wf = workflow([node('d', 'data'), node('s', 'view.summary')], [edge('d', 'out', 's')]);
         await expect(runWorkflow(wf, createDefaultRegistry(), env([]))).rejects.toBeInstanceOf(WorkflowValidationError);

@@ -1567,12 +1567,12 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                             </fieldset>
 
                             <div className="flex flex-wrap gap-2 pt-2 border-t">
-                                {selectedDef?.role !== 'view' && (
-                                    <button className={button} onClick={() => run(selected.id)} disabled={running || errors.length > 0}
-                                        title="Run this block and what it needs">
-                                        <SkipForward className="w-4 h-4" /> Run to here
-                                    </button>
-                                )}
+                                <button className={button} onClick={() => run(selected.id)} disabled={running || errors.length > 0}
+                                    title={selectedDef?.role === 'view'
+                                        ? 'Run what this view displays (the blocks feeding it), nothing else'
+                                        : 'Run this block and what it needs, nothing else'}>
+                                    <SkipForward className="w-4 h-4" /> Run to here
+                                </button>
                                 {isCompositeType(selected.type) && (
                                     <button className={button} onClick={() => openGroup(selected.id)}
                                         title="Look inside: its blocks, connections, parameters and results (or double-click it)">
