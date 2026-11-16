@@ -82,7 +82,8 @@ describe('grouping groups', () => {
         expect(whole.nodes.map(x => x.id).sort()).toEqual(['data', n.analysis].sort());
         expect(analysis.nodes.map(x => x.id).sort()).toEqual(['inversion-1', n.clean].sort());
         // The outer group exposes what the inner ones produce
-        expect(whole.outputs.map(o => o.type).sort()).toEqual(['InversionResult', 'InversionResult']);
+        // (Inversion 2, Rejected, All (marked))
+        expect(whole.outputs.map(o => o.type).sort()).toEqual(['InversionResult', 'InversionResult', 'InversionResult']);
     });
 
     test('the expansion goes down to ordinary blocks, with chained ids', () => {

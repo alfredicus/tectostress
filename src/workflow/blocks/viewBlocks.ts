@@ -7,6 +7,17 @@ import { BlockDefinition, ParamDefinition, PayloadType } from '../types';
 /** Saved state of the visualization (zoom, colours, projection…): presentation only */
 const STATE_PARAM: ParamDefinition = { key: 'state', label: 'View state', kind: 'object', scope: 'presentation', default: null };
 
+/** Kept / rejected data after a Misfit filter (§14.4): which population the view shows */
+export const SHOW_PARAM: ParamDefinition = {
+    key: 'show', label: 'Show', kind: 'select', scope: 'presentation', default: 'both',
+    options: [
+        { value: 'both', label: 'Kept and rejected (distinguished)' },
+        { value: 'kept', label: 'Kept only' },
+        { value: 'rejected', label: 'Rejected only' },
+    ],
+    help: 'For data that went through a Misfit filter; ignored otherwise',
+};
+
 function view(type: string, title: string, input: PayloadType, visualization: string, description: string): BlockDefinition {
     return {
         type,
@@ -18,7 +29,7 @@ function view(type: string, title: string, input: PayloadType, visualization: st
         inputs: [{ id: 'in', label: input === 'Dataset' ? 'Dataset' : 'Inversion result', type: input }],
         outputs: [],
         visualization,
-        params: [STATE_PARAM],
+        params: [SHOW_PARAM, STATE_PARAM],
     };
 }
 
@@ -51,6 +62,7 @@ export const DashboardBlock: BlockDefinition = {
             default: ['view.stereonet', 'view.misfit-histogram', 'view.summary'],
             options: VIEW_BLOCKS.map(v => ({ value: v.type, label: v.title })),
         },
+        SHOW_PARAM,
         { key: 'layout', label: 'Layout', kind: 'object', scope: 'presentation', default: null },
     ],
 };

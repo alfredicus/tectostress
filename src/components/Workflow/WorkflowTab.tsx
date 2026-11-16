@@ -277,6 +277,8 @@ function ViewNodeResult({ node, def, result, registry }: {
     const views: string[] = node.type === 'view.dashboard'
         ? paramsWithDefaults(def, node, 'presentation').views
         : [node.type];
+    // Kept / rejected data after a Misfit filter: which population(s) to show (§14.4)
+    const show = paramsWithDefaults(def, node, 'presentation').show ?? 'both';
     return (
         <div className="space-y-6">
             {inputs.map((payload, i) => (
@@ -285,7 +287,7 @@ function ViewNodeResult({ node, def, result, registry }: {
                     {views.map(v => (
                         <div key={v}>
                             {views.length > 1 && <h4 className="font-semibold text-indigo-800 mb-2">{registry.get(v)?.title}</h4>}
-                            <ViewRenderer viewType={v} payload={payload} registry={registry} />
+                            <ViewRenderer viewType={v} payload={payload} registry={registry} show={show} />
                         </div>
                     ))}
                     <ProvenanceDetails provenance={payload.provenance} />

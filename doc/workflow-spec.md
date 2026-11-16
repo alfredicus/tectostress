@@ -323,7 +323,7 @@ Choices made while building the engine (`src/workflow/`) that the spec did not s
 | # | Decision | Why |
 |---|---|---|
 | 13 | **Filter** output has the type of its input. Filtering an `InversionResult` gives an `InversionResult` (fewer rows, same solution). | The remaining rows' predictions are still those of that solution, so views stay truthful. |
-| 14 | **Misfit filter**: *kept* is a plain `Dataset` (predictions and stress axes removed), *rejected* stays an `InversionResult`. | *kept* is meant to be re-inverted; *rejected* is meant to be inspected with its predictions. |
+| 14 | ~~**Misfit filter**: *kept* is a plain `Dataset`, *rejected* stays an `InversionResult`.~~ **Replaced by §14.4 (2026-11-16)**: both are inversion results, plus *All (marked)*. | Re-inverting *kept* is unaffected: the Inversion ignores earlier predictions (#16). |
 | 15 | **Misfit filter**: data the inversion could not predict are kept by default (parameter "Data without prediction": keep / reject). | They have no misfit to compare with the threshold. The choice is made visible instead of being implicit. |
 | 16 | The **Inversion** block ignores fields written by an earlier inversion (`predicted_*`, `misfit_*`, stress axes) in its input. | An inversion is always computed from measurements only, whatever is wired into it. |
 | 17 | **Add Tags** passes its input through unchanged, with its provenance. It is never cached, and renaming a tag never makes anything stale. | A tag is report metadata, not a computation. |
@@ -602,3 +602,361 @@ edited three levels down makes every level stale; save → load → save gives t
 same results; ungroup removes one level and keeps edited parameters; a group from the library brings
 the groups it contains; a group containing itself (edited file) is reported. A group used inside a
 "My blocks" group cannot be removed from the library before it.
+
+---
+
+## 14. Execution model: what runs, what comes out, alternatives
+
+Raised by the user on 2026-11-16: TectoStress is meant for a large community of Earth scientists, so
+what runs, what a loop produces and how alternative analyses coexist must be unambiguous. Agree on the
+semantics first, then implement. Everything in this section is **[PROPOSAL]** unless stated.
+
+Review of v1 of this section (2026-11-16, user + scientific reviewer): general architecture
+approved; clarified below. The key requirement: distinguish a **collection of data** from a
+**collection of complete inversion results**, so successive tectonic phases keep their scientific
+identity and can be compared. **[DECIDED]**
+
+### 14.1 Principles **[DECIDED]**
+1. **Predictable**: before pressing a button, the user can see which blocks will run.
+2. **Isolated**: a problem in an unrelated branch never prevents running the selected one.
+3. **Reproducible**: every run records the blocks, parameters, data and outputs actually used.
+4. **Transparent**: every block that did not run says why.
+5. **Unambiguous vocabulary**, defined once (14.2) and used everywhere: interface, report, help.
+
+### 14.2 Vocabulary
+- **Workflow**: everything on one canvas; one file. It may hold several **branches**.
+- **Branch**: not a chain. A workflow is a directed graph; a block can need several blocks and feed
+  several. So there is no "Run this chain".
+- **Upstream of a block**: every block it needs, directly or not, to compute its inputs.
+- **Group**: an organizing container; it changes nothing scientifically (§13).
+- **Loop**: a container that repeats its blocks, each *iteration* receiving what the previous one
+  passed on (§12).
+- **View**: a block that only displays; it never computes.
+- **Up to date / out of date**: a block is up to date when its stored result matches its current
+  parameters and inputs.
+
+### 14.3 Run commands
+Only two commands, with distinct meanings: **[DECIDED]**
+
+| Command | Where | Runs | Never runs |
+|---|---|---|---|
+| **Run all** (today "Run") | toolbar | every out-of-date block of every branch | blocks already up to date |
+| **Run to here — ‹block name›** | panel of the selected block, view or group | the selected block and everything upstream of it that is out of date | anything downstream, and every other branch |
+
+- **Same command for views**: "Run to here — Stereonet" runs what the view displays. No separate
+  "Update view". **[DECIDED]**
+- **Visible preview, not only on hover**: when a block is selected, its panel always shows what
+  *Run to here* will do, e.g. "Will compute: Inversion 1, Misfit filter (2 blocks); Data is up to
+  date", and the canvas outlines those blocks. The toolbar shows the same summary for *Run all*
+  ("Will compute 7 blocks in 2 branches; 1 branch not run: problem in Data 3").
+- **Isolation (to fix)**: today a structural problem anywhere (unknown block, invalid per-iteration
+  list, cycle) disables both commands. Instead, only problems **upstream of the target** block *Run
+  to here*; *Run all* runs every branch free of problems and marks the others "Not run: problem in
+  this branch", with the reason. Runtime failures are already isolated: a failed block only blocks
+  what depends on it.
+- **Incomplete branches** (an input not connected, a block not configured) only warn, and never
+  prevent running another branch. **[DECIDED]** (current behaviour)
+- **Switching a block off** (*Active* unticked), made explicit: **[DECIDED]** (current behaviour, §4.5)
+  - a block that can pass its input through (Filter, Misfit filter, Add Tags) does so, marked
+    *bypassed*; everything downstream runs normally with the unfiltered data;
+  - any other block (Data, Inversion, Aggregate, a group, a loop) **stops its branch**: it produces
+    nothing, and every block depending on it, directly or not, is shown *Blocked: ‹block› is off*
+    and does not run. Switching off the first block of an alternative branch therefore parks the
+    whole branch, predictably, without deleting it.
+- The run report records its **scope** (all, or the target) with the provenance.
+
+### 14.4 Kept and rejected data: every view for both
+Requested by the user, approved with the reviewer on 2026-11-16. **[DECIDED]**
+
+After a Misfit filter, *every* view (stereonet, sphere, histogram, Mohr, misfit histogram,
+summary…) must be available for the kept data, the rejected data, or both. Port colours keep their
+meaning: **blue = data, purple = inversion result** (shown in a legend in the palette).
+
+- **Kept and Rejected are both inversion results** (purple): each keeps the stress solution, and the
+  predictions and misfits of its own data. Replaces §10 #14. Being re-inverted is no reason to strip
+  this information: the Inversion already ignores earlier predictions (#16).
+- **A third output, *All (marked)*** (purple): the whole inversion result, both populations with
+  their inversion information, and **an explicit classification on every datum**:
+  `misfit_class` = `kept` or `rejected`, and `misfit_threshold` = the threshold used. Every row of
+  *Kept* and *Rejected* carries the same fields. Views read the classification; they never
+  reconstruct it from misfits and thresholds.
+- Each view **represents the two populations in the way that suits it**:
+  - stereonet and sphere: two colours (rejected also lighter or hollow);
+  - misfit histogram: two distinguishable populations, and the threshold as a vertical line;
+  - Mohr diagram: points in two colours;
+  - summary: separate counts and misfit statistics for each population, with the solution.
+  A legend names the two populations and the threshold.
+- A display option **Show: Kept / Rejected / Both** on views whose input is classified, so the
+  displayed population changes without rewiring.
+
+**Status (2026-11-16): implemented.** Misfit filter v2 (`filterBlocks.ts`): three inversion-result
+outputs, `misfit_class` / `misfit_threshold` on every datum. The Inversion tags each row with
+`_datum` (its datum in the inversion), so views of a subset use exactly that subset: **before this,
+the Mohr view of *Rejected* drew every datum of the inversion** (bug found while implementing).
+Views: stereonet, sphere and Mohr colour the two populations; the misfit histogram draws kept and
+rejected series with the threshold line; the summary adds a table per population; histogram and
+rose diagram follow *Show* (one population at a time). *Show* is a display setting of every view and
+dashboard. Helpers in `src/workflow/populations.ts`; tests in `populations.test.ts` and the updated
+`executor.test.ts` (Kept re-inverted from exactly the same measurements).
+
+### 14.5 What comes out of a loop (scientific meaning)
+Two different scientific procedures share the same loop, and differ only by the **carried output**:
+**[DECIDED]**
+
+| Procedure | Carried output | Scientific objective | Final result |
+|---|---|---|---|
+| **Iterative cleaning** | Kept | refine one dataset progressively | the last inversion |
+| **Phase separation** | Rejected | identify successive tectonic phases | one complete result per phase |
+
+The panel names the procedure when the carried output is chosen, the documentation explains both,
+and each has a predefined workflow (*Separate tectonic phases* exists; *Iterative cleaning* to add),
+so a technically valid loop is not given the wrong interpretation.
+
+Outputs, as implemented today: every output except *All iterations* gives the value of the **last
+iteration** only; *All iterations* gathers one chosen output over every iteration as **data** (rows
+with an `iteration` number; the stress solution of each iteration is not kept; with carried = Kept
+the sets overlap).
+
+Proposal, with two clearly different kinds of collected output: **[DECIDED]** (principle)
+- **All iterations (data)**: as today, one dataset with an `iteration` column. For a stereonet of
+  every datum coloured by phase, or a table.
+- **Each iteration (results)**: a structured collection of **complete scientific results**, one per
+  iteration: the inversion solution and stress tensor, the data with their predictions and misfits,
+  the kept/rejected marking, the parameters actually used (§12.5), the provenance. Never flattened.
+  Views and dashboards receive this collection as such (14.6).
+- **Names say what they hold**: "Kept — last iteration", "Rejected — last iteration (passed to the
+  next)", "All iterations (data) — Phase", "Each iteration (results)"; each with a one-line
+  explanation in the panel and on hover.
+- **Choose the outputs when making the loop**: every inner output is listed with its meaning; the
+  user ticks those to expose. Default: the carried output, the **last inversion result**, and *Each
+  iteration (results)*.
+
+**Recomputation after a change** (e.g. the maximum misfit of iteration 2): **[DECIDED]**
+- iteration 1 is reused from the cache (same parameters, same input);
+- iteration 2 is recomputed with the new value;
+- every later iteration is recomputed **if its input changed** (different rejected data) and is
+  reused only if its input and parameters are identical. This follows from cache keys built on
+  parameters and input content; a test must cover both cases.
+- Views and comparisons then update.
+
+### 14.6 Comparing tectonic phases interactively
+A scientific comparison tool, not just several panels. **[DECIDED]** (requirement)
+
+**Phase comparison view** (receives *Each iteration (results)*):
+- **Select the phases** to show (1, 2, 3… with a colour each).
+- **Stereonet / sphere**: the principal stress axes σ1, σ2, σ3 of the selected phases together, each
+  phase in its colour, optionally with its data.
+- **Comparison table**: per phase: number of data, stress ratio, misfit, σ1/σ2/σ3 trend and plunge,
+  the parameters that varied (§12.5); and the angle between the σ1 (and σ3) axes of two phases.
+- **Misfit histograms** of the selected phases, side by side or superposed.
+- **Mohr diagrams** of the selected phases, side by side.
+Room is left for more than two phases.
+
+**Phase workbench: a central design objective of TectoStress.** **[DECIDED]**
+The loop is the computational mechanism; the workbench is the scientific environment in which the
+geologist interprets, tests and accepts successive tectonic phases. It follows the user's actual
+procedure:
+1. invert the current data;
+2. examine **synchronized plots side by side**: Mohr diagram, misfit histogram, stereonet (or
+   sphere), kept and rejected distinguished (14.4);
+3. decide whether the proposed separation is geologically meaningful;
+4. modify the inversion or filtering parameters (e.g. drag the threshold line on the histogram);
+5. repeat until the phase is satisfactorily identified;
+6. accept the phase, and analyse the remaining observations.
+
+**Exploring and accepting are two different operations.** **[DECIDED]**
+- *Exploring*: the user changes the parameters of an iteration and re-runs it (and what depends on
+  it) as often as wanted, without committing anything.
+- *Accepting phase k*: the parameters used and the resulting scientific solution are recorded as
+  **the accepted result of iteration k**, with its provenance. The accepted parameters become the
+  loop's per-iteration values (§12.5), so *Run all* replays exactly what was accepted.
+- **Accepted results are never silently overwritten**: re-accepting a phase adds a new entry to
+  that phase's **history** (date, parameters, summary of the solution, provenance id), and earlier
+  entries stay visible and restorable.
+
+**Free navigation between phases, not only "next".** **[DECIDED]**
+- The user can go back to any phase, compare it with others (phase comparison view above), change
+  its parameters and recompute.
+- Tectonic phases are not independent: changing phase 1's threshold changes the data available to
+  phases 2, 3… Recomputation follows 14.5: valid earlier results are reused from the cache, every
+  iteration whose input changed is recomputed; **a result whose inputs changed is never reused**.
+- Later phases that were accepted but whose input has since changed are shown **"accepted — out of
+  date: its data changed"**, and must be examined and accepted again; their previous acceptance
+  stays in the history.
+
+### 14.7 Exploring alternatives
+- **Within one workflow**: alternative branches (e.g. two misfit criteria) may sit side by side on
+  the canvas to be compared; each runs with *Run to here*, independently (14.3); a branch is parked
+  by switching its first block off.
+- **Separate workflows**: complete alternative analyses are separate workflows. Today: Save / Load
+  files, plus one autosaved canvas per browser. Later: a **My workflows** list (named workflows,
+  *Save as*, *Duplicate as a variant*), and **comparing results across workflows**, not only across
+  branches. Files remain the way to share and archive. Lower priority than 14.3–14.6. **[DECIDED]**
+- A report states which workflow (name and version) and which scope produced it.
+
+### 14.8 Order
+**[DECIDED]** (priorities set by the user; updated 2026-11-16: data types and view compatibility
+first)
+1. Kept and rejected for every view: data types, *All (marked)*, classification, views showing both
+   populations, *Show* selector (14.4).
+2. Execution semantics (14.3): Run all / Run to here with block names, visible preview, isolation
+   of structural problems.
+3. Loop outputs (14.5): explicit names and explanations, choosing outputs, last inversion result,
+   *Each iteration (results)* with every iteration kept by the engine, recomputation tests.
+4. Phase comparison view, then the phase workbench with exploration, acceptance, history and free
+   navigation (14.6).
+5. My workflows and variants (14.7).
+
+---
+
+## 15. Keeping the workflow safe in the browser [PROPOSAL]
+
+*Report (16 Nov):* a new workflow was built, the Data tab was used to choose data, and back in the
+Workflow tab the latest changes were gone.
+
+### 15.1 What was found
+
+- The Workflow tab is **not** unmounted when another tab is shown (it is hidden), and choosing data
+  never changes the workflow. The workflow is written to browser storage 0.3 s after each change.
+  Replaying the sequence (New, add blocks, Data, load Matelles, back) **did not lose anything**.
+- The open TectoStress page had been reloaded at 15:19:00, the very moment a browser check by Claude
+  wrote back a copy of the workflow taken at 15:16 and reloaded the page. Anything built in that page,
+  or saved by another TectoStress page, between those two moments was overwritten without warning.
+  This is the most likely cause; it also shows weaknesses that a user can hit alone:
+  - **W1 Silent failure.** If writing fails, nothing is said.
+  - **W2 Last change dropped.** A change made less than 0.3 s before closing or reloading the page is
+    not written.
+  - **W3 Several pages.** With TectoStress open in two tabs or windows, the last page to write wins,
+    silently. A page still holding an older workflow overwrites the newer one at its next edit.
+  - **W4 Replacing is final.** *New*, a predefined workflow and *Load* replace the workflow with no
+    way back. "Unsaved changes will be lost" is confusing: the workflow *is* kept in the browser; only
+    a file copy is missing.
+  - **W5 Checks by Claude.** Backing up and restoring the user's storage around a browser check is
+    itself a risk (it caused, or could have caused, this loss).
+
+### 15.2 Proposal
+
+1. **Write at once, and before leaving.** Pending changes are written when the page is hidden, closed
+   or reloaded, and when the Workflow tab is unmounted.
+2. **Failures are visible.** If the workflow cannot be written, a warning stays on screen until it
+   can (with *Save to file* offered).
+3. **Several pages never overwrite each other silently.** Each written copy carries a revision. Before
+   writing, a page checks that the stored copy is still the one it read or wrote last; if another page
+   changed it, nothing is overwritten and the user chooses: *Load the other version* or *Keep this one*.
+   The other page is told as soon as it happens.
+4. **Recent workflows.** The workflow being replaced (*New*, predefined, *Load*, other version) is
+   kept in a list of the last 10, from which it can be reopened. The message becomes "The current
+   workflow will be kept in Recent workflows". This is the first piece of *My workflows* (14.7).
+5. **Checks never touch the user's data.** The page opened with `?sandbox` uses its own storage;
+   browser checks by Claude use only that page, with no backup and restore.
+
+Tests: writing on page hide; a stale page does not overwrite a newer copy; replacing keeps the old
+workflow in the recent list; storage failure is reported.
+
+---
+
+## 16. Visual language: blocks, ports, links [PROPOSAL, v2]
+
+*Revised after review (16 Nov). v1 explained the rules but kept a drawing that contradicts them.*
+
+### 16.1 What is wrong today
+
+A block shows **four different things**, and today two of them share the same colours:
+
+| Element | What it shows | Today |
+|---|---|---|
+| Top border of the block | kind of block | sources **blue**, computations **indigo**, views green, report **purple** |
+| Ports and links | kind of data | measured data **blue**, inversion result **indigo/purple**, other grey |
+| Status badge | state of the run | Done **green**, Out of date amber, Blocked orange, Failed red |
+| Dashed and faded | block switched off | |
+
+So:
+- A Data block (blue top) looks like "measured data", and an Inversion (indigo top) looks like "an
+  inversion result", though these are kinds of block.
+- Green means both "view" and "done".
+- **An input drawn blue accepts purple too.** The rule behind it ("an inversion result contains the
+  measured data") is sound, but the drawing says "measured data", and the user has to know the rule
+  to read it. This is the contradiction seen when testing: a purple output joining a blue input.
+- The outputs of pass-through blocks (Filter, Add Tags, Conditional) stay grey, though the data they
+  pass on have a known type.
+
+### 16.2 Principles
+
+1. **One meaning per colour.** Blue and purple mean **only** the kind of data, everywhere: ports,
+   links, legend, loop and group ports, help. No block border, badge or other mark uses them.
+2. **A port shows exactly what it accepts.** No implicit rule is needed to read it:
+   - **purple**: inversion results only;
+   - **half blue, half purple**: measured data or inversion results;
+   - **blue alone**: measured data only, and inversion results refused. *(No block needs this today;
+     it is kept for one that would.)*
+
+   The engine keeps the rule "an inversion result is a dataset". Only the drawing changes: an input
+   that accepts both is drawn with both colours.
+3. **An output shows what it produces.** A pass-through output takes the colour of what it receives
+   (grey until connected). Links have the colour of the data they carry; they already do.
+4. **The kind of block is given by an icon and a word, not a colour.** A block is white with a grey
+   border, with a small icon and a category word: *Source*, *Processing*, *Control*, *View*, *Report*,
+   *Group*, *Loop*. A colour per category could only be found outside blue, purple and the status
+   colours, and would add one more colour code to learn. Icons scale better as blocks are added.
+   *(Instead of the reviewer's tinted bodies: a blue Data block or a violet Inversion block would
+   repeat today's confusion.)*
+5. **State is shown only by the badge** (and by dashed and faded when switched off). The block itself
+   is never recoloured.
+6. **The purpose of a block decides what it accepts.** A view whose meaning needs a stress solution
+   refuses measured data. The application enforces this; the user does not have to know it.
+7. **Nothing relies on colour alone.** Every port has a tooltip ("Accepts: inversion results only"),
+   there is a legend on the canvas, and every refusal is explained (16.4).
+8. **One table defines it all** (16.3): connection checks, port drawing, tooltips, legend, warnings
+   and documentation all come from it.
+
+### 16.3 Compatibility table
+
+| Block | Category | Measured data | Inversion result | Input drawn | Output |
+|---|---|---|---|---|---|
+| Data | Source | — | — | — | measured data |
+| Filter (by data type) | Processing | yes | yes | half/half | same as input |
+| Aggregate | Processing | yes | yes: only their measured data are kept | half/half | measured data |
+| Inversion | Processing | yes | yes: previous solution and predictions discarded | half/half | inversion result |
+| Misfit filter | Processing | **no** | yes | purple | 3 × inversion result |
+| Add Tags | Processing | yes | yes | grey (anything) | same as input |
+| Conditional, ExitLoop | Control | yes | yes | grey (anything) | same as input |
+| Stereonet, Sphere | View | yes: observations | yes: observations, predicted striations, kept/rejected | half/half | — |
+| Rose diagram | View | yes | yes | half/half | — |
+| *Data histogram* (16.5) | View | yes | yes | half/half | — |
+| Misfit histogram | View | **no** | yes | purple | — |
+| Mohr diagram | View | **no** | yes | purple | — |
+| Summary | View | **no** | yes | purple | — |
+| Misfit landscape | View | **no** | yes | purple | — |
+| MCMC statistics | View | **no** | yes (MCMC or Monte Carlo only) | purple | — |
+| Dashboard | View | yes | yes | half/half | — |
+| Generate report | Report | — (reads tagged items) | — | — | — |
+| Group, Loop | Group / Loop | as the inner input it feeds | | from the inner block | from the inner block |
+
+**Dashboard.** It accepts both, but an inversion-only view chosen in it while it receives measured
+data gives a warning on the block, and that view says "Needs an inversion result" instead of
+nothing.
+
+### 16.4 Refusals are explained
+
+- While a link is dragged, the inputs that accept it are highlighted and the others faded.
+- Dropping it on a refused input shows why, from the table. For example: "Mohr diagram needs an
+  inversion result. Measured data have no stress solution yet: connect an Inversion first."
+- Today the refusal is silent: the link just does not attach.
+
+### 16.5 Histogram [OPEN: user decision]
+
+Today *Histogram* is a general histogram of **one column of the data** (dip, strike, rake…). It does
+not show misfits; *Misfit histogram* does. Making it purple-only would not make it scientific: it
+would still plot measured columns, while refusing them before an inversion. Choose one:
+
+- **A.** Rename it **Data histogram** ("distribution of a measured variable"), drawn half/half; the
+  only histogram that needs a solution is **Misfit histogram**, purple.
+- **B.** Remove it from the workflow palette: only Misfit histogram remains. Measured columns can
+  still be plotted in the Data tab.
+
+Either way, raw data can no longer reach a block whose name suggests misfits.
+
+### 16.6 Tests
+
+Every block against every type, checking the table in 16.3; every refusal message; port drawing taken
+from the table (no colour defined in a component).

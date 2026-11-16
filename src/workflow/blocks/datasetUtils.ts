@@ -6,7 +6,7 @@ import { hashValue } from '../hash';
 import { SourceFileRef } from '../types';
 
 /** Row fields written by an inversion; they only make sense next to that inversion's solution */
-export const INVERSION_ROW_FIELDS = ['predicted_normal', 'predicted_striation', 'misfit_angle', 'misfit_category'];
+export const INVERSION_ROW_FIELDS = ['predicted_normal', 'predicted_striation', 'misfit_angle', 'misfit_category', 'misfit_class', 'misfit_threshold', '_datum'];
 
 const rowsOf = (file: DataFile): Record<string, any>[] => {
     const rows = file.content ?? (file as any).data;

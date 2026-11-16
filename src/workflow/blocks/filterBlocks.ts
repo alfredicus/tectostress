@@ -3,7 +3,7 @@
 
 import { beautifyName, TypeSynonyms } from '../../utils/TypeSynonyms';
 import { BlockDefinition, InversionResultPayload, Payload } from '../types';
-import { countRows, filterRows, stripInversionFields } from './datasetUtils';
+import { countRows, filterRows } from './datasetUtils';
 
 export const DATA_TYPE_OPTIONS = ['joint', 'fault', 'stylolite', 'dilation band', 'compaction band']
     .map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }));
@@ -79,17 +79,20 @@ export const FilterBlock: BlockDefinition = {
 
 export const MisfitFilterBlock: BlockDefinition = {
     type: 'misfit-filter',
-    version: 1,
+    // v2 (§14.4): Kept is an inversion result too, and All (marked) gives both populations
+    version: 2,
     title: 'Misfit filter',
     description: 'Split an inversion result by the angular misfit of each datum',
     category: 'Processing',
     role: 'computation',
     inputs: [{ id: 'in', label: 'Inversion result', type: 'InversionResult' }],
+    // All three keep the inversion's solution, predictions and misfits, so every view can show
+    // them; each datum is classified (misfit_class, misfit_threshold). Re-inverting Kept is
+    // unaffected: the Inversion ignores earlier predictions.
     outputs: [
-        // Plain data, ready for another inversion
-        { id: 'kept', label: 'Kept', type: 'Dataset' },
-        // Still an inversion result, so the discarded data can be shown with their predictions
+        { id: 'kept', label: 'Kept', type: 'InversionResult' },
         { id: 'rejected', label: 'Rejected', type: 'InversionResult' },
+        { id: 'all', label: 'All (marked)', type: 'InversionResult' },
     ],
     bypass: { from: 'in', to: 'kept' },
     params: [
@@ -113,15 +116,25 @@ export const MisfitFilterBlock: BlockDefinition = {
             ? rejectUnpredicted
             : row.misfit_angle > threshold;
 
-        const kept = stripInversionFields(filterRows(input.files, row => !isRejected(row)));
-        const rejected = filterRows(input.files, isRejected);
+        // Every datum says which population it belongs to, and by which threshold
+        const all = input.files.map(file => ({
+            ...file,
+            content: ((file.content as any[]) ?? []).map(row => ({
+                ...row,
+                misfit_class: isRejected(row) ? 'rejected' : 'kept',
+                misfit_threshold: threshold,
+            })),
+        }));
+        const kept = filterRows(all, row => row.misfit_class === 'kept');
+        const rejected = filterRows(all, row => row.misfit_class === 'rejected');
         ctx.log('info', `Kept ${countRows(kept)}, rejected ${countRows(rejected)} (misfit > ${threshold}°)`);
 
         const { provenance, ...body } = input;
         return {
             outputs: {
-                kept: { type: 'Dataset', files: kept },
+                kept: { ...body, files: kept },
                 rejected: { ...body, files: rejected },
+                all: { ...body, files: all },
             },
         };
     },

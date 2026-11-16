@@ -27,6 +27,11 @@ export type HistogramParameters = {
     strokeWidth?: number,
     densityColor?: string,
     overlayColor?: string,
+    // Vertical lines at given x values (e.g. a misfit threshold)
+    markers?: { value: number, color: string, label?: string }[],
+    // Statistics box of the primary series (on by default); off when it would describe only part
+    // of what is drawn (e.g. kept data with rejected data overlaid)
+    showStatistics?: boolean,
     xAxisLabel?: string,
     yAxisLabel?: string,
     title?: string
@@ -341,6 +346,23 @@ export class Histogram {
                 .style('pointer-events', 'none')
         }
 
+        // Vertical markers (e.g. the misfit threshold), dashed, labelled at the top
+        ;(this.params.markers ?? []).forEach(m => {
+            const [lo, hi] = xScale.domain()
+            if (m.value < lo || m.value > hi) return
+            const x = xScale(m.value)
+            this.chartGroup_.append('line')
+                .attr('x1', x).attr('x2', x).attr('y1', 0).attr('y2', chartHeight)
+                .attr('stroke', m.color).attr('stroke-width', 2).attr('stroke-dasharray', '6,4')
+                .style('pointer-events', 'none')
+            if (m.label) {
+                this.chartGroup_.append('text')
+                    .attr('x', x + 4).attr('y', 12)
+                    .attr('fill', m.color).attr('font-size', 12).attr('font-weight', 600)
+                    .text(m.label)
+            }
+        })
+
         // Draw density curve if enabled
         if (this.params.draw!.density && mean !== undefined && stdDev !== undefined && stdDev > 0) {
             // Keep the curve within the plotted x-range (may be narrower than the data extent).
@@ -431,7 +453,7 @@ export class Histogram {
         }
 
         // Add statistics text if there's space
-        if (mean !== undefined && stdDev !== undefined && chartWidth > 300) {
+        if (this.params.showStatistics !== false && mean !== undefined && stdDev !== undefined && chartWidth > 300) {
             const statsGroup = this.chartGroup_.append('g')
                 .attr('class', 'statistics')
                 .attr('transform', `translate(${Math.max(chartWidth - 150, 10)}, 20)`)

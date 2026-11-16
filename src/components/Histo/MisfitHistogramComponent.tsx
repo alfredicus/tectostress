@@ -16,6 +16,16 @@ interface MisfitHistogramComponentProps {
     misfits: MisfitEntry[];
     /** Total data processed, so we can report how many produced a prediction. */
     totalData?: number;
+    /**
+     * After a Misfit filter (§14.4): the misfits of the kept and rejected data, drawn as two
+     * distinguishable series with the threshold. Replaces the category selector.
+     */
+    populations?: {
+        kept: number[];
+        rejected: number[];
+        threshold?: number;
+        style: Record<'kept' | 'rejected', { label: string; color: string }>;
+    };
 }
 
 // Distinct fill colour per category, cycled if there are more categories than colours.
@@ -34,7 +44,7 @@ const median = (a: number[]) => {
  * normals after an inversion. Shown in the inversion results panel. Lets the user switch
  * between "All data" and each individual data category.
  */
-const MisfitHistogramComponent: React.FC<MisfitHistogramComponentProps> = ({ misfits, totalData }) => {
+const MisfitHistogramComponent: React.FC<MisfitHistogramComponentProps> = ({ misfits, totalData, populations }) => {
     const chartRef = useRef<HTMLDivElement>(null);
 
     // Categories present in the data, in stable order of first appearance.
@@ -89,22 +99,45 @@ const MisfitHistogramComponent: React.FC<MisfitHistogramComponentProps> = ({ mis
         // Number of whole bins of `safeWidth` needed to cover [0, safeMax]; extend the domain
         // to a whole multiple of the width so every bin is exactly `safeWidth` degrees wide.
         const nBins = Math.max(1, Math.ceil(safeMax / safeWidth));
-        // eslint-disable-next-line no-new
-        new Histogram(chartRef.current, angles, {
-            width: 560,
-            height: 320,
-            bins: nBins,
-            domain: [0, nBins * safeWidth],
-            fillColor: selected === 'All' ? '#3498db' : colorFor(selected),
-            strokeColor: '#2c3e50',
-            draw: { grid: true, labels: true, axes: true, density: true },
-            xAxisLabel: 'Angular difference (measured − computed) [°]',
-            yAxisLabel: 'Count',
-        });
+        if (populations) {
+            // Kept data in one colour, rejected data on top in the other, and the threshold
+            const h = new Histogram(chartRef.current, populations.kept, {
+                width: 560,
+                height: 320,
+                bins: nBins,
+                domain: [0, nBins * safeWidth],
+                fillColor: populations.style.kept.color,
+                overlayColor: populations.style.rejected.color,
+                strokeColor: '#2c3e50',
+                draw: { grid: true, labels: true, axes: true, density: false },
+                // The cards beside the chart describe every datum; a box for the kept series alone would mislead
+                showStatistics: false,
+                markers: populations.threshold !== undefined
+                    ? [{ value: populations.threshold, color: '#111827', label: `threshold ${populations.threshold}°` }]
+                    : [],
+                xAxisLabel: 'Angular difference (measured − computed) [°]',
+                yAxisLabel: 'Count',
+            });
+            // (the setter redraws)
+            h.overlayData = populations.rejected;
+        } else {
+            // eslint-disable-next-line no-new
+            new Histogram(chartRef.current, angles, {
+                width: 560,
+                height: 320,
+                bins: nBins,
+                domain: [0, nBins * safeWidth],
+                fillColor: selected === 'All' ? '#3498db' : colorFor(selected),
+                strokeColor: '#2c3e50',
+                draw: { grid: true, labels: true, axes: true, density: true },
+                xAxisLabel: 'Angular difference (measured − computed) [°]',
+                yAxisLabel: 'Count',
+            });
+        }
         return () => {
             if (chartRef.current) chartRef.current.innerHTML = '';
         };
-    }, [angles, selected, xMax, binWidth]);
+    }, [angles, selected, xMax, binWidth, populations]);
 
     if (misfits.length === 0) return null;
 
@@ -124,8 +157,21 @@ const MisfitHistogramComponent: React.FC<MisfitHistogramComponentProps> = ({ mis
                 )}
             </p>
 
+            {/* Kept and rejected populations (after a Misfit filter): a legend instead of the selector */}
+            {populations && (
+                <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
+                    {(['kept', 'rejected'] as const).map(p => (
+                        <span key={p} className="inline-flex items-center gap-1.5">
+                            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: populations.style[p].color, opacity: p === 'rejected' ? 0.6 : 1 }} />
+                            {populations.style[p].label} ({populations[p].length})
+                        </span>
+                    ))}
+                    {populations.threshold !== undefined && <span className="text-gray-600">threshold {populations.threshold}° (dashed line)</span>}
+                </div>
+            )}
+
             {/* Category selector */}
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className={`flex flex-wrap gap-2 mb-3 ${populations ? 'hidden' : ''}`}>
                 {['All', ...categories].map(cat => {
                     const count = cat === 'All'
                         ? misfits.length

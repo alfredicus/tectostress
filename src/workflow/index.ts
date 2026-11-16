@@ -20,3 +20,5 @@ export {
 export { METRICS, OPERATORS, describeCondition } from './conditions';
 export type { InnerParams, PerIteration } from './composite';
 export { fileRef } from './blocks/datasetUtils';
+export { POPULATION_STYLE, populationOf, classification, selectPopulation, inversionData } from './populations';
+export type { Population, ShowPopulation } from './populations';

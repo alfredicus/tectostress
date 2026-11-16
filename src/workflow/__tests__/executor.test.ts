@@ -3,7 +3,7 @@ import { BlockRegistry } from '../registry';
 import { runWorkflow, planWorkflow, WorkflowCache, WorkflowValidationError } from '../executor';
 import { instantiateTemplate, PREDEFINED_WORKFLOWS } from '../templates';
 import { BlockDefinition, DatasetPayload, InversionResultPayload, Workflow } from '../types';
-import { fileRef, countRows } from '../blocks/datasetUtils';
+import { fileRef, countRows, stripInversionFields, INVERSION_ROW_FIELDS } from '../blocks/datasetUtils';
 import { runInversion } from '../../inversion/InversionService';
 import { dataNode, edge, env, FAST_INVERSION, faultFiles, node, seedRandom, synthetic2Files, workflow } from './fixtures';
 
@@ -45,18 +45,39 @@ describe('running the predefined workflow', () => {
         Object.entries(report.nodes).forEach(([id, r]) => expect([id, r.status]).toEqual([id, 'done']));
 
         const inv1 = report.nodes['inversion-1'].outputs.out as InversionResultPayload;
-        const kept = report.nodes['misfit-filter'].outputs.kept as DatasetPayload;
+        const kept = report.nodes['misfit-filter'].outputs.kept as InversionResultPayload;
         const rejected = report.nodes['misfit-filter'].outputs.rejected as InversionResultPayload;
+        const all = report.nodes['misfit-filter'].outputs.all as InversionResultPayload;
         expect(inv1.type).toBe('InversionResult');
         expect(countRows(kept.files) + countRows(rejected.files)).toBe(countRows(files));
 
-        // Kept rows are plain data again; rejected rows keep the predictions of inversion 1
+        // §14.4: Kept, Rejected and All (marked) are all inversion results, with the solution of
+        // inversion 1 and the predictions of their data, every datum classified
+        [kept, rejected, all].forEach(p => {
+            expect(p.type).toBe('InversionResult');
+            expect(p.solution).toBe(inv1.solution);
+        });
         kept.files.forEach(f => f.content.forEach((row: any) => {
-            expect(row.predicted_striation).toBeUndefined();
-            expect(row.misfit_angle).toBeUndefined();
-            expect((f as any).stressAxes).toBeUndefined();
+            expect(row.misfit_angle).toBeLessThanOrEqual(10);
+            expect(row).toMatchObject({ misfit_class: 'kept', misfit_threshold: 10 });
         }));
-        rejected.files.forEach(f => f.content.forEach((row: any) => expect(row.misfit_angle).toBeGreaterThan(10)));
+        rejected.files.forEach(f => f.content.forEach((row: any) => {
+            expect(row.misfit_angle).toBeGreaterThan(10);
+            expect(row).toMatchObject({ misfit_class: 'rejected', misfit_threshold: 10 });
+        }));
+        expect(countRows(all.files)).toBe(countRows(files));
+        const classes = all.files.flatMap(f => f.content.map((r: any) => r.misfit_class));
+        expect(classes.filter(c => c === 'kept')).toHaveLength(countRows(kept.files));
+        expect(classes.filter(c => c === 'rejected')).toHaveLength(countRows(rejected.files));
+
+        // Re-inverting Kept sees exactly the measurements: the Inversion strips everything an
+        // inversion or a misfit filter added
+        const measurements = (p: InversionResultPayload) => stripInversionFields(p.files).map(f => f.content);
+        expect(measurements(kept)).toEqual(stripInversionFields(inv1.files)
+            .map((f, k) => f.content.filter((_: any, j: number) => (inv1.files[k].content[j] as any).misfit_angle == null
+                || (inv1.files[k].content[j] as any).misfit_angle <= 10)));
+        kept.files.forEach(f => f.content.forEach((row: any) =>
+            INVERSION_ROW_FIELDS.forEach(field => expect(stripInversionFields([{ ...f, content: [row] }])[0].content[0]).not.toHaveProperty(field))));
 
         // Rows stay traceable to the Data-tab file and row they came from
         rejected.files.forEach(f => f.content.forEach((row: any) => {

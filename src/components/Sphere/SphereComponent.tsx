@@ -298,15 +298,27 @@ const MOHR_MARGIN = { left: 40, right: 48, top: 22, bottom: 30 };
 // STRESS SPHERE COMPONENT
 // ============================================================================
 
-const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { autoEnable?: boolean }> = ({
+const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
+    autoEnable?: boolean;
+    /**
+     * Optional grouping replacing the data types: a row field (e.g. `misfit_class`, the kept and
+     * rejected populations after a Misfit filter, §14.4), and each value's label and colour
+     */
+    groupField?: string;
+    groupStyles?: Record<string, { label: string; color: string }>;
+}> = ({
     files,
     width = 600,
     height = 600,
     title = "Stress Sphere",
     state,
     onStateChange,
-    autoEnable = false
+    autoEnable = false,
+    groupField,
+    groupStyles,
 }) => {
+    const keyOfRow = (row: any): string =>
+        groupField && row?.[groupField] != null ? String(row[groupField]) : groupOf(row.type);
     const mountRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -377,20 +389,22 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
             if (!Array.isArray(rows)) return;
             rows.forEach((row: any) => {
                 if (row?.type == null || !normalFromRow(row)) return;
-                const g = groupOf(row.type);
+                const g = keyOfRow(row);
                 counts.set(g, (counts.get(g) ?? 0) + 1);
             });
         });
         return Array.from(counts, ([key, count]) => ({ key, count }));
-    }, [files]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [files, groupField]);
 
     const colorFor = (key: string): string => {
         if (settings.typeColors[key]) return settings.typeColors[key];
+        if (groupStyles?.[key]) return groupStyles[key].color;
         if (SPHERE_TYPE_COLORS[key]) return SPHERE_TYPE_COLORS[key];
         const idx = groups.findIndex(g => g.key === key);
         return SPHERE_FALLBACK_COLORS[(idx < 0 ? 0 : idx) % SPHERE_FALLBACK_COLORS.length];
     };
-    const labelFor = (key: string): string => SPHERE_TYPE_LABELS[key] ?? beautifyName(key);
+    const labelFor = (key: string): string => groupStyles?.[key]?.label ?? SPHERE_TYPE_LABELS[key] ?? beautifyName(key);
 
     const stressFrame = useMemo(() => readStressFrame(files as any[]), [files]);
 
@@ -896,7 +910,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
                 if (!normal) return;
 
                 total++;
-                const group = groupOf(row.type);
+                const group = keyOfRow(row);
                 if (settings.hiddenTypes[group]) return;
 
                 const pole = toSphere(normal);
@@ -979,7 +993,8 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & { auto
             points: mohrPoints
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files, stressFrame, settings]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [files, stressFrame, settings, groupField, groupStyles]);
 
     // ── Panels ───────────────────────────────────────────────────────────────
 

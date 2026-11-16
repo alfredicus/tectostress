@@ -4,7 +4,7 @@
 import { Workflow, WorkflowNode } from './types';
 import { WORKFLOW_SCHEMA_VERSION } from './persistence';
 import { createDefaultRegistry } from './blocks';
-import { LOOP_COLLECTED, makeLoop } from './composite';
+import { LOOP_COLLECTED, loopOptions, makeLoop } from './composite';
 
 export interface WorkflowTemplate {
     id: string;
@@ -70,14 +70,16 @@ function phaseSeparation(): Workflow {
         ],
     };
     let k = 0;
-    const { workflow, nodeId, definition } = makeLoop(
-        flat, createDefaultRegistry(), ['inversion', 'misfit-filter', 'phase-inversion', 'phase-tag', 'exit'],
-        'Phase separation', () => `tpl${++k}`,
-        { carriedOutput: 'out1', collect: 'out2', maxIterations: 5 });
-    // out1 = the rejected data (carried to the next iteration), out2 = the phase, tagged
-    if (definition.outputs[0]?.source.port !== 'rejected' || definition.outputs[1]?.source.node !== 'phase-tag') {
-        throw new Error('Phase separation template: unexpected loop outputs');
-    }
+    const inner = ['inversion', 'misfit-filter', 'phase-inversion', 'phase-tag', 'exit'];
+    // The rejected data are carried to the next iteration; the phase (tagged) is collected
+    const { definition: preview } = loopOptions(flat, createDefaultRegistry(), inner);
+    const outputOf = (node: string, port: string) => preview.outputs.find(o => o.source.node === node && o.source.port === port)?.id;
+    const carried = outputOf('misfit-filter', 'rejected');
+    const phase = outputOf('phase-tag', 'out');
+    if (!carried || !phase) throw new Error('Phase separation template: unexpected loop outputs');
+    const { workflow, nodeId } = makeLoop(
+        flat, createDefaultRegistry(), inner, 'Phase separation', () => `tpl${++k}`,
+        { carriedOutput: carried, collect: phase, maxIterations: 5 });
     return {
         ...workflow,
         nodes: [

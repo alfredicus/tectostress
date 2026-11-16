@@ -44,6 +44,12 @@ const ZOOM_MAX  = 3.0;
 interface InversionMohrComponentProps {
     solution: StressSolution;
     data: Data[];
+    /**
+     * Optional grouping replacing the data types, e.g. the kept and rejected populations after a
+     * Misfit filter (§14.4): datum → group key, and each group's label and colour
+     */
+    groupByDatum?: Map<Data, string>;
+    groupStyles?: Record<string, { label: string; color: string }>;
 }
 
 // ─── Per-type display colours ─────────────────────────────────────────────────
@@ -119,7 +125,10 @@ function groupOf(raw: unknown): string {
 const InversionMohrComponent: React.FC<InversionMohrComponentProps> = ({
     solution,
     data,
+    groupByDatum,
+    groupStyles,
 }) => {
+    const keyOf = (d: Data): string => groupByDatum?.get(d) ?? groupOf((d as any).type);
     const containerRef = useRef<HTMLDivElement>(null);
     const [zoom, setZoom] = useState<number>(1.0);
     const [showDataPanel, setShowDataPanel] = useState<boolean>(false);
@@ -140,19 +149,21 @@ const InversionMohrComponent: React.FC<InversionMohrComponentProps> = ({
     const groups = useMemo(() => {
         const counts = new Map<string, number>();
         data.forEach(d => {
-            const g = groupOf((d as any).type);
+            const g = keyOf(d);
             counts.set(g, (counts.get(g) ?? 0) + 1);
         });
         return Array.from(counts, ([key, count]) => ({ key, count }));
-    }, [data]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, groupByDatum]);
 
     const colorFor = (key: string): string => {
         if (colorOverrides[key]) return colorOverrides[key];
+        if (groupStyles?.[key]) return groupStyles[key].color;
         if (TYPE_COLORS[key]) return TYPE_COLORS[key];
         const idx = groups.findIndex(g => g.key === key);
         return FALLBACK_COLORS[(idx < 0 ? 0 : idx) % FALLBACK_COLORS.length];
     };
-    const labelFor = (key: string): string => TYPE_LABELS[key] ?? beautifyName(key);
+    const labelFor = (key: string): string => groupStyles?.[key]?.label ?? TYPE_LABELS[key] ?? beautifyName(key);
 
     const plottedCount = groups
         .filter(g => !hiddenTypes[g.key])
@@ -246,7 +257,7 @@ const InversionMohrComponent: React.FC<InversionMohrComponentProps> = ({
         const vectors: Array<{ n: [number, number, number]; color: string; label: string }> = [];
 
         for (const datum of data) {
-            const group = groupOf((datum as any).type);
+            const group = keyOf(datum);
             if (hiddenTypes[group]) continue;
 
             const nRaw = (datum as any).normal as number[] | undefined;
@@ -272,7 +283,7 @@ const InversionMohrComponent: React.FC<InversionMohrComponentProps> = ({
 
         return () => { container.innerHTML = ''; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [solution, data, effectiveWidth, effectiveHeight, isEngineer, hiddenTypes, colorOverrides, style]);
+    }, [solution, data, groupByDatum, groupStyles, effectiveWidth, effectiveHeight, isEngineer, hiddenTypes, colorOverrides, style]);
 
     // ── Zoom ──────────────────────────────────────────────────────────────────
     const zoomIn  = () => setZoom(z => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 10) / 10));

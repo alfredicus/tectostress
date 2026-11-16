@@ -87,8 +87,14 @@ describe('canConnect', () => {
         expect(canConnect(base(), registry, { source: 'm', sourcePort: 'kept', target: 'i2', targetPort: 'in' }).ok).toBe(true);
     });
 
+    test('kept, rejected and all (marked) data accept every view, Mohr and Summary included (§14.4)', () => {
+        ['kept', 'rejected', 'all'].forEach(port =>
+            expect(canConnect(base(), registry, { source: 'm', sourcePort: port, target: 's', targetPort: 'in' }).ok).toBe(true));
+    });
+
     test('refuses an incompatible type', () => {
-        const r = canConnect(base(), registry, { source: 'm', sourcePort: 'kept', target: 's', targetPort: 'in' });
+        // Plain data into a view that needs an inversion result
+        const r = canConnect(base(), registry, { source: 'd', sourcePort: 'out', target: 's', targetPort: 'in' });
         expect(r.ok).toBe(false);
         expect(r.reason).toMatch(/expects InversionResult/);
     });

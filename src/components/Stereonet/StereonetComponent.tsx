@@ -145,7 +145,15 @@ function getAvailableRepresentations(files: any[], enableByDefault = false): Ava
 // WULFF STEREONET COMPONENT
 // ============================================================================
 
-const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & { autoEnable?: boolean }> = ({
+const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & {
+    autoEnable?: boolean;
+    /**
+     * Optional: draw the rows in groups by a field (e.g. `misfit_class`, the kept and rejected
+     * populations after a Misfit filter, §14.4), each group in its own colour
+     */
+    groupField?: string;
+    groupStyles?: Record<string, { label: string; color: string }>;
+}> = ({
     files,
     width = 600,
     height = 600,
@@ -153,7 +161,9 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
     state,
     onStateChange,
     onDimensionChange,
-    autoEnable = false
+    autoEnable = false,
+    groupField,
+    groupStyles,
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     // Unique radio-group name, since several stereonets can be on screen at once
@@ -329,9 +339,19 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
                 const relevantFiles = files.filter(f => repr.availableInFiles.includes(f.id));
 
                 relevantFiles.forEach(file => {
-                    const fileData = file.data || file.content;
-                    if (!fileData || fileData.length === 0) return;
+                    const allRows = file.data || file.content;
+                    if (!allRows || allRows.length === 0) return;
+                    // Rows drawn group by group when grouped (kept / rejected), each in its colour
+                    const parts: { rows: any[]; color: string }[] = groupField
+                        ? Array.from(allRows.reduce((m: Map<string, any[]>, row: any) => {
+                            const k = row?.[groupField] != null ? String(row[groupField]) : '';
+                            m.set(k, [...(m.get(k) ?? []), row]);
+                            return m;
+                        }, new Map<string, any[]>()) as Map<string, any[]>)
+                            .map(([k, rows]) => ({ rows, color: groupStyles?.[k]?.color ?? repr.color }))
+                        : [{ rows: allRows, color: repr.color }];
 
+                    parts.forEach(({ rows: fileData, color: partColor }) => {
                     const config = DATA_TYPE_CONFIGS[repr.dataType];
                     const processedData = processDataForRepresentation(
                         fileData,
@@ -349,7 +369,7 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
 
                     if (processedData.data.length > 0) {
                         const dataStyle: DataStyle = {
-                            color: repr.color,
+                            color: partColor,
                             width: 2,
                             size: symbolSize,
                             opacity: repr.opacity,
@@ -378,6 +398,7 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
                         plotPredictedOnStereonet(stereonet, processedData.predicted, repr, predictedStyle);
                         totalStats.predicted += processedData.predicted.length;
                     }
+                    });
                 });
             });
 
@@ -419,6 +440,8 @@ const StereonetComponent: React.FC<BaseVisualizationProps<StereonetCompState> & 
         stereonet,
         currentState.settings.availableRepresentations,
         files,
+        groupField,
+        groupStyles,
         currentState.settings.showPredicted,
         currentState.settings.predictedColor,
         currentState.settings.showStressAxes,

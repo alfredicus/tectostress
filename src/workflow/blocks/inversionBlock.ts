@@ -58,12 +58,19 @@ export const InversionBlock: BlockDefinition = {
         );
         const predictions = computePredictions(run, run.solution);
 
-        // Rows carry their misfit category too, so the misfit histogram survives filtering
+        // Rows carry their misfit category too, so the misfit histogram survives filtering, and
+        // the index of their datum in the inversion (`_datum`), so views of a subset (kept or
+        // rejected data, §14.4) use exactly the data they receive
+        const datumOf = new Map(run.origins.map((o, i) => [predictionKey(o.fileId, o.rowIndex), i]));
         const enriched = enrichFiles(files, run.solution, predictions).map(file => ({
             ...file,
             content: (file.content as any[]).map((row, i) => {
-                const category = predictions.get(predictionKey(file.id, i))?.category;
-                return category ? { ...row, misfit_category: category } : row;
+                const key = predictionKey(file.id, i);
+                const category = predictions.get(key)?.category;
+                const datum = datumOf.get(key);
+                return category || datum !== undefined
+                    ? { ...row, ...(category ? { misfit_category: category } : {}), ...(datum !== undefined ? { _datum: datum } : {}) }
+                    : row;
             }),
         }));
 

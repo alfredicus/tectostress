@@ -46,6 +46,8 @@ describe('grouping', () => {
         expect(definition.outputs.map(o => [o.source.node, o.source.port, o.type])).toEqual([
             ['inversion-2', 'out', 'InversionResult'],
             ['misfit-filter', 'rejected', 'InversionResult'],
+            // Not used inside: offered as a final result of the group (§11.3, §14.4)
+            ['misfit-filter', 'all', 'InversionResult'],
         ]);
         expect(workflow.nodes.map(n => n.id)).toContain(nodeId);
         expect(validateWorkflow(workflow, registryFor(workflow, base)).filter(i => i.severity === 'error')).toEqual([]);
