@@ -9,6 +9,8 @@ export interface BlockNodeData extends Record<string, unknown> {
     node: WorkflowNode;
     def?: BlockDefinition;
     result?: NodeResult;
+    /** Extra line under the title, e.g. why a block inside a group is not used */
+    note?: string;
 }
 
 export type BlockFlowNode = Node<BlockNodeData, 'block'>;
@@ -64,7 +66,7 @@ function Ports({ ports, side }: { ports: PortDefinition[]; side: 'in' | 'out' })
 }
 
 const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
-    const { node, def, result } = data;
+    const { node, def, result, note } = data;
     const status: NodeStatus = !node.active ? 'inactive' : result?.status ?? 'idle';
     const style = STATUS_STYLE[status];
     const title = node.label || def?.title || node.type;
@@ -105,6 +107,7 @@ const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
                 <div className="font-semibold text-gray-800 truncate" title={title}>{title}</div>
                 {node.label && def && <div className="text-[10px] text-gray-500">{def.title}</div>}
                 {!def && <div className="text-[10px] text-red-600">Unknown block type “{node.type}”</div>}
+                {note && <div className="text-[10px] text-indigo-700 max-w-[180px]">{note}</div>}
             </div>
 
             <div className="px-3 pb-2 flex items-center gap-1 flex-wrap">
@@ -131,3 +134,47 @@ const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
 };
 
 export default React.memo(BlockNode);
+
+// ---- Ports of an opened group (§13.1) -------------------------------------------------------
+
+export interface PortNodeData extends Record<string, unknown> {
+    side: 'in' | 'out';
+    label: string;
+    type: string;
+    optional?: boolean;
+    /** Extra line, e.g. "replaces Data" or "→ next iteration" */
+    note?: string;
+}
+
+export type PortFlowNode = Node<PortNodeData, 'port'>;
+
+/**
+ * An input or output of the opened group, drawn at the edge of its inner graph: where the outside
+ * data comes in, and where results leave.
+ */
+export const PortNode: React.FC<NodeProps<PortFlowNode>> = React.memo(({ data, selected }) => {
+    const color = PORT_COLOR[data.type] ?? '#94a3b8';
+    return (
+        <div className={`relative rounded-full border-2 border-dashed bg-white px-3 py-1.5 text-xs min-w-[120px] max-w-[230px]
+            ${selected ? 'ring-2 ring-blue-400' : ''}`} style={{ borderColor: color }}>
+            <div className="font-semibold text-gray-700 truncate" title={data.label}>
+                {data.side === 'in' ? '⇥ ' : ''}{data.label}{data.side === 'out' ? ' ⇥' : ''}
+            </div>
+            <div className="text-[10px] text-gray-500">
+                {data.side === 'in' ? 'Group input' : 'Group output'} · {data.type === 'any' ? 'any value' : data.type}
+                {data.optional ? ', optional' : ''}
+            </div>
+            {data.note && <div className="text-[10px] text-indigo-700">{data.note}</div>}
+            <Handle
+                type={data.side === 'in' ? 'source' : 'target'}
+                position={data.side === 'in' ? Position.Right : Position.Left}
+                id="port"
+                style={{
+                    width: 10, height: 10,
+                    background: data.optional ? 'white' : color,
+                    border: data.optional ? `2px solid ${color}` : '2px solid white',
+                }}
+            />
+        </div>
+    );
+});

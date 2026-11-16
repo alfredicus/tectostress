@@ -1,6 +1,6 @@
 # Workflows: specification (draft v0.1)
 
-Status: **v0.3**. Recommendations of v0.1 and engine decisions (§10) approved. Implemented: phase 1, phase 2 except Google Drive (§11), control blocks (§12). Proposals in §11–§12 await review.
+Status: **v0.4**. Recommendations of v0.1, engine decisions (§10) and §13 approved. Implemented: phase 1, phase 2 except Google Drive (§11), control blocks (§12). Proposals in §11–§12 await review.
 
 Every statement carries one of three tags:
 
@@ -452,3 +452,64 @@ The "since the previous iteration" quantities are false on the first iteration.
   something, so both branches can be merged again. **[PROPOSAL]**
 - Like Add Tags, ExitLoop and Conditional hand values over unchanged: never cached, and they are
   evaluated even when only checking what is out of date. **[PROPOSAL]**
+
+---
+
+## 13. Looking inside groups, and groups inside groups
+
+Requested by the user: see what a group contains, and what a group inside it contains, and so on.
+Today a group cannot contain a group, and its content is only visible as a list of parameters in
+the inspector. Approved by the user on 2026-11-16: a group must never become a black box; seeing how
+a result was obtained matters as much as the result. No limit on the nesting depth. **[DECIDED]**
+
+### 13.1 Opening a group
+- **Double-click** a group (or loop), or press **Open** in its panel: the canvas shows its inner
+  blocks and connections, laid out as they were when grouped. **[DECIDED]**
+- A **breadcrumb** above the canvas shows where you are: `Workflow › Phase filter › Misfit step`.
+  Click any level to go back up; **Esc** goes up one level. **[DECIDED]**
+- The group's inputs and outputs are drawn as **port blocks** on the left and right edges, labelled
+  as on the group, so you see where the outside data comes in and where results leave.
+  **[DECIDED]**
+- Inside, every block shows its **own state** (done, stale, error, skipped…) from the last run, and
+  clicking it shows its own results in the results pane and its own parameters in the panel, as for
+  a top-level block. Parameter changes are stored on the group, as today. **[DECIDED]**
+- **Read-only does not mean inaccessible**: every inner block, its parameters, connections and
+  results, and every nested group can be opened and inspected. **[DECIDED]**
+- The structure is **read-only** inside: no adding, deleting or rewiring blocks (that is "editing a
+  group in place", still out of scope). The palette is hidden and the canvas is tinted to make the
+  difference visible. **[DECIDED]**
+- Alternative not recommended: expanding a group in place as a frame on the main canvas. It gets
+  unreadable at depth 2 or 3 and fights with the layout of the surrounding blocks.
+
+### 13.2 Groups inside groups
+- A selection may contain groups: **Group as block** then makes a group of groups, to any depth.
+  **[DECIDED]**
+- At run time the engine expands groups **recursively** before running, so cache, provenance and
+  states work exactly as for flat groups. Inner ids chain the path: `outer/inner/block`.
+  **[DECIDED]**
+- A group's state folds the states of its inner blocks **from the deepest level up**. **[DECIDED]**
+- Its panel lists the parameters of its direct inner blocks; an inner group appears as one entry
+  with an **Open** button, rather than flattening every level into one long list. **[DECIDED]**
+- **Ungroup** removes one level only: the inner groups come back as groups. **[DECIDED]**
+- **Nothing of the inner structure is ever lost when saving**: a workflow file and the "My blocks"
+  library store every definition needed, nested ones included (blocks, connections, parameters,
+  hierarchy), so files stay self-contained. Tested by save → load round trips. **[DECIDED]**
+- Recursive execution must give the same results, provenance and cache behaviour as the same blocks
+  ungrouped. Tested against the flat workflow. **[DECIDED]**
+
+### 13.3 Loops
+- A loop can be opened the same way. Its inner blocks show the **last iteration**. **[DECIDED]**
+- Later improvement, not blocking: an iteration selector to inspect earlier iterations. Today only
+  the last iteration's inner results are kept in memory, so this needs the engine to keep them.
+  **[PROPOSAL]**
+- Still not supported in this step: loops inside loops or groups, groups inside loops. **[DECIDED]**
+
+### 13.4 Order
+1. Open and inspect groups and loops (§13.1, §13.3). Editor only: the engine already keeps the
+   inner results (`group/inner`).
+2. Groups inside groups (§13.2): recursive expansion and folding with tests (results, provenance,
+   cache, save/load), then the editor.
+3. Earlier loop iterations, if feasible.
+
+Before each step, the existing workflows (predefined templates, the user's saved workflow, the 59
+engine tests) serve as the regression reference.
