@@ -5,7 +5,7 @@
 import { hashValue } from './hash';
 import { BlockRegistry, paramsWithDefaults } from './registry';
 import {
-    buildLoopBody, expandComposites, foldComposite, foldReport, isCompositeType, LOOP_COLLECTED, LoopInputBlock,
+    buildLoopBody, expandComposites, foldAncestors, foldReport, isCompositeType, leafIds, LOOP_COLLECTED, LoopInputBlock,
     LOOP_INPUT_TYPE, outerId, registryFor,
 } from './composite';
 import { countRows } from './blocks/datasetUtils';
@@ -164,19 +164,14 @@ export async function runWorkflow(
     if (innerErrors.length) throw new WorkflowValidationError(innerErrors);
 
     const target = options.targetNodeId;
-    const targets = target ? expansion.inner.get(target) ?? [target] : undefined;
+    const targets = target ? leafIds(expansion, target) : undefined;
 
-    // Live updates: inner blocks as they are, and their composite folded again each time
+    // Live updates: inner blocks as they are, and the groups containing them folded again each time
     const live: Record<string, NodeResult> = {};
     const onNodeUpdate = options.onNodeUpdate && ((id: string, result: NodeResult) => {
         live[id] = result;
         options.onNodeUpdate!(id, result);
-        const compositeId = outerId(id);
-        const node = workflow.nodes.find(n => n.id === compositeId);
-        if (compositeId !== id && node) {
-            const folded = foldComposite(compositeId, expansion.definitions.get(node.type)!, live, expansion.dropped);
-            if (folded) options.onNodeUpdate!(compositeId, folded);
-        }
+        foldAncestors(id, expansion, live).forEach(([groupId, folded]) => options.onNodeUpdate!(groupId, folded));
     });
 
     const report = await runFlat(expansion.workflow, registry, env, { ...options, onNodeUpdate }, targets);

@@ -51,14 +51,11 @@ describe('grouping', () => {
         expect(validateWorkflow(workflow, registryFor(workflow, base)).filter(i => i.severity === 'error')).toEqual([]);
     });
 
-    test('report blocks, single blocks and nested groups are refused', () => {
+    test('report blocks and single blocks are refused (groups inside groups: nested.test.ts)', () => {
         const wf = template();
         wf.nodes.push({ ...wf.nodes[0], id: 'report', type: 'report', scientificParams: {} });
         expect(() => groupAsComposite(wf, base, ['inversion-2', 'report'], 'x', makeId)).toThrow(CompositeError);
         expect(() => groupAsComposite(wf, base, ['inversion-2'], 'x', makeId)).toThrow(/at least two/);
-        const { workflow, nodeId } = grouped();
-        expect(() => groupAsComposite(workflow, registryFor(workflow, base), [nodeId, 'inversion-1'], 'y', makeId))
-            .toThrow(/another group/);
     });
 });
 

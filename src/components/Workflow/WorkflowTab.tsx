@@ -17,7 +17,7 @@ import {
     validateWorkflow, Workflow, WorkflowCache, WorkflowEnvironment, WorkflowNode, WorkflowRunReport,
     WORKFLOW_SCHEMA_VERSION, BlockDefinition, NodeResult, paramsWithDefaults, ReportPayload,
     registryFor, groupAsComposite, ungroupComposite, isCompositeType, outerId, CompositeDefinition, InnerParams,
-    innerPresentation, BlockRegistry, makeLoop, loopOptions, LOOP_COLLECTED,
+    innerPresentation, BlockRegistry, makeLoop, loopOptions, LOOP_COLLECTED, compositeWithDependencies,
 } from '../../workflow';
 import { hashValue } from '../../workflow/hash';
 import BlockNode, { BlockFlowNode, PortFlowNode, PortNode, STATUS_STYLE } from './BlockNode';
@@ -43,6 +43,19 @@ function loadStoredWorkflow(registry: ReturnType<typeof createDefaultRegistry>):
         if (json) return parseWorkflow(json, registry).workflow;
     } catch { /* unreadable or blocked storage: start empty */ }
     return emptyWorkflow();
+}
+
+/**
+ * A new group in the library, with the groups it contains (§13.2), so it can be reused even after
+ * they are removed from the workflow
+ */
+function addToLibrary(library: CompositeDefinition[], def: CompositeDefinition, pool: CompositeDefinition[]): CompositeDefinition[] {
+    const deps = compositeWithDependencies(def.type, [def, ...pool]).filter(d => d.type !== def.type);
+    return [
+        ...library.filter(c => c.type !== def.type),
+        ...deps.filter(d => !library.some(c => c.type === d.type)),
+        def,
+    ];
 }
 
 /** Groups saved in this browser, offered in the palette (§11.3) */
@@ -384,13 +397,15 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         const node = createNode(def, id, pos);
         // A new Data block starts with every file of the Data tab
         if (type === 'data') node.scientificParams.files = files.map(fileRef);
-        // A group from the library travels with the workflow from now on
-        const groupDef = isCompositeType(type) && !workflow.composites?.some(c => c.type === type)
-            ? library.find(c => c.type === type) : undefined;
+        // A group from the library travels with the workflow from now on, with the groups inside it
+        const needed = isCompositeType(type)
+            ? compositeWithDependencies(type, [...(workflow.composites ?? []), ...library])
+                .filter(c => !workflow.composites?.some(w => w.type === c.type))
+            : [];
         setWorkflow(wf => ({
             ...wf,
             nodes: [...wf.nodes, node],
-            ...(groupDef ? { composites: [...(wf.composites ?? []), groupDef] } : {}),
+            ...(needed.length ? { composites: [...(wf.composites ?? []), ...needed] } : {}),
         }));
         selectOnly(id);
         setSelectedEdgeId(null);
@@ -480,7 +495,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                 maxIterations: loopDraft.maxIterations,
             });
             setWorkflow(r.workflow);
-            setLibrary(lib => [...lib.filter(c => c.type !== r.definition.type), r.definition]);
+            setLibrary(lib => addToLibrary(lib, r.definition, r.workflow.composites ?? []));
             selectOnly(r.nodeId);
             setGroupName('');
             setLoopDraft({ maxIterations: 10 });
@@ -493,7 +508,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         try {
             const r = groupAsComposite(workflow, registry, selectedIds, groupName || 'My block', uid);
             setWorkflow(r.workflow);
-            setLibrary(lib => [...lib.filter(c => c.type !== r.definition.type), r.definition]);
+            setLibrary(lib => addToLibrary(lib, r.definition, r.workflow.composites ?? []));
             selectOnly(r.nodeId);
             setGroupName('');
         } catch (e) {
@@ -512,22 +527,35 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
 
     /** Display name of a block, including blocks inside a group (`group/inner`) */
     const labelOf = useCallback((id: string): string => {
-        const outer = workflow.nodes.find(n => n.id === outerId(id));
-        const outerName = outer ? outer.label || registry.get(outer.type)?.title || outer.type : id;
-        if (outerId(id) === id) return outerName;
-        const innerLocal = id.slice(outerId(id).length + 1);
-        const inner = workflow.composites?.find(c => c.type === outer?.type)?.nodes.find(n => n.id === innerLocal);
-        return `${outerName} › ${inner ? inner.label || registry.get(inner.type)?.title || inner.type : innerLocal}`;
+        // `a/b/c`: block c inside group b inside group a, at any depth (§13.2)
+        const names: string[] = [];
+        let nodes: WorkflowNode[] = workflow.nodes;
+        for (const part of id.split('/')) {
+            const n = nodes.find(x => x.id === part);
+            names.push(n ? n.label || registry.get(n.type)?.title || n.type : part);
+            nodes = (n && workflow.composites?.find(c => c.type === n.type)?.nodes) ?? [];
+        }
+        return names.join(' › ');
     }, [workflow, registry]);
+
+    /**
+     * Is input `port` of the group opened at `depth` fed by something? By a block next to it, or by
+     * an input of the group around it that is itself fed (groups inside groups, §13.2)
+     */
+    const inputFed = useCallback((depth: number, port: string): boolean => {
+        const id = openPath[depth];
+        if (depth === 0) return workflow.edges.some(e => e.target === id && e.targetPort === port);
+        const parent = openLevels?.[depth - 1]?.def;
+        if (!parent) return false;
+        if (parent.edges.some(e => e.target === id && e.targetPort === port)) return true;
+        return parent.inputs.some(i => i.targets.some(t => t.node === id && t.port === port) && inputFed(depth - 1, i.id));
+    }, [openPath, openLevels, workflow.edges]);
 
     // ---- Inside an opened group: its blocks, its ports, read-only (§13.1) -------------------
     const innerView = useMemo(() => {
         if (!opened || !openLevels) return null;
         const { node: group, def, runId } = opened;
-        const groupLocalId = openPath[openPath.length - 1];
-        // Connections reaching the group, at the level that contains it
-        const parentEdges = openLevels.length > 1 ? openLevels[openLevels.length - 2].def.edges : workflow.edges;
-        const connected = new Set(parentEdges.filter(e => e.target === groupLocalId).map(e => e.targetPort));
+        const connected = new Set(def.inputs.filter(i => inputFed(openPath.length - 1, i.id)).map(i => i.id));
         const nameOf = (id: string) => {
             const n = def.nodes.find(x => x.id === id);
             return n ? n.label || registry.get(n.type)?.title || n.type : id;
@@ -615,7 +643,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
             });
         });
         return { nodes, edges, replaced };
-    }, [opened, openLevels, openPath, workflow, registry, results, innerSelectedId]);
+    }, [opened, openLevels, openPath, workflow, registry, results, innerSelectedId, inputFed]);
 
     // ---- React Flow wiring ---------------------------------------------------------------
     const rfNodes: BlockFlowNode[] = useMemo(() => workflow.nodes.map(n => ({
@@ -947,9 +975,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         const { node: group, def } = opened;
         if (!innerNode) {
             const groupDef = registry.get(group.type);
-            const parentEdges = openLevels && openLevels.length > 1 ? openLevels[openLevels.length - 2].def.edges : workflow.edges;
-            const groupLocalId = openPath[openPath.length - 1];
-            const isConnected = (port: string) => parentEdges.some(e => e.target === groupLocalId && e.targetPort === port);
+            const isConnected = (port: string) => inputFed(openPath.length - 1, port);
             return (
                 <div className="space-y-3">
                     <div>
@@ -1138,7 +1164,12 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                         <button
                                             className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600"
                                             title="Remove from my blocks (workflows using it keep their copy)"
-                                            onClick={e => { e.stopPropagation(); setLibrary(lib => lib.filter(c => c.type !== b.type)); }}
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                const user = library.find(c => c.type !== b.type && compositeWithDependencies(c.type, library).some(d => d.type === b.type));
+                                                if (user) setMessage({ kind: 'error', text: `“${b.title}” is used inside “${user.title}” in My blocks: remove that one first` });
+                                                else setLibrary(lib => lib.filter(c => c.type !== b.type));
+                                            }}
                                         >
                                             <X className="w-3.5 h-3.5" />
                                         </button>
@@ -1357,6 +1388,20 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                     return groupDef.nodes.map(innerNode => {
                                         const innerDef = registry.get(innerNode.type);
                                         if (!innerDef) return null;
+                                        // A group inside: one entry, opened to see and edit its own blocks
+                                        if (isCompositeType(innerNode.type)) {
+                                            return (
+                                                <div key={innerNode.id} className="border rounded p-2 flex items-center gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs font-semibold text-gray-700 truncate">{innerNode.label || innerDef.title}</div>
+                                                        <div className="text-[11px] text-gray-500">{innerDef.description}</div>
+                                                    </div>
+                                                    <button type="button" className={button} onClick={() => { setOpenPath([selected.id, innerNode.id]); setInnerSelectedId(null); fitPending.current = true; }}>
+                                                        <LogIn className="w-4 h-4" /> Open
+                                                    </button>
+                                                </div>
+                                            );
+                                        }
                                         // An inner Data block replaced by data connected to the group
                                         const replacedBy = groupDef.inputs.find(i => i.replaces?.node === innerNode.id
                                             && workflow.edges.some(e => e.target === selected.id && e.targetPort === i.id));
@@ -1444,7 +1489,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                 })()}
                             </fieldset>
 
-                            <div className="flex gap-2 pt-2 border-t">
+                            <div className="flex flex-wrap gap-2 pt-2 border-t">
                                 {selectedDef?.role !== 'view' && (
                                     <button className={button} onClick={() => run(selected.id)} disabled={running || errors.length > 0}
                                         title="Run this block and what it needs">

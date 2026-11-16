@@ -130,69 +130,122 @@ export function registryFor(workflow: Workflow, base: BlockRegistry, library: Co
 
 export interface Expansion {
     workflow: Workflow;
-    /** Composite node id → ids of its inner nodes in the expanded workflow */
+    /**
+     * Composite node id → ids of its inner nodes, in expansion order (outer groups first). An inner
+     * id can itself be a composite expanded later (groups inside groups, §13.2).
+     */
     inner: Map<string, string[]>;
+    /** Composite node id (expanded, e.g. `a/b`) → its block type */
+    types: Map<string, string>;
     definitions: Map<string, CompositeDefinition>;
     /** Expanded ids of inner source blocks left out because a connected input replaces them */
     dropped: Set<string>;
 }
 
-/** Replace every active composite node by its inner blocks, rewiring the connections */
+/**
+ * Every group definition a workflow needs: those of its blocks, and of the groups inside them, at
+ * any depth (§13.2). In the order found, outer first.
+ */
+export function usedComposites(workflow: Pick<Workflow, 'nodes' | 'composites'>, pool: CompositeDefinition[] = workflow.composites ?? []): CompositeDefinition[] {
+    const byType = new Map(pool.map(c => [c.type, c]));
+    const used: CompositeDefinition[] = [];
+    const visit = (type: string) => {
+        const def = byType.get(type);
+        if (!def || used.includes(def)) return;
+        used.push(def);
+        def.nodes.forEach(n => visit(n.type));
+    };
+    workflow.nodes.forEach(n => visit(n.type));
+    return used;
+}
+
+/** A group definition and every definition it needs inside, from a pool (e.g. the library) */
+export function compositeWithDependencies(type: string, pool: CompositeDefinition[]): CompositeDefinition[] {
+    return usedComposites({ nodes: [{ type } as WorkflowNode] }, pool);
+}
+
+/**
+ * Replace every active composite node by its inner blocks, rewiring the connections. Groups inside
+ * groups are expanded in turn, level after level, until only ordinary blocks (and loops) are left.
+ */
 export function expandComposites(workflow: Workflow): Expansion {
     const definitions = new Map((workflow.composites ?? []).map(c => [c.type, c]));
     const inner = new Map<string, string[]>();
+    const types = new Map<string, string>();
     const dropped = new Set<string>();
-    const nodes: WorkflowNode[] = [];
+    let nodes: WorkflowNode[] = workflow.nodes;
     let edges: WorkflowEdge[] = [...workflow.edges];
 
-    workflow.nodes.forEach(node => {
-        const def = definitions.get(node.type);
-        // An inactive composite stays a single (inactive) block: it stops its branch. A ForLoop
-        // stays a single block too: the executor runs it iteration after iteration
-        if (!def || !node.active || def.loop) { nodes.push(node); return; }
+    // An inactive composite stays a single (inactive) block: it stops its branch. A ForLoop stays a
+    // single block too: the executor runs it iteration after iteration
+    const expandable = (n: WorkflowNode) => {
+        const def = definitions.get(n.type);
+        return !!def && n.active && !def.loop;
+    };
 
-        const params: InnerParams = node.scientificParams.inner ?? {};
-        const { replacedPorts, droppedNodes } = replacements(def, workflow.edges, node.id);
-        const ids: string[] = [];
-        def.nodes.forEach(n => {
-            const id = innerId(node.id, n.id);
-            if (droppedNodes.has(n.id)) { dropped.add(id); return; }
-            ids.push(id);
-            nodes.push({
-                ...n,
-                id,
-                label: n.label,
-                scientificParams: params[n.id] ?? n.scientificParams,
-                presentationParams: innerPresentation(node, n),
-                position: { x: node.position.x + n.position.x, y: node.position.y + n.position.y },
-            });
-        });
-        inner.set(node.id, ids);
-
-        const rewired: WorkflowEdge[] = [];
-        edges.forEach(e => {
-            if (e.target === node.id) {
-                const input = def.inputs.find(i => i.id === e.targetPort);
-                input?.targets.forEach((t, k) => rewired.push({
-                    ...e, id: `${e.id}${INNER_SEPARATOR}${k}`, target: innerId(node.id, t.node), targetPort: t.port,
-                }));
-            } else if (e.source === node.id) {
-                const output = def.outputs.find(o => o.id === e.sourcePort);
-                if (output) rewired.push({ ...e, source: innerId(node.id, output.source.node), sourcePort: output.source.port });
-            } else {
-                rewired.push(e);
+    while (nodes.some(expandable)) {
+        const next: WorkflowNode[] = [];
+        nodes.forEach(node => {
+            if (!expandable(node)) { next.push(node); return; }
+            const def = definitions.get(node.type)!;
+            // A definition containing itself (only possible in an edited file) would never end
+            const ancestors = node.id.split(INNER_SEPARATOR).slice(0, -1)
+                .map((_, k, parts) => parts.slice(0, k + 1).join(INNER_SEPARATOR));
+            if (ancestors.some(a => types.get(a) === node.type)) {
+                throw new CompositeError(`The group “${def.title}” contains itself`);
             }
+            types.set(node.id, node.type);
+
+            const params: InnerParams = node.scientificParams.inner ?? {};
+            const { replacedPorts, droppedNodes } = replacements(def, edges, node.id);
+            const ids: string[] = [];
+            def.nodes.forEach(n => {
+                const id = innerId(node.id, n.id);
+                if (droppedNodes.has(n.id)) { dropped.add(id); return; }
+                ids.push(id);
+                next.push({
+                    ...n,
+                    id,
+                    label: n.label,
+                    scientificParams: params[n.id] ?? n.scientificParams,
+                    presentationParams: innerPresentation(node, n),
+                    position: { x: node.position.x + n.position.x, y: node.position.y + n.position.y },
+                });
+            });
+            inner.set(node.id, ids);
+
+            const rewired: WorkflowEdge[] = [];
+            edges.forEach(e => {
+                if (e.target === node.id) {
+                    const input = def.inputs.find(i => i.id === e.targetPort);
+                    input?.targets.forEach((t, k) => rewired.push({
+                        ...e, id: `${e.id}${INNER_SEPARATOR}${k}`, target: innerId(node.id, t.node), targetPort: t.port,
+                    }));
+                } else if (e.source === node.id) {
+                    const output = def.outputs.find(o => o.id === e.sourcePort);
+                    if (output) rewired.push({ ...e, source: innerId(node.id, output.source.node), sourcePort: output.source.port });
+                } else {
+                    rewired.push(e);
+                }
+            });
+            def.edges
+                .filter(e => !replacedPorts.has(`${e.source}:${e.sourcePort}`) && !droppedNodes.has(e.source))
+                .forEach(e => rewired.push({
+                    ...e, id: innerId(node.id, e.id), source: innerId(node.id, e.source), target: innerId(node.id, e.target),
+                }));
+            edges = rewired;
         });
-        def.edges
-            .filter(e => !replacedPorts.has(`${e.source}:${e.sourcePort}`) && !droppedNodes.has(e.source))
-            .forEach(e => rewired.push({
-                ...e, id: innerId(node.id, e.id), source: innerId(node.id, e.source), target: innerId(node.id, e.target),
-            }));
-        edges = rewired;
-    });
+        nodes = next;
+    }
 
     const loops = (workflow.composites ?? []).filter(c => c.loop);
-    return { workflow: { ...workflow, nodes, edges, composites: loops.length ? loops : undefined }, inner, definitions, dropped };
+    return { workflow: { ...workflow, nodes, edges, composites: loops.length ? loops : undefined }, inner, types, definitions, dropped };
+}
+
+/** Ids of the ordinary blocks a (possibly nested) composite node was expanded into */
+export function leafIds(expansion: Expansion, id: string): string[] {
+    const ids = expansion.inner.get(id);
+    return ids ? ids.flatMap(i => leafIds(expansion, i)) : [id];
 }
 
 /**
@@ -267,14 +320,33 @@ export function foldComposite(
 }
 
 /** Add the folded result of every composite node to a report of the expanded workflow */
-export function foldReport(report: WorkflowRunReport, expansion: Expansion, workflow: Workflow): WorkflowRunReport {
+export function foldReport(report: WorkflowRunReport, expansion: Expansion, _workflow?: Workflow): WorkflowRunReport {
     const nodes = { ...report.nodes };
-    expansion.inner.forEach((_, compositeId) => {
-        const node = workflow.nodes.find(n => n.id === compositeId)!;
-        const folded = foldComposite(compositeId, expansion.definitions.get(node.type)!, report.nodes, expansion.dropped);
+    // Deepest groups first: a group folds the results of the groups inside it
+    Array.from(expansion.inner.keys()).reverse().forEach(compositeId => {
+        const folded = foldComposite(compositeId, expansion.definitions.get(expansion.types.get(compositeId)!)!, nodes, expansion.dropped);
         if (folded) nodes[compositeId] = folded;
     });
     return { ...report, nodes };
+}
+
+/**
+ * The groups containing a block, deepest first, folded again from the latest results (live
+ * updates while running)
+ */
+export function foldAncestors(id: string, expansion: Expansion, nodes: Record<string, NodeResult>): [string, NodeResult][] {
+    const parts = id.split(INNER_SEPARATOR);
+    const out: [string, NodeResult][] = [];
+    for (let k = parts.length - 1; k >= 1; k--) {
+        const groupId = parts.slice(0, k).join(INNER_SEPARATOR);
+        const type = expansion.types.get(groupId);
+        if (!type) continue;
+        const folded = foldComposite(groupId, expansion.definitions.get(type)!, nodes, expansion.dropped);
+        if (!folded) continue;
+        nodes[groupId] = folded;
+        out.push([groupId, folded]);
+    }
+    return out;
 }
 
 // ============================================================================
@@ -306,7 +378,13 @@ export function groupAsComposite(
     for (const n of selected) {
         const def = registry.get(n.type);
         if (!def) throw new CompositeError(`Unknown block type "${n.type}"`);
-        if (isCompositeType(n.type)) throw new CompositeError('A group cannot contain another group (not supported yet)');
+        // Groups may contain groups, at any depth (§13.2); loops may not go inside a group yet
+        if (isCompositeType(n.type) && workflow.composites?.find(c => c.type === n.type)?.loop) {
+            throw new CompositeError('A loop cannot go inside a group (not supported yet)');
+        }
+        if (isCompositeType(n.type) && !workflow.composites?.some(c => c.type === n.type)) {
+            throw new CompositeError(`The definition of the group “${def.title}” is missing from this workflow`);
+        }
         // Views are fine (the group shows them); a report gathers the tags of the whole run
         if (def.role === 'report') {
             throw new CompositeError(`${def.title} blocks cannot go into a group: a report covers the whole workflow`);
@@ -458,6 +536,9 @@ export function groupAsComposite(
 
 /** What "Make a loop" would produce for a selection: the carried input and the possible choices */
 export function loopOptions(workflow: Workflow, registry: BlockRegistry, selectedIds: string[]) {
+    if (workflow.nodes.some(n => selectedIds.includes(n.id) && isCompositeType(n.type))) {
+        throw new CompositeError('A group cannot go inside a loop (not supported yet): ungroup it first');
+    }
     const { definition } = groupAsComposite(workflow, registry, selectedIds, 'loop', () => 'preview');
     const carried = definition.inputs.find(i => !i.optional) ?? definition.inputs[0];
     if (!carried) {
@@ -547,11 +628,9 @@ export function ungroupComposite(workflow: Workflow, compositeNodeId: string, ma
         .forEach(e => edges.push({ ...e, id: newId(e.id), source: newId(e.source), target: newId(e.target) }));
 
     const others = workflow.nodes.filter(n => n.id !== node.id);
-    const stillUsed = others.some(n => n.type === def.type);
-    return {
-        ...workflow,
-        nodes: [...others, ...nodes],
-        edges,
-        composites: stillUsed ? workflow.composites : workflow.composites!.filter(c => c.type !== def.type),
-    };
+    const result = { ...workflow, nodes: [...others, ...nodes], edges };
+    // Groups inside come back as groups (one level only); a definition is dropped only when no
+    // block uses it any more, at any depth
+    const stillUsed = usedComposites(result).some(c => c.type === def.type);
+    return { ...result, composites: stillUsed ? workflow.composites : workflow.composites!.filter(c => c.type !== def.type) };
 }

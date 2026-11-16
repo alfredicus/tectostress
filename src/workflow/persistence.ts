@@ -4,7 +4,7 @@
 
 import { BlockRegistry } from './registry';
 import { validateWorkflow, ValidationIssue } from './validate';
-import { isCompositeType, registryFor } from './composite';
+import { isCompositeType, registryFor, usedComposites } from './composite';
 import { CompositeDefinition, Workflow, WorkflowEdge, WorkflowNode } from './types';
 
 export const WORKFLOW_SCHEMA_VERSION = 1;
@@ -20,8 +20,8 @@ export class WorkflowFormatError extends Error {
 }
 
 export function serializeWorkflow(workflow: Workflow): string {
-    // Only the composite definitions actually used
-    const used = (workflow.composites ?? []).filter(c => workflow.nodes.some(n => n.type === c.type));
+    // Only the composite definitions actually used, at any depth (groups inside groups)
+    const used = usedComposites(workflow);
     const clean: Workflow = {
         schemaVersion: WORKFLOW_SCHEMA_VERSION,
         name: workflow.name,

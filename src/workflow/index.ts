@@ -13,6 +13,7 @@ export type { WorkflowTemplate } from './templates';
 export { createDefaultRegistry } from './blocks';
 export {
     registryFor, groupAsComposite, ungroupComposite, expandComposites, isCompositeType, outerId, innerPresentation,
+    usedComposites, compositeWithDependencies, leafIds,
     CompositeError, COMPOSITE_PREFIX, makeLoop, loopOptions, LOOP_COLLECTED,
 } from './composite';
 export { METRICS, OPERATORS, describeCondition } from './conditions';

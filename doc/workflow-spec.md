@@ -1,6 +1,6 @@
 # Workflows: specification (draft v0.1)
 
-Status: **v0.4**. Recommendations of v0.1, engine decisions (§10) and §13 approved. Implemented: phase 1, phase 2 except Google Drive (§11), control blocks (§12). Proposals in §11–§12 await review.
+Status: **v0.4**. Recommendations of v0.1, engine decisions (§10) and §13 approved. Implemented: phase 1, phase 2 except Google Drive (§11), control blocks (§12), looking inside groups and groups inside groups (§13 steps 1–2). Proposals in §11–§12 await review.
 
 Every statement carries one of three tags:
 
@@ -504,7 +504,18 @@ a result was obtained matters as much as the result. No limit on the nesting dep
   **[PROPOSAL]**
 - Still not supported in this step: loops inside loops or groups, groups inside loops. **[DECIDED]**
 
-### 13.4 Order
+### 13.4 Future requirement: loops inside groups
+- Requested by the user on 2026-11-16: a group should eventually be able to encapsulate a complete
+  scientific procedure, **including an iterative loop**. Principle: *groups organize and
+  encapsulate procedures; loops control their execution*, so both must be able to coexist.
+  **[DECIDED]** (as a requirement)
+- A separate development step, after nested groups are stable. Today a loop cannot go inside a
+  group, nor a group inside a loop: both are refused with an explicit message. **[DECIDED]**
+- Likely work: the executor runs a loop wherever it sits in the expanded graph (today only where
+  groups have been flattened around it), and the loop body itself may contain groups, expanded
+  inside each iteration. **[PROPOSAL]**
+
+### 13.5 Order
 1. Open and inspect groups and loops (§13.1, §13.3). Editor only: the engine already keeps the
    inner results (`group/inner`).
 2. Groups inside groups (§13.2): recursive expansion and folding with tests (results, provenance,
@@ -513,3 +524,10 @@ a result was obtained matters as much as the result. No limit on the nesting dep
 
 Before each step, the existing workflows (predefined templates, the user's saved workflow, the 59
 engine tests) serve as the regression reference.
+
+Status (2026-11-16): steps 1 and 2 implemented. Step 2 is covered by `src/workflow/__tests__/nested.test.ts`
+(three levels): same results, provenance ids and cache entries as the blocks ungrouped; a parameter
+edited three levels down makes every level stale; save → load → save gives the same file and the
+same results; ungroup removes one level and keeps edited parameters; a group from the library brings
+the groups it contains; a group containing itself (edited file) is reported. A group used inside a
+"My blocks" group cannot be removed from the library before it.
