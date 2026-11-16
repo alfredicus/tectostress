@@ -95,7 +95,8 @@ export const MisfitFilterBlock: BlockDefinition = {
     params: [
         {
             key: 'threshold', label: 'Maximum misfit', kind: 'number', scope: 'scientific', default: 30,
-            min: 0, max: 180, step: 1, unit: '°', help: 'Data with a larger misfit are rejected'
+            min: 0, max: 180, step: 1, unit: '°', help: 'Data with a larger misfit are rejected',
+            perIteration: true,
         },
         {
             key: 'unpredicted', label: 'Data without prediction', kind: 'select', scope: 'scientific', default: 'kept',

@@ -37,7 +37,7 @@ export function conditionParams(defaults: { metric: string; operator: Operator; 
             key: 'operator', label: 'Comparison', kind: 'select', scope: 'scientific', default: defaults.operator,
             options: OPERATORS.map(o => ({ value: o, label: o })),
         },
-        { key: 'value', label: 'Value', kind: 'number', scope: 'scientific', default: defaults.value },
+        { key: 'value', label: 'Value', kind: 'number', scope: 'scientific', default: defaults.value, perIteration: true },
     ];
 }
 

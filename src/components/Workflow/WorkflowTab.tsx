@@ -17,7 +17,7 @@ import {
     validateWorkflow, Workflow, WorkflowCache, WorkflowEnvironment, WorkflowNode, WorkflowRunReport,
     WORKFLOW_SCHEMA_VERSION, BlockDefinition, NodeResult, paramsWithDefaults, ReportPayload,
     registryFor, groupAsComposite, ungroupComposite, isCompositeType, outerId, CompositeDefinition, InnerParams,
-    innerPresentation, BlockRegistry, makeLoop, loopOptions, LOOP_COLLECTED, compositeWithDependencies,
+    innerPresentation, BlockRegistry, makeLoop, loopOptions, LOOP_COLLECTED, compositeWithDependencies, PerIteration,
 } from '../../workflow';
 import { hashValue } from '../../workflow/hash';
 import BlockNode, { BlockFlowNode, PortFlowNode, PortNode, STATUS_STYLE } from './BlockNode';
@@ -145,10 +145,61 @@ function withInnerParams(
     return set(node, rest[0], child[key]);
 }
 
+/** Parse "20, 15 12;10" into numbers; null if anything is not a number */
+function parseValues(text: string): number[] | null {
+    const parts = text.split(/[\s,;]+/).filter(Boolean);
+    const values = parts.map(Number);
+    return parts.length && values.every(Number.isFinite) ? values : null;
+}
+
+/**
+ * Values of a parameter varying with the iteration (§12.5): a list, one value per iteration,
+ * with the value each iteration will use
+ */
+function IterationValues({ values, unit, min, max, maxIterations, onChange }: {
+    values: number[]; unit?: string; min?: number; max?: number; maxIterations: number;
+    onChange: (values: number[]) => void;
+}) {
+    const [text, setText] = useState(values.join(', '));
+    // Follow outside changes (another panel, undo of a load…) unless the text already says the same
+    useEffect(() => {
+        if (JSON.stringify(parseValues(text)) !== JSON.stringify(values)) setText(values.join(', '));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [values.join(',')]);
+    const parsed = parseValues(text);
+    const outOfRange = parsed?.some(v => (min !== undefined && v < min) || (max !== undefined && v > max));
+    const shown = Math.min(Math.max(values.length, 1), maxIterations);
+    const u = unit ?? '';
+    return (
+        <div className="space-y-1">
+            <input className={`w-full border rounded px-2 py-1 text-sm ${parsed && !outOfRange ? '' : 'border-red-400'}`}
+                value={text} placeholder="e.g. 20, 15, 12, 10"
+                onChange={e => {
+                    setText(e.target.value);
+                    const v = parseValues(e.target.value);
+                    if (v && !v.some(x => (min !== undefined && x < min) || (max !== undefined && x > max))) onChange(v);
+                }} />
+            {!parsed && <div className="text-[11px] text-red-700">Enter at least one number, separated by commas.</div>}
+            {parsed && outOfRange && <div className="text-[11px] text-red-700">Values must be between {min ?? '−∞'} and {max ?? '∞'}.</div>}
+            <div className="text-[11px] text-gray-500">
+                {values.slice(0, shown).map((v, i) => `iteration ${i + 1}: ${v}${u}`).join(' · ')}
+                {values.length < maxIterations && ` · from iteration ${values.length + 1} on: ${values[values.length - 1]}${u} (last value)`}
+                {values.length > maxIterations && ` · ${values.length - maxIterations} value(s) never used (maximum ${maxIterations} iterations)`}
+            </div>
+        </div>
+    );
+}
+
 /** Scientific then display parameters of a block, each edited in place */
-function BlockParams({ def, node, files, onChange }: {
+function BlockParams({ def, node, files, onChange, varying }: {
     def: BlockDefinition; node: WorkflowNode; files: DataFile[];
     onChange: (scope: 'scientific' | 'presentation', key: string, value: any, current: Record<string, any>) => void;
+    /** Inside a ForLoop: parameters that may vary with the iteration (§12.5) */
+    varying?: {
+        lists: Record<string, number[]>;
+        maxIterations: number;
+        onChange: (key: string, values: number[] | undefined) => void;
+    };
 }) {
     const scientific = paramsWithDefaults(def, node, 'scientific');
     const presentation = paramsWithDefaults(def, node, 'presentation');
@@ -157,14 +208,34 @@ function BlockParams({ def, node, files, onChange }: {
     return (
         <>
             {sciParams.length === 0 && presParams.length === 0 && <div className="text-xs text-gray-400">No parameter</div>}
-            {sciParams.map(p => (
-                <div key={p.key}>
-                    <div className="text-xs text-gray-600 mb-0.5" title={p.help}>{p.label}</div>
-                    <ParamEditor param={p} value={scientific[p.key]} siblings={scientific} files={files}
-                        onChange={v => onChange('scientific', p.key, v, scientific)} />
-                    {p.help && <div className="text-[11px] text-gray-400 mt-0.5">{p.help}</div>}
-                </div>
-            ))}
+            {sciParams.map(p => {
+                const canVary = !!varying && !!p.perIteration;
+                const list = varying?.lists[p.key];
+                return (
+                    <div key={p.key}>
+                        <div className="text-xs text-gray-600 mb-0.5" title={p.help}>{p.label}{p.unit ? ` (${p.unit})` : ''}</div>
+                        {canVary && (
+                            <div className="flex gap-3 text-[11px] text-gray-700 mb-1">
+                                <label className="flex items-center gap-1">
+                                    <input type="radio" checked={!list} onChange={() => varying!.onChange(p.key, undefined)} />
+                                    Same at every iteration
+                                </label>
+                                <label className="flex items-center gap-1">
+                                    <input type="radio" checked={!!list}
+                                        onChange={() => varying!.onChange(p.key, [Number(scientific[p.key])])} />
+                                    Varies by iteration
+                                </label>
+                            </div>
+                        )}
+                        {list
+                            ? <IterationValues values={list} unit={p.unit} min={p.min} max={p.max} maxIterations={varying!.maxIterations}
+                                onChange={v => varying!.onChange(p.key, v)} />
+                            : <ParamEditor param={p} value={scientific[p.key]} siblings={scientific} files={files}
+                                onChange={v => onChange('scientific', p.key, v, scientific)} />}
+                        {p.help && <div className="text-[11px] text-gray-400 mt-0.5">{p.help}</div>}
+                    </div>
+                );
+            })}
             {presParams.length > 0 && <div className="text-xs font-medium text-gray-700 pt-1 border-t">Display</div>}
             {presParams.map(p => (
                 <div key={p.key}>
@@ -584,7 +655,11 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                 result: results[`${runId}/${n.id}`],
                 note: replaced.has(n.id)
                     ? `Not used: replaced by “${replaced.get(n.id)!.label}”`
-                    : isCompositeType(n.type) ? 'Double-click to open' : undefined,
+                    : isCompositeType(n.type) ? 'Double-click to open'
+                    : def.loop && group.scientificParams.perIteration?.[n.id]
+                        ? `↕ Varies by iteration: ${Object.keys(group.scientificParams.perIteration[n.id])
+                            .map(k => registry.get(n.type)?.params.find(p => p.key === k)?.label ?? k).join(', ')}`
+                    : undefined,
             },
         }));
         const edges: Edge[] = [];
@@ -827,6 +902,26 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     const innerRunId = opened && innerNode ? `${opened.runId}/${innerNode.id}` : '';
     const innerResult = innerNode ? results[innerRunId] : undefined;
 
+    /**
+     * Lists of values varying with the iteration (§12.5) for one inner block of a ForLoop node, and
+     * how to change them. Stored on the loop node: `scientificParams.perIteration[inner][param]`.
+     */
+    const varyingFor = (loopNode: WorkflowNode, innerLocalId: string) => {
+        const loopDef = registry.get(loopNode.type);
+        const maxIterations = loopDef ? Number(paramsWithDefaults(loopDef, loopNode, 'scientific').maxIterations) : 10;
+        return {
+            lists: ((loopNode.scientificParams.perIteration ?? {}) as PerIteration)[innerLocalId] ?? {},
+            maxIterations,
+            onChange: (key: string, values: number[] | undefined) => updateNode(loopNode.id, n => {
+                const per: PerIteration = { ...(n.scientificParams.perIteration ?? {}) };
+                const lists = { ...(per[innerLocalId] ?? {}) };
+                if (values) lists[key] = values; else delete lists[key];
+                if (Object.keys(lists).length) per[innerLocalId] = lists; else delete per[innerLocalId];
+                return { ...n, scientificParams: { ...n.scientificParams, perIteration: per } };
+            }),
+        };
+    };
+
     /** Store a parameter of the selected inner block on the top-level group node */
     const setInnerParam = (scope: 'scientific' | 'presentation', key: string, value: any, current: Record<string, any>) => {
         if (!innerNode || !openPath.length) return;
@@ -847,6 +942,12 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         if (!groupDef || !result) return null;
         const innerViews = groupDef.nodes.filter(n => registry.get(n.type)?.role === 'view');
         const loop = result.loop;
+        // One column per parameter varying with the iteration (§12.5)
+        const varyingColumns: { id: string; label: string; blockName: string }[] = [];
+        loop?.iterations.forEach(it => it.params?.forEach(v => {
+            const id = `${v.node}:${v.key}`;
+            if (!varyingColumns.some(c => c.id === id)) varyingColumns.push({ id, label: v.label ?? v.key, blockName: v.blockName ?? v.node });
+        }));
         const stopped = loop && ({
             exit: 'stopped by its ExitLoop', max: 'stopped at the maximum number of iterations',
             empty: 'stopped: no data left', 'no-value': 'stopped: nothing produced to carry on', cancelled: 'cancelled',
@@ -862,6 +963,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                 <thead><tr className="text-left text-gray-600">
                                     <th className="pr-4 py-1">Iteration</th><th className="pr-4">Data in</th><th className="pr-4">Carried on</th>
                                     <th className="pr-4">Misfit</th><th className="pr-4">Stress ratio</th>
+                                    {varyingColumns.map(c => <th key={c.id} className="pr-4" title={`Varies by iteration: ${c.label} of ${c.blockName}`}>{c.label} <span className="font-normal text-gray-400">({c.blockName})</span></th>)}
                                 </tr></thead>
                                 <tbody>
                                     {loop.iterations.map(it => (
@@ -871,6 +973,10 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                             <td className="pr-4">{it.rowsOut ?? '—'}</td>
                                             <td className="pr-4">{it.misfit === undefined ? '—' : it.misfitCriterion === 'DOT' ? it.misfit.toFixed(4) : `${it.misfit.toFixed(1)}°`}</td>
                                             <td className="pr-4">{it.stressRatio === undefined ? '—' : it.stressRatio.toFixed(2)}</td>
+                                            {varyingColumns.map(c => {
+                                                const v = it.params?.find(x => `${x.node}:${x.key}` === c.id);
+                                                return <td key={c.id} className="pr-4">{v ? `${v.value}${v.unit ?? ''}` : '—'}</td>;
+                                            })}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1040,7 +1146,8 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                 )}
                 {innerDef && (
                     <fieldset disabled={running} className="space-y-3">
-                        <BlockParams def={innerDef} node={innerNode} files={files} onChange={setInnerParam} />
+                        <BlockParams def={innerDef} node={innerNode} files={files} onChange={setInnerParam}
+                            varying={opened.def.loop && openPath.length === 1 ? varyingFor(opened.node, innerNode.id) : undefined} />
                     </fieldset>
                 )}
                 <p className="text-[11px] text-gray-500">
@@ -1414,44 +1521,14 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                             );
                                         }
                                         const current = { ...innerNode, scientificParams: inner[innerNode.id] ?? innerNode.scientificParams };
-                                        const values = paramsWithDefaults(innerDef, current, 'scientific');
-                                        const params = innerDef.params.filter(p => p.scope === 'scientific');
-                                        const displayParams = innerDef.params.filter(p => p.scope === 'presentation' && p.kind !== 'object');
-                                        const display = paramsWithDefaults(innerDef, { ...innerNode, presentationParams: innerPresentation(selected, innerNode) }, 'presentation');
+                                        const shown = { ...current, presentationParams: innerPresentation(selected, innerNode) };
                                         return (
                                             <div key={innerNode.id} className="border rounded p-2 space-y-2">
                                                 <div className="text-xs font-semibold text-gray-700">{innerNode.label || innerDef.title}</div>
-                                                {params.length === 0 && displayParams.length === 0 && <div className="text-xs text-gray-400">No parameter</div>}
-                                                {displayParams.map(p => (
-                                                    <div key={p.key}>
-                                                        <div className="text-xs text-gray-600 mb-0.5">{p.label}</div>
-                                                        <ParamEditor
-                                                            param={p} value={display[p.key]} siblings={display} files={files}
-                                                            onChange={v => updateNode(selected.id, n => ({
-                                                                ...n,
-                                                                presentationParams: {
-                                                                    ...n.presentationParams,
-                                                                    inner: { ...(n.presentationParams.inner ?? {}), [innerNode.id]: { ...display, [p.key]: v } },
-                                                                },
-                                                            }))}
-                                                        />
-                                                    </div>
-                                                ))}
-                                                {params.map(p => (
-                                                    <div key={p.key}>
-                                                        <div className="text-xs text-gray-600 mb-0.5" title={p.help}>{p.label}</div>
-                                                        <ParamEditor
-                                                            param={p} value={values[p.key]} siblings={values} files={files}
-                                                            onChange={v => updateNode(selected.id, n => ({
-                                                                ...n,
-                                                                scientificParams: {
-                                                                    ...n.scientificParams,
-                                                                    inner: { ...(n.scientificParams.inner ?? {}), [innerNode.id]: { ...values, [p.key]: v } },
-                                                                },
-                                                            }))}
-                                                        />
-                                                    </div>
-                                                ))}
+                                                <BlockParams def={innerDef} node={shown} files={files}
+                                                    onChange={(scope, key, v, values) => updateNode(selected.id, n =>
+                                                        withInnerParams(n, [], innerNode.id, scope, { ...values, [key]: v }, workflow.composites ?? []))}
+                                                    varying={groupDef.loop ? varyingFor(selected, innerNode.id) : undefined} />
                                             </div>
                                         );
                                     });

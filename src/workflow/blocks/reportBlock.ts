@@ -54,6 +54,7 @@ export const ReportBlock: BlockDefinition = {
             nodeId: t.nodeId,
             nodeLabel: labelOf(t.nodeId),
             iteration: t.iteration,
+            ...(t.iterationParams ? { iterationParams: t.iterationParams } : {}),
             outdated: t.outdated,
             payload: t.payload,
             lineage: lineageOf(t.payload.provenance, ctx.provenance),

@@ -14,8 +14,9 @@ export { createDefaultRegistry } from './blocks';
 export {
     registryFor, groupAsComposite, ungroupComposite, expandComposites, isCompositeType, outerId, innerPresentation,
     usedComposites, compositeWithDependencies, leafIds,
+    valueAtIteration, bodyForIteration,
     CompositeError, COMPOSITE_PREFIX, makeLoop, loopOptions, LOOP_COLLECTED,
 } from './composite';
 export { METRICS, OPERATORS, describeCondition } from './conditions';
-export type { InnerParams } from './composite';
+export type { InnerParams, PerIteration } from './composite';
 export { fileRef } from './blocks/datasetUtils';

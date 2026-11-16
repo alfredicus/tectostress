@@ -107,6 +107,10 @@ async function itemHtml(item: ReportItem, doc: ReportDocument, labelOf: (id: str
     const p = item.payload;
     const parts: string[] = [];
     parts.push(`<h3>${esc(labelOf(item.nodeId))}${item.iteration !== undefined ? ` — iteration ${item.iteration}` : ''} <span class="muted">— ${p.type === 'InversionResult' ? 'inversion result' : 'dataset'}, ${countRows(p.files)} rows</span></h3>`);
+    if (item.iterationParams?.length) {
+        parts.push(`<p>Parameters of this iteration: ${item.iterationParams.map(v =>
+            `<b>${esc(v.label ?? v.key)}</b> (${esc(v.blockName ?? v.node)}) = ${esc(v.value)}${esc(v.unit ?? '')}`).join(', ')}.</p>`);
+    }
     if (item.outdated) parts.push('<p class="warning">From an earlier run: may not match the current workflow.</p>');
     if (item.note) parts.push(`<p>${esc(item.note)}</p>`);
 

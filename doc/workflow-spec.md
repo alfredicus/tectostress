@@ -453,6 +453,77 @@ The "since the previous iteration" quantities are false on the first iteration.
 - Like Add Tags, ExitLoop and Conditional hand values over unchanged: never cached, and they are
   evaluated even when only checking what is out of date. **[PROPOSAL]**
 
+### 12.5 Parameters that vary with the iteration
+Requested by the user on 2026-11-16. Today every block inside a loop uses the **same** parameter
+values at every iteration (the loop's blocks are prepared once, before the first iteration). But
+successive tectonic phases may have different internal dispersion, so e.g. the Misfit filter's
+maximum misfit may need to differ per phase.
+
+**Principle.** Each scientific parameter of a block inside a loop is either **constant** (the
+default, today's behaviour) or **varies by iteration**. Varying is never automatic: the user
+switches it on for one parameter, deliberately, as a modelling decision. **[DECIDED]**
+
+Approved by the user on 2026-11-16, with the clarifications below.
+
+**Values.** A varying parameter holds a list of values, one per iteration: e.g. maximum misfit
+`20, 15, 12, 10`. **[DECIDED]**
+- Iterations are numbered **from 1**. Iterations beyond the end of the list **reuse its last value**
+  (10° from iteration 4 on), and the panel says so. **[DECIDED]**
+- An **empty list is invalid** (error before running); so are non-numbers and values outside the
+  parameter's range. **[DECIDED]**
+- Values beyond *Maximum iterations* are simply unused, with a warning. **[DECIDED]**
+- **Eligible parameters are declared explicitly** by each block (`perIteration: true`), not every
+  numeric field: computational or methodological settings stay constant. First set: the Misfit
+  filter's *Maximum misfit*, and the *Value* of ExitLoop and Conditional conditions. The inversion's
+  method parameters (e.g. number of simulations) and every choice (method, criterion…) stay
+  constant. **[DECIDED]**
+- **The list is indexed by iteration number, not by tectonic phase.** In the phase-separation
+  workflow iteration *k* is meant to find phase *k*, but if an iteration does not isolate a new phase
+  its value is still consumed. The panel and this spec say "iteration", never "phase". **[DECIDED]**
+
+**Where it is stored.** On the loop block, next to the inner parameters it already holds:
+`scientificParams.perIteration = { <inner block>: { <parameter>: [20, 15, 12, 10] } }`. A workflow
+without it behaves exactly as today, so older files need no migration. Saved, loaded and copied to
+"My blocks" with the loop. **[DECIDED]**
+
+**How it runs.** At each iteration the loop resolves the actual value of every varying parameter
+and gives the blocks of that iteration plain, fixed values. Nothing else in the engine changes:
+**[DECIDED]**
+- **Cache:** a block's cache key already contains its parameter values, so each iteration's value is
+  its own cache entry. Changing only the 3rd value recomputes from iteration 3; iterations 1–2 come
+  from the cache.
+- **Provenance:** every value produced already records the parameters of the block that made it,
+  so the threshold actually used by each iteration is in its provenance and in the report's
+  lineage.
+- **Staleness:** the lists are scientific parameters of the loop block, so editing one makes the
+  loop out of date, like any other parameter.
+
+**What is shown.** **[DECIDED]**
+- The loop's iteration table gains one column per varying parameter, with the value used, next to
+  data in, data carried on, misfit and stress ratio, and the reason the loop stopped.
+- The report states, for each item tagged inside the loop, the parameter values its iteration used
+  (also visible in its provenance table).
+- On the canvas, a block with a varying parameter shows a small "varies" mark; in the panel, the
+  parameter shows the switch *Same at every iteration / Varies by iteration* and, when varying, the
+  list of values with the iteration each applies to.
+
+**Later, not in this step.** **[PROPOSAL]**
+- **Formulas of the iteration number**, e.g. `max(20 − 5·(i−1), 8)`: the same mechanism, resolved
+  per iteration.
+- **Rules based on the previous iteration's results**, e.g. a threshold proportional to the previous
+  misfit. Scientific caution: the threshold then depends on the data it filters, which makes the
+  separation harder to justify and to reproduce by hand. If added, the value used must be shown and
+  recorded the same way.
+- **Loops inside groups** (§13.4) do not change this design: the per-iteration lists belong to the
+  loop, wherever it sits.
+
+**Status (2026-11-16): implemented.** Engine: `bodyForIteration` / `valueAtIteration` in
+`composite.ts`, used by the executor's loop; checks in `validate.ts`; values carried in the iteration
+summary and in tagged items. Tests: `src/workflow/__tests__/periteration.test.ts` (numbering and last
+value; checks; constant = same results as before; values in summary, provenance and tags; changing
+only iteration 3's value recomputes one inversion, iterations 1–2 from the cache; save → load →
+save identical, same results; older files unchanged).
+
 ---
 
 ## 13. Looking inside groups, and groups inside groups

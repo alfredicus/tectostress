@@ -5,7 +5,7 @@
 import { hashValue } from './hash';
 import { BlockRegistry, paramsWithDefaults } from './registry';
 import {
-    buildLoopBody, expandComposites, foldAncestors, foldReport, isCompositeType, leafIds, LOOP_COLLECTED, LoopInputBlock,
+    bodyForIteration, buildLoopBody, expandComposites, foldAncestors, foldReport, isCompositeType, leafIds, LOOP_COLLECTED, LoopInputBlock,
     LOOP_INPUT_TYPE, outerId, registryFor,
 } from './composite';
 import { countRows } from './blocks/datasetUtils';
@@ -268,7 +268,14 @@ async function runFlat(
                 const value = inputId === cfg.carriedInput ? carried : result.inputs[inputId]?.[0];
                 if (value) injected[nodeId] = { out: value };
             });
-            const report = await runWorkflow(body, bodyRegistry, env, {
+            // Parameters varying with the iteration take this iteration's value (§12.5)
+            const { workflow: iterationBody, used: usedValues } = bodyForIteration(body, params.perIteration, it);
+            const used = usedValues.map(u => {
+                const inner = loopDef.nodes.find(n => n.id === u.node);
+                const p = inner && registry.get(inner.type)?.params.find(x => x.key === u.key);
+                return { ...u, label: p?.label ?? u.key, unit: p?.unit, blockName: nameIn(u.node) };
+            });
+            const report = await runWorkflow(iterationBody, bodyRegistry, env, {
                 cache, dryRun, signal, injected,
                 loop: { iteration: it, previous: last },
                 onNodeUpdate: (inner, r) => {
@@ -294,7 +301,7 @@ async function runFlat(
             // Tags of every iteration are kept, marked with their iteration
             report.tagged.filter(t => !t.outdated).forEach(t => {
                 const inner = `${id}/${t.nodeId}`;
-                tagged.push({ ...t, nodeId: inner, iteration: it });
+                tagged.push({ ...t, nodeId: inner, iteration: it, ...(used.length ? { iterationParams: used } : {}) });
                 taggedBy.add(inner);
                 taggedBy.add(id);
             });
@@ -312,6 +319,7 @@ async function runFlat(
                 misfit: inversion ? (inversion.solution.misfitCriterion === 'DOT' ? inversion.solution.misfit : inversion.solution.misfit * 180) : undefined,
                 misfitCriterion: inversion?.solution.misfitCriterion,
                 stressRatio: inversion?.solution.stressRatio,
+                ...(used.length ? { params: used } : {}),
             });
             if (collectOut) {
                 const c = report.nodes[collectOut.source.node]?.outputs[collectOut.source.port];

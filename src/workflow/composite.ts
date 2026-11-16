@@ -6,8 +6,8 @@ import { hashValue } from './hash';
 import { BlockRegistry, findPort } from './registry';
 import { resolveOutputType, topologicalOrder } from './validate';
 import {
-    BlockDefinition, CompositeDefinition, NodeResult, NodeStatus, PayloadType, Workflow, WorkflowEdge, WorkflowNode,
-    WorkflowRunReport, isSubtypeOf,
+    BlockDefinition, CompositeDefinition, IterationParamValue, NodeResult, NodeStatus, PayloadType, Workflow, WorkflowEdge,
+    WorkflowNode, WorkflowRunReport, isSubtypeOf,
 } from './types';
 
 export const COMPOSITE_PREFIX = 'composite:';
@@ -63,6 +63,10 @@ export function compositeBlockDefinition(def: CompositeDefinition): BlockDefinit
                 options: [{ value: 'none', label: 'Nothing' }, ...collectable.map(o => ({ value: o.id, label: o.label }))],
                 help: 'Gathered into the “All iterations” output, each row with its iteration number',
             },
+            {
+                // Inner parameters whose value changes with the iteration (§12.5): edited per inner block
+                key: 'perIteration', label: 'Varying with the iteration', kind: 'object', scope: 'scientific', default: {},
+            },
         ],
     };
 }
@@ -112,6 +116,43 @@ export function buildLoopBody(def: CompositeDefinition, node: WorkflowNode, conn
         input.targets.forEach((t, k) => edges.push({ id: `${id}-${k}`, source: id, sourcePort: 'out', target: t.node, targetPort: t.port }));
     });
     return { workflow: { schemaVersion: 1, name: def.title, nodes, edges }, inputNodes };
+}
+
+// ============================================================================
+// PARAMETERS VARYING WITH THE ITERATION (§12.5)
+// ============================================================================
+
+/**
+ * Stored on a ForLoop node as `scientificParams.perIteration`: for an inner block, the list of
+ * values of a parameter, one per iteration (iteration 1 first)
+ */
+export type PerIteration = Record<string, Record<string, number[]>>;
+
+/** Value of a varying parameter at iteration `it` (from 1): past the end, the list's last value */
+export const valueAtIteration = (values: number[], it: number): number => values[Math.min(Math.max(it, 1), values.length) - 1];
+
+/**
+ * A loop body whose varying parameters hold the value of iteration `it`, and the values used. Each
+ * iteration then runs ordinary blocks with fixed parameters, so cache keys and provenance record the
+ * actual values.
+ */
+export function bodyForIteration(body: Workflow, perIteration: PerIteration | undefined, it: number): {
+    workflow: Workflow; used: IterationParamValue[];
+} {
+    if (!perIteration || Object.keys(perIteration).length === 0) return { workflow: body, used: [] };
+    const used: IterationParamValue[] = [];
+    const nodes = body.nodes.map(n => {
+        const lists = perIteration[n.id];
+        if (!lists) return n;
+        const values: Record<string, number> = {};
+        Object.entries(lists).forEach(([key, list]) => {
+            if (!Array.isArray(list) || list.length === 0) return;
+            values[key] = valueAtIteration(list, it);
+            used.push({ node: n.id, key, value: values[key] });
+        });
+        return { ...n, scientificParams: { ...n.scientificParams, ...values } };
+    });
+    return { workflow: { ...body, nodes }, used };
 }
 
 /** The registry extended with the composite blocks a workflow (and a library) defines */

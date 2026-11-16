@@ -158,6 +158,48 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): V
         issues.push({ severity: 'error', message: 'The workflow contains a cycle' });
     }
 
+    workflow.nodes.forEach(node => issues.push(...checkPerIteration(workflow, registry, node)));
+
+    return issues;
+}
+
+/**
+ * Parameters varying with the iteration (§12.5): only on a ForLoop, only for parameters declared
+ * eligible, as non-empty lists of numbers within the parameter's range
+ */
+function checkPerIteration(workflow: Workflow, registry: BlockRegistry, node: WorkflowNode): ValidationIssue[] {
+    const per = node.scientificParams?.perIteration;
+    if (per === undefined || per === null) return [];
+    const issues: ValidationIssue[] = [];
+    const error = (message: string) => issues.push({ severity: 'error', nodeId: node.id, message });
+    const loop = workflow.composites?.find(c => c.type === node.type);
+    if (!loop?.loop) { error(`${nodeName(node)}: only blocks inside a ForLoop can have parameters varying with the iteration`); return issues; }
+    if (typeof per !== 'object' || Array.isArray(per)) { error(`${nodeName(node)}: unreadable parameters varying with the iteration`); return issues; }
+    const maxIterations = Number(node.scientificParams.maxIterations ?? 10);
+
+    Object.entries<any>(per).forEach(([innerId, lists]) => {
+        const inner = loop.nodes.find(n => n.id === innerId);
+        const def = inner && registry.get(inner.type);
+        if (!inner || !def) { error(`${nodeName(node)}: no block “${innerId}” in this loop`); return; }
+        const name = `${inner.label || def.title} (in ${nodeName(node)})`;
+        Object.entries<any>(lists ?? {}).forEach(([key, values]) => {
+            const param = def.params.find(p => p.key === key);
+            if (!param || !param.perIteration) {
+                error(`“${param?.label ?? key}” of ${name} cannot vary with the iteration`);
+            } else if (!Array.isArray(values) || values.length === 0) {
+                error(`“${param.label}” of ${name} varies with the iteration but has no value`);
+            } else if (values.some(v => typeof v !== 'number' || !Number.isFinite(v))) {
+                error(`“${param.label}” of ${name}: every value must be a number`);
+            } else if (values.some(v => (param.min !== undefined && v < param.min) || (param.max !== undefined && v > param.max))) {
+                error(`“${param.label}” of ${name}: values must be between ${param.min ?? '−∞'} and ${param.max ?? '∞'}`);
+            } else if (values.length > maxIterations) {
+                issues.push({
+                    severity: 'warning', nodeId: node.id,
+                    message: `“${param.label}” of ${name}: ${values.length} values for at most ${maxIterations} iterations; the last ${values.length - maxIterations} are never used`,
+                });
+            }
+        });
+    });
     return issues;
 }
 

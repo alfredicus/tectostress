@@ -91,6 +91,8 @@ export interface ReportItem {
     nodeLabel: string;
     /** Tagged inside a ForLoop: the iteration that produced it */
     iteration?: number;
+    /** …and the values its parameters varying with the iteration took (§12.5) */
+    iterationParams?: IterationParamValue[];
     outdated: boolean;
     payload: DataPayload;
     /** Every step from the source files to this value, sources first */
@@ -176,6 +178,11 @@ export interface ParamDefinition {
     options?: { value: string; label: string }[];
     dependsOn?: string;
     help?: string;
+    /**
+     * Number parameter that may vary with the iteration inside a ForLoop (§12.5). Declared
+     * explicitly: computational settings stay constant.
+     */
+    perIteration?: boolean;
 }
 
 export type LogLevel = 'info' | 'success' | 'warning' | 'error';
@@ -242,6 +249,20 @@ export interface LoopIterationSummary {
     misfit?: number;
     misfitCriterion?: string;
     stressRatio?: number;
+    /** Values used by the parameters that vary with the iteration (§12.5) */
+    params?: IterationParamValue[];
+}
+
+/** One parameter varying with the iteration: the value one iteration used */
+export interface IterationParamValue {
+    /** Inner block id (local to the loop) */
+    node: string;
+    key: string;
+    value: number;
+    /** For display: the parameter's label and unit, and the block's name */
+    label?: string;
+    unit?: string;
+    blockName?: string;
 }
 
 export interface LoopSummary {
@@ -408,6 +429,8 @@ export interface TaggedItem {
     payload: DataPayload;
     /** Tagged inside a ForLoop: the iteration that produced it */
     iteration?: number;
+    /** …and the values its parameters varying with the iteration took (§12.5) */
+    iterationParams?: IterationParamValue[];
     /** Its branch did not produce a fresh value in the last run (stale, blocked, errored…) */
     outdated: boolean;
 }
