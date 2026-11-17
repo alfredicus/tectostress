@@ -268,6 +268,13 @@ function readStressFrame(files: any[]): { e1: number[]; e2: number[]; e3: number
     };
 }
 
+/**
+ * Frame used when there is no stress solution: (e1, e3, e2) = (South, East, Up), so that the
+ * display (X, Y, Z) = (e3, e2, e1) shows East to the right, Up at the top and South towards the
+ * viewer. Right-handed (e1 × e3 = e2), like a principal frame.
+ */
+const GEOGRAPHIC_FRAME = { e1: [0, -1, 0], e2: [0, 0, 1], e3: [1, 0, 0], R: 0.5 };
+
 /** '#rrggbb' → 0xrrggbb for three.js. */
 function hexToInt(color: string): number {
     return parseInt(color.replace('#', ''), 16);
@@ -556,13 +563,10 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         });
         content.clear();
 
-        if (!stressFrame) {
-            setStats(null);
-            setFieldRange(null);
-            setMohr(null);
-            if (surfaceRef.current) surfaceRef.current.visible = true;
-            return;
-        }
+        // Without a stress solution (measured data only), the data are drawn in the geographic
+        // frame alone: nothing depends on a tensor except the field, the curves, the principal
+        // axes, the Mohr diagram and the predicted striations, which are left out.
+        const solved = stressFrame !== null;
 
         const pixelW = renderer.domElement.clientWidth;
         const pixelH = renderer.domElement.clientHeight;
@@ -570,8 +574,12 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         /** Frame coordinates → three.js display coordinates, as in the slip-lines app. */
         const toDisplay = (v: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(v.y, v.z, v.x);
 
-        /** Geographic (E, N, Up) → principal frame (σ1, σ3, σ2), the frame sphere_utils works in. */
-        const { e1, e2, e3, R } = stressFrame;
+        /**
+         * Geographic (E, N, Up) → principal frame (σ1, σ3, σ2), the frame sphere_utils works in.
+         * Unsolved, the geographic frame itself, oriented so the display shows East to the right,
+         * Up at the top and South towards the viewer.
+         */
+        const { e1, e2, e3, R } = stressFrame ?? GEOGRAPHIC_FRAME;
         const toFrame = (n: number[]): Point3D => ({ x: dot3(n, e1), y: dot3(n, e3), z: dot3(n, e2) });
 
         /** …and on to display coordinates. */
@@ -659,7 +667,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         // principal values are passed in that same order — otherwise the bands would not line up
         // with the analytic equipotential curves.
         const sphereGeometry = sphereGeometryRef.current;
-        if (settings.showNormalStressField && sphereGeometry) {
+        if (solved && settings.showNormalStressField && sphereGeometry) {
             const position = sphereGeometry.attributes.position;
             const scalarField: number[] = [];
             for (let i = 0; i < position.count; i++) {
@@ -743,7 +751,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         /** Frame point → (Fn, Fτ), with the λ order the curve generators were given. */
         const toMohr = (p: Point3D) => getMohrPoint(p, S1_REF, S3_REF, S2);
 
-        if (settings.showEquipotential) {
+        if (solved && settings.showEquipotential) {
             const equipotentials = settings.useParametricEquipotentials
                 ? generateEquipotentialsParametric(S1_REF, S3_REF, S2, config)
                 : generateEquipotentialsBinary(S1_REF, S3_REF, S2, config);
@@ -772,12 +780,12 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
             });
         }
 
-        if (settings.showSpecialEquipotential) {
+        if (solved && settings.showSpecialEquipotential) {
             const meridians = generateSpecialEquipotentialMeridian(S1_REF, S3_REF, S2, { curveResolution: 500 });
             addCurves(meridians, settings.specialEquipotentialColor, settings.curveLineWidth);
         }
 
-        if (settings.showSlipLines) {
+        if (solved && settings.showSlipLines) {
             const slipLines = generateSlipLines(S1_REF, S3_REF, S2, config);
             addCurves(slipLines, settings.slipLineColor, settings.curveLineWidth);
 
@@ -791,7 +799,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
             });
         }
 
-        if (settings.showStressAxes) {
+        if (solved && settings.showStressAxes) {
             const axes: PrincipalAxis[] = generatePrincipalAxes(S1_REF, S3_REF, S2);
             axes.forEach(axis => {
                 const dir = toDisplay(new THREE.Vector3(axis.axis.x, axis.axis.y, axis.axis.z));
@@ -920,7 +928,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
 
                 // Same plane, seen in the Mohr diagram: one point per measured orientation.
                 // n and −n give the same (σn, τ), so the antipodal copy would land on top of it.
-                const { sigma_n, tau } = toMohr(toFrame(normal));
+                const { sigma_n, tau } = solved ? toMohr(toFrame(normal)) : { sigma_n: NaN, tau: NaN };
                 if (isFinite(sigma_n) && isFinite(tau)) {
                     mohrPoints.push({ sigma: sigma_n, tau, color: colorFor(group), label });
                 }
@@ -941,7 +949,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
                     ? striationFromRow(row, normal)
                     : null;
                 const measuredDir = measuredRaw ? toSphere(measuredRaw) : null;
-                const predictedDir = settings.showPredictedStriations && Array.isArray(row.predicted_striation)
+                const predictedDir = solved && settings.showPredictedStriations && Array.isArray(row.predicted_striation)
                     ? toSphere(row.predicted_striation)
                     : null;
 
@@ -986,6 +994,10 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         });
 
         setStats({ total, poles, measured, predicted });
+        if (!solved) {
+            setMohr(null);
+            return;
+        }
         setMohr({
             sigmaRef: [S1_REF, S2, S3_REF],
             isoLines: mohrIso,
@@ -1071,8 +1083,9 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
 
             {!stressFrame && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                    No stress solution attached to these files — run an inversion to draw the slip
-                    lines and place the data in the principal frame.
+                    Measured data, no stress solution yet: the data are shown in the geographic frame.
+                    Connect an inversion result to draw the slip lines, the principal axes and the
+                    Mohr diagram.
                 </p>
             )}
         </div>
