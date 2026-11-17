@@ -1117,7 +1117,19 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         const groupDef = workflow.composites?.find(c => c.type === node.type);
         const result = results[runId];
         if (!groupDef || !result) return null;
-        const innerViews = groupDef.nodes.filter(n => registry.get(n.type)?.role === 'view');
+        // Views at every depth: those of the groups inside it too (§13.2), each with the display
+        // settings stored on the outer node, and the names of the groups leading to it
+        type ShownView = { node: WorkflowNode; runId: string; path: string[] };
+        const viewsIn = (group: WorkflowNode, def: CompositeDefinition, id: string, path: string[]): ShownView[] =>
+            def.nodes.flatMap(inner => {
+                const shown = { ...inner, presentationParams: innerPresentation(group, inner) };
+                const innerId = `${id}/${inner.id}`;
+                if (registry.get(inner.type)?.role === 'view') return [{ node: shown, runId: innerId, path }];
+                const innerGroup = workflow.composites?.find(c => c.type === inner.type);
+                if (!innerGroup || innerGroup.loop || !inner.active) return [];
+                return viewsIn(shown, innerGroup, innerId, [...path, inner.label || innerGroup.title]);
+            });
+        const innerViews = viewsIn(node, groupDef, runId, []);
         const loop = result.loop;
         // One column per parameter varying with the iteration (§12.5)
         const varyingColumns: { id: string; label: string; blockName: string }[] = [];
@@ -1161,13 +1173,15 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         </div>
                     </div>
                 )}
-                {innerViews.map(inner => {
-                    const innerDef = registry.get(inner.type)!;
-                    const r = results[`${runId}/${inner.id}`];
-                    const shown = { ...inner, presentationParams: innerPresentation(node, inner) };
+                {innerViews.map(({ node: shown, runId: viewId, path }) => {
+                    const innerDef = registry.get(shown.type)!;
+                    const r = results[viewId];
                     return (
-                        <div key={inner.id} className="space-y-2">
-                            <h3 className="font-semibold text-gray-800">{inner.label || innerDef.title}</h3>
+                        <div key={viewId} className="space-y-2">
+                            <h3 className="font-semibold text-gray-800">
+                                {path.map((p, k) => <span key={k} className="font-normal text-gray-500">{p} › </span>)}
+                                {shown.label || innerDef.title}
+                            </h3>
                             {r?.status === 'done'
                                 ? <ViewNodeResult node={shown} def={innerDef} result={r} registry={registry} />
                                 : <p className="text-sm text-gray-500">{r?.reason ?? r?.error ?? 'Not run yet.'}</p>}
