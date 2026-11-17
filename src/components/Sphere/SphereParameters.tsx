@@ -87,6 +87,11 @@ export interface SphereSettings {
     plotDataBothSides: boolean;
     /** Sinon, ramener chaque donnée dans le demi-espace σ2 > 0. */
     foldToPositiveSigma2: boolean;
+    /**
+     * Screen orientation: geographic (Up at the top, East right, South towards the viewer) or
+     * the principal frame of the slip-lines app (σ2 at the top). Computation is the same.
+     */
+    orientation: 'geographic' | 'principal';
 
     // ── Stries ───────────────────────────────────────────────────────────────
     // Drawn as short great-circle arcs tangent to the sphere at the plane's pole: the
@@ -158,6 +163,7 @@ export function createSphereSettings(overrides: Partial<SphereSettings> = {}): S
 
         plotDataBothSides: true,
         foldToPositiveSigma2: false,
+        orientation: 'geographic',
 
         showMeasuredStriations: true,
         measuredStriationColor: '#111111',

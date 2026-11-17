@@ -12,8 +12,11 @@
 // with e1/e2/e3 the eigenvectors of the solution, e1 the most compressive axis — the same
 // mapping the Mohr diagram uses.
 //
-// Three.js display uses the slip-lines convention (X, Y, Z) = (frame.y, frame.z, frame.x),
-// i.e. σ3 to the right, σ2 up, σ1 towards the viewer.
+// The curves are always computed in that principal frame. The screen shows, by default, the
+// geographic frame: Up at the top, East to the right, South towards the viewer, so data and
+// tensor are seen in space as in a block diagram. The setting "Orientation" can show instead the
+// slip-lines convention (X, Y, Z) = (frame.y, frame.z, frame.x): σ3 to the right, σ2 up, σ1
+// towards the viewer (every regime then looks strike-slip, since σ2 is always vertical).
 //
 // Both reference frames are drawn: the principal axes (solid, coloured, σ₁/σ₂/σ₃) and the
 // geographic triad (dashed, N/S — E/W — Up/Down) obtained by pushing (1,0,0), (0,1,0), (0,0,1)
@@ -571,9 +574,6 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         const pixelW = renderer.domElement.clientWidth;
         const pixelH = renderer.domElement.clientHeight;
 
-        /** Frame coordinates → three.js display coordinates, as in the slip-lines app. */
-        const toDisplay = (v: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(v.y, v.z, v.x);
-
         /**
          * Geographic (E, N, Up) → principal frame (σ1, σ3, σ2), the frame sphere_utils works in.
          * Unsolved, the geographic frame itself, oriented so the display shows East to the right,
@@ -581,12 +581,25 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
          */
         const { e1, e2, e3, R } = stressFrame ?? GEOGRAPHIC_FRAME;
         const toFrame = (n: number[]): Point3D => ({ x: dot3(n, e1), y: dot3(n, e3), z: dot3(n, e2) });
+        /** Principal frame → geographic (E, N, Up): e1, e3, e2 are orthonormal */
+        const frameToGeo = (f: Point3D): number[] => [0, 1, 2].map(k => f.x * e1[k] + f.y * e3[k] + f.z * e2[k]);
 
-        /** …and on to display coordinates. */
-        const toSphere = (n: number[]): THREE.Vector3 => {
-            const f = toFrame(n);
-            return toDisplay(new THREE.Vector3(f.x, f.y, f.z)).normalize();
+        // Screen: geographic by default (Up at the top, East to the right, South towards the
+        // viewer), so data and tensor are seen as in space; or the principal frame of the
+        // slip-lines app (σ3 to the right, σ2 at the top, σ1 towards the viewer). The curves are
+        // computed in the principal frame either way: only the picture turns.
+        const principalView = settings.orientation === 'principal';
+        const frameToDisplay = (f: Point3D): THREE.Vector3 => {
+            if (principalView) return new THREE.Vector3(f.y, f.z, f.x);
+            const g = frameToGeo(f);
+            return new THREE.Vector3(g[0], g[2], -g[1]);
         };
+        const displayToFrame = (p: Point3D): Point3D => principalView
+            ? { x: p.z, y: p.x, z: p.y }
+            : toFrame([p.x, -p.z, p.y]);
+
+        /** Geographic vector → display direction */
+        const toSphere = (n: number[]): THREE.Vector3 => frameToDisplay(toFrame(n)).normalize();
 
         const addFatLine = (points: THREE.Vector3[], color: string, lineWidth: number) => {
             if (points.length < 2) return;
@@ -647,7 +660,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
                 const pts: THREE.Vector3[] = [];
                 for (let i = 0; i < x.length; i++) {
                     if (!isFinite(x[i]) || !isFinite(y[i]) || !isFinite(z[i])) return;
-                    pts.push(new THREE.Vector3(y[i] * 1.001, z[i] * 1.001, x[i] * 1.001));
+                    pts.push(frameToDisplay({ x: x[i], y: y[i], z: z[i] }).multiplyScalar(1.001));
                 }
                 addFatLine(pts, color, lineWidth);
             });
@@ -663,18 +676,16 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         // ── Normal-stress field: filled iso-contour bands on the surface ─────
         //
         // σn is sampled at every vertex of the sphere mesh and banded by keplerlit's marching
-        // triangles. The mesh lives in display coordinates (X, Y, Z) = (σ3, σ2, σ1), so the
-        // principal values are passed in that same order — otherwise the bands would not line up
-        // with the analytic equipotential curves.
+        // triangles. Each mesh vertex (display coordinates) is taken back to the principal frame
+        // and passed in the order (σ3, σ2, σ1) with the principal values in that same order —
+        // otherwise the bands would not line up with the analytic equipotential curves.
         const sphereGeometry = sphereGeometryRef.current;
         if (solved && settings.showNormalStressField && sphereGeometry) {
             const position = sphereGeometry.attributes.position;
             const scalarField: number[] = [];
             for (let i = 0; i < position.count; i++) {
-                scalarField.push(getEquipotentialPoint(
-                    { x: position.getX(i), y: position.getY(i), z: position.getZ(i) },
-                    S3_REF, S2, S1_REF
-                ));
+                const f = displayToFrame({ x: position.getX(i), y: position.getY(i), z: position.getZ(i) });
+                scalarField.push(getEquipotentialPoint({ x: f.y, y: f.z, z: f.x }, S3_REF, S2, S1_REF));
             }
 
             const minVal = Math.min(...scalarField);
@@ -802,7 +813,7 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
         if (solved && settings.showStressAxes) {
             const axes: PrincipalAxis[] = generatePrincipalAxes(S1_REF, S3_REF, S2);
             axes.forEach(axis => {
-                const dir = toDisplay(new THREE.Vector3(axis.axis.x, axis.axis.y, axis.axis.z));
+                const dir = frameToDisplay({ x: axis.axis.x, y: axis.axis.y, z: axis.axis.z });
                 const material = new THREE.LineBasicMaterial({ color: axis.colorHex });
                 // The frame axes are (x, y, z) = (σ1, σ3, σ2). A principal axis has no sense of
                 // direction, so both of its ends carry the same name.
@@ -936,13 +947,12 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
                 // A plane's normal points both ways — n and −n describe the same plane — so each
                 // datum is drawn at both ends of its diameter by default, which keeps a copy of
                 // everything in view whichever way the sphere is turned. Failing that it can be
-                // folded into the σ2 > 0 half-space (display Y is the σ2 axis: toDisplay maps
-                // frame z → Y).
+                // folded into the σ2 > 0 half-space (σ2 component of the normal, frame z).
                 //
                 // The traction is linear in n, hence F_τ(−n) = −F_τ(n): the striation of the far
                 // copy has to be reversed too, which is what keeps its sense of movement
                 // consistent with the slip lines running past it there.
-                const folded = settings.foldToPositiveSigma2 && pole.y < 0 ? -1 : 1;
+                const folded = settings.foldToPositiveSigma2 && toFrame(normal).z < 0 ? -1 : 1;
                 const copies = settings.plotDataBothSides ? [1, -1] : [folded];
 
                 const measuredRaw = settings.showMeasuredStriations
@@ -1400,6 +1410,17 @@ const SphereComponent: React.FC<BaseVisualizationProps<SphereCompState> & {
                             />
                         </label>
                     )}
+                    <label className="flex items-center justify-between">
+                        <span className="text-sm">Orientation</span>
+                        <select
+                            value={settings.orientation}
+                            onChange={e => updateSettings({ orientation: e.target.value as SphereSettings['orientation'] })}
+                            className="text-sm border rounded px-1 py-0.5"
+                        >
+                            <option value="geographic">Geographic (Up at the top)</option>
+                            <option value="principal">Principal frame (σ₂ at the top)</option>
+                        </select>
+                    </label>
                     <label className="flex items-center justify-between">
                         <span className="text-sm">Show Stress Axes (σ₁ σ₂ σ₃)</span>
                         <input
