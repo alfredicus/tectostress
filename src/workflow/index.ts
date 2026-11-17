@@ -22,3 +22,9 @@ export type { InnerParams, PerIteration } from './composite';
 export { fileRef } from './blocks/datasetUtils';
 export { POPULATION_STYLE, populationOf, classification, selectPopulation, inversionData } from './populations';
 export type { Population, ShowPopulation } from './populations';
+export {
+    DATA_TYPES, FLOW_TYPES, colorOf, nameOf, acceptedTypes, portAccepts, describeAccepted, inputColors,
+    portBackground, refusalReason,
+} from './dataTypes';
+export type { FlowType, DataTypeInfo } from './dataTypes';
+export { upgradeInputs, upgradeLibrary } from './upgradeInputs';

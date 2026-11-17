@@ -91,7 +91,7 @@ describe('running the predefined workflow', () => {
         expect(report.tagged[0].payload).toBe(rejected);
 
         // Views simply receive their input
-        expect(report.nodes['outliers-stereonet'].inputs.in[0]).toBe(rejected);
+        expect(report.nodes['outliers-stereonet'].inputs.result[0]).toBe(rejected);
         expect(report.nodes['dashboard'].inputs.in[0]).toBe(report.nodes['inversion-2'].outputs.out);
     });
 
@@ -236,11 +236,11 @@ describe('inactive blocks, errors and partial runs', () => {
         const files = faultFiles();
         const wf = workflow(
             [dataNode('d', files), node('f', 'filter', { dataTypes: ['joint'] }, { active: false }), node('v', 'view.stereonet')],
-            [edge('d', 'out', 'f'), edge('f', 'out', 'v')]);
+            [edge('d', 'out', 'f'), edge('f', 'out', 'v', 'data')]);
         const report = await runWorkflow(wf, createDefaultRegistry(), env(files));
         expect(report.nodes['f']).toMatchObject({ status: 'inactive', bypassed: true });
         expect(report.nodes['v'].status).toBe('done');
-        expect(report.nodes['v'].inputs.in[0]).toBe(report.nodes['d'].outputs.out);
+        expect(report.nodes['v'].inputs.data[0]).toBe(report.nodes['d'].outputs.out);
     });
 
     test('an inactive inversion stops its branch', async () => {
@@ -282,7 +282,7 @@ describe('inactive blocks, errors and partial runs', () => {
         const report = await runWorkflow(templateWorkflow(files), registry, env(files), { targetNodeId: 'outliers-stereonet' });
         expect(Object.keys(report.nodes).sort()).toEqual(['data', 'inversion-1', 'misfit-filter', 'outliers-stereonet', 'tag-outliers']);
         expect(report.nodes['outliers-stereonet'].status).toBe('done');
-        expect(report.nodes['outliers-stereonet'].inputs.in[0]).toBe(report.nodes['tag-outliers'].outputs.out);
+        expect(report.nodes['outliers-stereonet'].inputs.result[0]).toBe(report.nodes['tag-outliers'].outputs.out);
         // The other branch (Inversion 2 → dashboard) is not run
         expect(calls.inversion).toBe(1);
     });

@@ -79,13 +79,13 @@ describe('a group containing views', () => {
 
         // Connect it onwards
         const reg = registryFor(workflow, base);
-        const candidate = { source: nodeId, sourcePort: 'out1', target: 'outliers-stereonet', targetPort: 'in' };
+        const candidate = { source: nodeId, sourcePort: 'out1', target: 'outliers-stereonet', targetPort: 'result' };
         workflow.edges = workflow.edges.filter(e => e.target !== 'outliers-stereonet');
         expect(canConnect(workflow, reg, candidate).ok).toBe(true);
         workflow.edges.push({ id: 'onwards', ...candidate });
         const r = await runWorkflow(workflow, base, env(files));
         expect(r.nodes['outliers-stereonet'].status).toBe('done');
-        expect(r.nodes['outliers-stereonet'].inputs.in[0]).toBe(r.nodes[`${nodeId}/inversion-1`].outputs.out);
+        expect(r.nodes['outliers-stereonet'].inputs.result[0]).toBe(r.nodes[`${nodeId}/inversion-1`].outputs.out);
     });
 
     test('runs, and its inner views receive their inputs', async () => {
@@ -146,12 +146,12 @@ describe('inputs of a group', () => {
     test('the first block of a group decides the type of its required input', () => {
         const wf = workflow(
             [node('m', 'misfit-filter'), node('i', 'inversion', FAST_INVERSION), node('v', 'view.stereonet')],
-            [edge('m', 'kept', 'i'), edge('i', 'out', 'v')]);
+            [edge('m', 'kept', 'i'), edge('i', 'out', 'v', 'result')]);
         const fromMisfit = groupAsComposite(wf, base, ['m', 'i'], 'A', makeId).definition;
         expect(fromMisfit.inputs.map(i => [i.type, i.optional])).toEqual([['InversionResult', undefined]]);
 
         // Inversion → Stereonet with nothing feeding the inversion
-        const alone = workflow([node('i', 'inversion', FAST_INVERSION), node('v', 'view.stereonet')], [edge('i', 'out', 'v')]);
+        const alone = workflow([node('i', 'inversion', FAST_INVERSION), node('v', 'view.stereonet')], [edge('i', 'out', 'v', 'result')]);
         const fromInversion = groupAsComposite(alone, base, ['i', 'v'], 'B', makeId);
         expect(fromInversion.definition.inputs.map(i => i.type)).toEqual(['Dataset']);
         // Unconnected, a required input is reported

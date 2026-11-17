@@ -24,13 +24,13 @@ describe('validateWorkflow', () => {
     test('a Dataset cannot feed a block that needs an InversionResult', () => {
         const wf = workflow([node('d', 'data'), node('s', 'view.summary')], [edge('d', 'out', 's')]);
         const issues = validateWorkflow(wf, registry);
-        expect(issues.some(i => i.severity === 'error' && /expects InversionResult/.test(i.message))).toBe(true);
+        expect(issues.some(i => i.severity === 'error' && /needs an inversion result/.test(i.message))).toBe(true);
     });
 
     test('an InversionResult can feed a block that needs a Dataset', () => {
         const wf = workflow(
             [node('d', 'data'), node('i', 'inversion'), node('st', 'view.stereonet')],
-            [edge('d', 'out', 'i'), edge('i', 'out', 'st')]);
+            [edge('d', 'out', 'i'), edge('i', 'out', 'st', 'result')]);
         expect(validateWorkflow(wf, registry).filter(i => i.severity === 'error')).toEqual([]);
     });
 
@@ -96,12 +96,12 @@ describe('canConnect', () => {
         // Plain data into a view that needs an inversion result
         const r = canConnect(base(), registry, { source: 'd', sourcePort: 'out', target: 's', targetPort: 'in' });
         expect(r.ok).toBe(false);
-        expect(r.reason).toMatch(/expects InversionResult/);
+        expect(r.reason).toMatch(/Summary needs an inversion result.*connect an Inversion first/);
     });
 
     test('refuses an occupied single input', () => {
         const r = canConnect(base(), registry, { source: 'd', sourcePort: 'out', target: 'i', targetPort: 'in' });
-        expect(r).toEqual({ ok: false, reason: 'Input "Dataset" is already connected' });
+        expect(r).toEqual({ ok: false, reason: 'Input "Data" is already connected' });
     });
 
     test('refuses a cycle', () => {

@@ -2,7 +2,8 @@
 // Structural checks on a workflow graph: block types, ports, payload types, cycles (§4.1, §4.2).
 
 import { BlockRegistry, findPort } from './registry';
-import { isSubtypeOf, PayloadType, Workflow, WorkflowEdge, WorkflowNode } from './types';
+import { PayloadType, PortDefinition, Workflow, WorkflowEdge, WorkflowNode } from './types';
+import { DATA_TYPES, portAccepts, refusalReason } from './dataTypes';
 
 export interface ValidationIssue {
     /** Errors prevent running the workflow; warnings only block the nodes concerned */
@@ -42,10 +43,9 @@ export function resolveOutputType(
     return resolveOutputType(workflow, registry, edge.source, edge.sourcePort, visiting);
 }
 
-/** Whether a value of `produced` type may flow into a port expecting `expected` */
-export function typesCompatible(produced: ResolvedType, expected: PayloadType | 'any'): boolean {
-    if (expected === 'any' || produced === 'any' || produced === 'unknown') return true;
-    return isSubtypeOf(produced, expected);
+/** Whether a value of `produced` type may flow into `port` (§16) */
+export function typesCompatible(produced: ResolvedType, port: Pick<PortDefinition, 'type' | 'exact'>): boolean {
+    return portAccepts(port, produced);
 }
 
 /** Node ids in dependency order (Kahn). Returns null when the graph has a cycle. */
@@ -97,8 +97,10 @@ function checkEdge(workflow: Workflow, registry: BlockRegistry, edge: WorkflowEd
     if (!out) return `${sourceDef.title} has no output "${edge.sourcePort}"`;
     if (!inp) return `${targetDef.title} has no input "${edge.targetPort}"`;
     const produced = resolveOutputType(workflow, registry, edge.source, edge.sourcePort);
-    if (!typesCompatible(produced, inp.type)) {
-        return `${sourceDef.title} produces ${produced}, but ${targetDef.title} expects ${inp.type}`;
+    if (!typesCompatible(produced, inp)) {
+        // Another input of the same block that would take it (Stereonet: measured data / inversion result)
+        const alternative = targetDef.inputs.find(p => p.id !== inp.id && portAccepts(p, produced));
+        return refusalReason(produced, inp, target.label || targetDef.title, alternative);
     }
     return null;
 }
@@ -145,13 +147,44 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): V
                     message: `Input "${port.label}" of ${nodeName(node)} accepts a single connection (${count} found)`
                 });
             }
-            if (count === 0 && !port.optional) {
+            if (count === 0 && !port.optional && !def.oneOfInputs?.includes(port.id)) {
                 issues.push({
                     severity: 'warning', nodeId: node.id,
                     message: `Input "${port.label}" of ${nodeName(node)} is not connected`
                 });
             }
         });
+    });
+
+    // Exactly one of alternative inputs (§16.3)
+    workflow.nodes.forEach(node => {
+        const def = registry.get(node.type);
+        if (!def?.oneOfInputs) return;
+        const ports = def.inputs.filter(p => def.oneOfInputs!.includes(p.id));
+        const connected = ports.filter(p => workflow.edges.some(e => e.target === node.id && e.targetPort === p.id));
+        const names = ports.map(p => `“${p.label}”`).join(' or ');
+        if (connected.length === 0) {
+            issues.push({ severity: 'warning', nodeId: node.id, message: `${nodeName(node)}: connect ${names}` });
+        } else if (connected.length > 1) {
+            issues.push({ severity: 'error', nodeId: node.id, message: `${nodeName(node)}: connect ${names}, not both` });
+        }
+    });
+
+    // A dashboard fed measured data, with views needing a stress solution (§16.3)
+    workflow.nodes.forEach(node => {
+        if (node.type !== 'view.dashboard') return;
+        const def = registry.get(node.type);
+        const views: string[] = node.presentationParams?.views ?? def?.params.find(p => p.key === 'views')?.default ?? [];
+        const needing = views.map(v => registry.get(v)).filter(v => v && v.inputs.length > 0
+            && v.inputs.every(p => !portAccepts(p, 'Dataset')));
+        const measured = workflow.edges.some(e => e.target === node.id
+            && resolveOutputType(workflow, registry, e.source, e.sourcePort) === 'Dataset');
+        if (measured && needing.length) {
+            issues.push({
+                severity: 'warning', nodeId: node.id,
+                message: `${nodeName(node)} receives ${DATA_TYPES.Dataset.plural}: ${needing.map(v => v!.title).join(', ')} need an inversion result and will show nothing for them`,
+            });
+        }
     });
 
     if (!topologicalOrder(workflow)) {

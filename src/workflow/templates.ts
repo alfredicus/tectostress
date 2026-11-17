@@ -29,7 +29,7 @@ const MISFIT_REINVERSION: Workflow = {
         { id: 'inversion-2', type: 'inversion', typeVersion: 1, label: 'Inversion 2', active: true, scientificParams: {}, presentationParams: {}, position: { x: 660, y: 40 } },
         { id: 'dashboard', type: 'view.dashboard', typeVersion: 1, label: 'Result', active: true, scientificParams: {}, presentationParams: {}, position: { x: 880, y: 40 } },
         { id: 'tag-outliers', type: 'add-tags', typeVersion: 1, active: true, scientificParams: { tag: 'outlier', note: 'Data rejected by the misfit filter' }, presentationParams: {}, position: { x: 660, y: 220 } },
-        { id: 'outliers-stereonet', type: 'view.stereonet', typeVersion: 1, label: 'Rejected data', active: true, scientificParams: {}, presentationParams: {}, position: { x: 880, y: 220 } },
+        { id: 'outliers-stereonet', type: 'view.stereonet', typeVersion: 2, label: 'Rejected data', active: true, scientificParams: {}, presentationParams: {}, position: { x: 880, y: 220 } },
     ],
     edges: [
         { id: 'e1', source: 'data', sourcePort: 'out', target: 'inversion-1', targetPort: 'in' },
@@ -37,7 +37,7 @@ const MISFIT_REINVERSION: Workflow = {
         { id: 'e3', source: 'misfit-filter', sourcePort: 'kept', target: 'inversion-2', targetPort: 'in' },
         { id: 'e4', source: 'inversion-2', sourcePort: 'out', target: 'dashboard', targetPort: 'in' },
         { id: 'e5', source: 'misfit-filter', sourcePort: 'rejected', target: 'tag-outliers', targetPort: 'in' },
-        { id: 'e6', source: 'tag-outliers', sourcePort: 'out', target: 'outliers-stereonet', targetPort: 'in' },
+        { id: 'e6', source: 'tag-outliers', sourcePort: 'out', target: 'outliers-stereonet', targetPort: 'result' },
     ],
 };
 
@@ -84,12 +84,12 @@ function phaseSeparation(): Workflow {
         ...workflow,
         nodes: [
             ...workflow.nodes,
-            n('all-phases', 'view.stereonet', 480, 100, 'All phases'),
+            { ...n('all-phases', 'view.stereonet', 480, 100, 'All phases'), typeVersion: 2 },
             n('report', 'report', 480, 220, undefined, { title: 'Tectonic phases', tags: 'phase' }),
         ],
         edges: [
             ...workflow.edges,
-            { id: 'e6', source: nodeId, sourcePort: LOOP_COLLECTED, target: 'all-phases', targetPort: 'in' },
+            { id: 'e6', source: nodeId, sourcePort: LOOP_COLLECTED, target: 'all-phases', targetPort: 'data' },
         ],
     };
 }

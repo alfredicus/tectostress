@@ -3,7 +3,11 @@
 
 import React from 'react';
 import { Handle, NodeProps, Position, Node } from '@xyflow/react';
-import { BlockDefinition, NodeResult, NodeStatus, PortDefinition, WorkflowNode } from '../../workflow';
+import { BarChart3, Boxes, Cog, Database, FileText, GitBranch, Repeat, Tag } from 'lucide-react';
+import {
+    BlockDefinition, colorOf, describeAccepted, DATA_TYPES, FlowType, inputColors, isCompositeType, nameOf,
+    NodeResult, NodeStatus, PayloadType, portBackground, PortDefinition, WorkflowNode,
+} from '../../workflow';
 
 export interface BlockNodeData extends Record<string, unknown> {
     node: WorkflowNode;
@@ -11,6 +15,10 @@ export interface BlockNodeData extends Record<string, unknown> {
     result?: NodeResult;
     /** Extra line under the title, e.g. why a block inside a group is not used */
     note?: string;
+    /** Type actually carried by each output (a pass-through output takes the type it receives) */
+    outputTypes?: Record<string, FlowType>;
+    /** While a link is being dragged: whether each input would accept it (§16.4) */
+    connectable?: Record<string, boolean>;
 }
 
 export type BlockFlowNode = Node<BlockNodeData, 'block'>;
@@ -26,47 +34,100 @@ export const STATUS_STYLE: Record<NodeStatus, { label: string; className: string
     inactive: { label: 'Off', className: 'bg-slate-200 text-slate-600' },
 };
 
-const ROLE_ACCENT: Record<string, string> = {
-    source: 'border-t-sky-500',
-    computation: 'border-t-indigo-500',
-    view: 'border-t-emerald-500',
-    report: 'border-t-purple-500',
-};
+/**
+ * Three families of blocks, each with one dark, muted colour for its icon and category word (§16.2).
+ * The hues avoid those that already mean something: blue and purple (kinds of data), green, amber,
+ * orange and red (states of a run), teal and orange (kept and rejected data in the views).
+ */
+export const BLOCK_FAMILIES = {
+    source: { name: 'Sources', color: '#7c5a3a', meaning: 'where data enter' },
+    computation: { name: 'Computation', color: '#334155', meaning: 'what transforms them' },
+    output: { name: 'Outputs', color: '#9d174d', meaning: 'what you look at' },
+} as const;
+export type BlockFamily = keyof typeof BLOCK_FAMILIES;
 
-const PORT_COLOR: Record<string, string> = {
-    Dataset: '#0ea5e9',
-    InversionResult: '#6366f1',
-    any: '#94a3b8',
-};
+/** Family of a palette category ("Sources", "Processing", "Views"…) */
+export function familyOfCategory(category: string): BlockFamily {
+    if (category === 'Sources') return 'source';
+    if (category === 'Views' || category === 'Report') return 'output';
+    return 'computation';
+}
+
+/**
+ * The kind of block, shown by an icon and a word in the colour of its family. Blue and purple are
+ * kept for the kinds of data (ports and links), the badge colours for the state of a run (§16.2).
+ */
+export function blockCategory(def: BlockDefinition | undefined): {
+    word: string; Icon: React.FC<{ className?: string }>; family: BlockFamily;
+} {
+    if (!def) return { word: 'Unknown', Icon: Cog, family: 'computation' };
+    if (isCompositeType(def.type)) {
+        return def.params.some(p => p.key === 'maxIterations')
+            ? { word: 'Loop', Icon: Repeat, family: 'computation' }
+            : { word: 'Group', Icon: Boxes, family: 'computation' };
+    }
+    if (def.role === 'source') return { word: 'Source', Icon: Database, family: 'source' };
+    if (def.role === 'view') return { word: 'View', Icon: BarChart3, family: 'output' };
+    if (def.role === 'report') return { word: 'Report', Icon: FileText, family: 'output' };
+    // Add Tags marks results for the report: filed with it, in the palette and on the canvas
+    if (def.category === 'Report') return { word: 'Report', Icon: Tag, family: 'output' };
+    if (def.category === 'Control') return { word: 'Control', Icon: GitBranch, family: 'computation' };
+    return { word: 'Processing', Icon: Cog, family: 'computation' };
+}
+
+/** Tooltip of an input: what it accepts, and what the block does with each kind */
+export function inputTooltip(port: PortDefinition): string {
+    const lines = [`${port.label}: accepts ${describeAccepted(port)}${port.optional ? ' (optional)' : ''}`];
+    Object.entries(port.meaning ?? {}).forEach(([type, text]) => {
+        if (text) lines.push(`• ${DATA_TYPES[type as PayloadType].name}: ${text}`);
+    });
+    return lines.join('\n');
+}
 
 /** Vertical position of the i-th of n handles */
 const handleTop = (i: number, n: number) => `${((i + 1) / (n + 1)) * 100}%`;
 
-function Ports({ ports, side }: { ports: PortDefinition[]; side: 'in' | 'out' }) {
+function Ports({ ports, side, types, connectable, oneOf }: {
+    ports: PortDefinition[]; side: 'in' | 'out'; types?: Record<string, FlowType>; connectable?: Record<string, boolean>;
+    /** Alternative inputs: one of them is required, so they are not drawn as optional */
+    oneOf?: string[];
+}) {
     return (
         <>
-            {ports.map((port, i) => (
-                <Handle
-                    key={port.id}
-                    id={port.id}
-                    type={side === 'in' ? 'target' : 'source'}
-                    position={side === 'in' ? Position.Left : Position.Right}
-                    title={`${port.label} (${port.type === 'any' ? 'any value' : port.type}${port.optional ? ', optional' : ''})`}
-                    style={{
-                        top: handleTop(i, ports.length),
-                        width: 10, height: 10,
-                        // Optional inputs are hollow
-                        background: port.optional ? 'white' : PORT_COLOR[port.type] ?? '#94a3b8',
-                        border: port.optional ? `2px solid ${PORT_COLOR[port.type] ?? '#94a3b8'}` : '2px solid white',
-                    }}
-                />
-            ))}
+            {ports.map((port, i) => {
+                // An input shows every kind it accepts; an output, the kind it produces
+                const colors = side === 'in' ? inputColors(port) : [colorOf(types?.[port.id] ?? port.type)];
+                const title = side === 'in' ? inputTooltip(port) : `${port.label}: ${nameOf(types?.[port.id] ?? port.type).toLowerCase()}`;
+                const ok = side === 'in' ? connectable?.[port.id] : undefined;
+                const hollow = port.optional && !oneOf?.includes(port.id);
+                return (
+                    <Handle
+                        key={port.id}
+                        id={port.id}
+                        type={side === 'in' ? 'target' : 'source'}
+                        position={side === 'in' ? Position.Left : Position.Right}
+                        title={title}
+                        style={{
+                            top: handleTop(i, ports.length),
+                            width: 12, height: 12,
+                            // Optional inputs are hollow (a ring of their colour(s))
+                            background: hollow ? 'white' : portBackground(colors),
+                            border: hollow ? `3px solid ${colors[0]}` : '2px solid white',
+                            ...(hollow && colors.length > 1 ? { borderColor: `${colors[0]} ${colors[1]} ${colors[1]} ${colors[0]}` } : {}),
+                            // While a link is dragged: accepting inputs stand out, the others fade
+                            ...(ok === true ? { boxShadow: '0 0 0 4px rgba(34,197,94,0.45)' } : {}),
+                            ...(ok === false ? { opacity: 0.2 } : {}),
+                        }}
+                    />
+                );
+            })}
         </>
     );
 }
 
 const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
-    const { node, def, result, note } = data;
+    const { node, def, result, note, outputTypes, connectable } = data;
+    const category = blockCategory(def);
     const status: NodeStatus = !node.active ? 'inactive' : result?.status ?? 'idle';
     const style = STATUS_STYLE[status];
     const title = node.label || def?.title || node.type;
@@ -93,17 +154,21 @@ const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
 
     return (
         <div
-            className={`relative flex rounded-lg bg-white shadow-sm border border-t-4 min-w-[170px] text-xs
-                ${def ? ROLE_ACCENT[def.role] : 'border-t-red-500'}
+            className={`relative flex rounded-lg bg-white shadow-sm border min-w-[170px] text-xs
+                ${def ? 'border-gray-300' : 'border-red-500'}
                 ${selected ? 'ring-2 ring-blue-400' : ''}
                 ${node.active ? '' : 'opacity-60 border-dashed'}`}
             style={{ minHeight }}
         >
-            {def && <Ports ports={def.inputs} side="in" />}
+            {def && <Ports ports={def.inputs} side="in" connectable={connectable} oneOf={def.oneOfInputs} />}
             {def && showInLabels && labelColumn(def.inputs, 'in')}
 
             <div className="flex-1 min-w-0">
             <div className="px-3 pt-2 pb-1">
+                <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide"
+                    style={{ color: BLOCK_FAMILIES[category.family].color }}>
+                    <category.Icon className="w-3 h-3" /> {category.word}
+                </div>
                 <div className="font-semibold text-gray-800 truncate" title={title}>{title}</div>
                 {node.label && def && <div className="text-[10px] text-gray-500">{def.title}</div>}
                 {!def && <div className="text-[10px] text-red-600">Unknown block type “{node.type}”</div>}
@@ -128,7 +193,7 @@ const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
 
             {def && showOutLabels && labelColumn(def.outputs, 'out')}
 
-            {def && <Ports ports={def.outputs} side="out" />}
+            {def && <Ports ports={def.outputs} side="out" types={outputTypes} />}
         </div>
     );
 };
@@ -141,6 +206,8 @@ export interface PortNodeData extends Record<string, unknown> {
     side: 'in' | 'out';
     label: string;
     type: string;
+    /** Group inputs: accepts `type` alone */
+    exact?: boolean;
     optional?: boolean;
     /** Extra line, e.g. "replaces Data" or "→ next iteration" */
     note?: string;
@@ -153,7 +220,9 @@ export type PortFlowNode = Node<PortNodeData, 'port'>;
  * data comes in, and where results leave.
  */
 export const PortNode: React.FC<NodeProps<PortFlowNode>> = React.memo(({ data, selected }) => {
-    const color = PORT_COLOR[data.type] ?? '#94a3b8';
+    const port = { type: data.type as PayloadType | 'any', exact: data.exact };
+    const colors = data.side === 'in' ? inputColors(port) : [colorOf(data.type as FlowType)];
+    const color = colors[0];
     return (
         <div className={`relative rounded-full border-2 border-dashed bg-white px-3 py-1.5 text-xs min-w-[120px] max-w-[230px]
             ${selected ? 'ring-2 ring-blue-400' : ''}`} style={{ borderColor: color }}>
@@ -161,7 +230,7 @@ export const PortNode: React.FC<NodeProps<PortFlowNode>> = React.memo(({ data, s
                 {data.side === 'in' ? '⇥ ' : ''}{data.label}{data.side === 'out' ? ' ⇥' : ''}
             </div>
             <div className="text-[10px] text-gray-500">
-                {data.side === 'in' ? 'Group input' : 'Group output'} · {data.type === 'any' ? 'any value' : data.type}
+                {data.side === 'in' ? `Group input · accepts ${describeAccepted(port)}` : `Group output · ${nameOf(data.type as FlowType).toLowerCase()}`}
                 {data.optional ? ', optional' : ''}
             </div>
             {data.note && <div className="text-[10px] text-indigo-700">{data.note}</div>}
@@ -171,7 +240,7 @@ export const PortNode: React.FC<NodeProps<PortFlowNode>> = React.memo(({ data, s
                 id="port"
                 style={{
                     width: 10, height: 10,
-                    background: data.optional ? 'white' : color,
+                    background: data.optional ? 'white' : portBackground(colors),
                     border: data.optional ? `2px solid ${color}` : '2px solid white',
                 }}
             />

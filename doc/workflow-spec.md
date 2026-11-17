@@ -809,7 +809,7 @@ first)
 
 ---
 
-## 15. Keeping the workflow safe in the browser [PROPOSAL]
+## 15. Keeping the workflow safe in the browser [DECIDED, implemented]
 
 *Report (16 Nov):* a new workflow was built, the Data tab was used to choose data, and back in the
 Workflow tab the latest changes were gone.
@@ -853,9 +853,14 @@ Workflow tab the latest changes were gone.
 Tests: writing on page hide; a stale page does not overwrite a newer copy; replacing keeps the old
 workflow in the recent list; storage failure is reported.
 
+*Status (16 Nov):* implemented (`browserStore.ts`, tests in `browserStore.test.ts`). Checked in two
+sandbox pages: the older page warns at once, nothing is overwritten, and *Open the other version*
+keeps its own in *Recent workflows*. The library is merged across pages (groups added, none
+removed).
+
 ---
 
-## 16. Visual language: blocks, ports, links [PROPOSAL, v2]
+## 16. Visual language: blocks, ports, links [DECIDED, implemented]
 
 *Revised after review (16 Nov). v1 explained the rules but kept a drawing that contradicts them.*
 
@@ -892,14 +897,28 @@ So:
 
    The engine keeps the rule "an inversion result is a dataset". Only the drawing changes: an input
    that accepts both is drawn with both colours.
+
+   **One input or two (decided 16 Nov).** When a block uses both kinds *the same way*, it has one
+   input drawn half/half (Inversion, Filter, Aggregate, Rose, Data histogram, Dashboard). When the
+   *meaning differs* with the kind, it has **two inputs**, one blue and one purple, and exactly one is
+   connected: Stereonet and Sphere show only the observations for measured data, and the
+   observations with predicted striations and kept/rejected data for an inversion result. Dropping a
+   link on the wrong one of the two points to the right one.
 3. **An output shows what it produces.** A pass-through output takes the colour of what it receives
    (grey until connected). Links have the colour of the data they carry; they already do.
-4. **The kind of block is given by an icon and a word, not a colour.** A block is white with a grey
-   border, with a small icon and a category word: *Source*, *Processing*, *Control*, *View*, *Report*,
-   *Group*, *Loop*. A colour per category could only be found outside blue, purple and the status
-   colours, and would add one more colour code to learn. Icons scale better as blocks are added.
-   *(Instead of the reviewer's tinted bodies: a blue Data block or a violet Inversion block would
-   repeat today's confusion.)*
+4. **The kind of block is given by an icon and a word**, coloured by its **family** (decided 16 Nov):
+
+   | Family | Blocks | Colour |
+   |---|---|---|
+   | Sources (where data enter) | Data | earth brown `#7c5a3a` |
+   | Computation (what transforms them) | Processing, Control, Group, Loop | dark slate `#334155` |
+   | Outputs (what you look at) | View, Report, Add Tags | deep magenta `#9d174d` |
+
+   Only the icon and the category word take the colour (also the palette headings and the legend);
+   the block stays white and its name dark grey. Three dark, muted tones that also differ in
+   lightness, chosen away from every colour that already means something: blue and purple (data),
+   green, amber, orange and red (states of a run), teal and orange (kept and rejected data). Seven
+   colours, one per kind, could not avoid them; inside a family, the icon tells the kinds apart.
 5. **State is shown only by the badge** (and by dashed and faded when switched off). The block itself
    is never recoloured.
 6. **The purpose of a block decides what it accepts.** A view whose meaning needs a stress solution
@@ -920,7 +939,7 @@ So:
 | Misfit filter | Processing | **no** | yes | purple | 3 × inversion result |
 | Add Tags | Processing | yes | yes | grey (anything) | same as input |
 | Conditional, ExitLoop | Control | yes | yes | grey (anything) | same as input |
-| Stereonet, Sphere | View | yes: observations | yes: observations, predicted striations, kept/rejected | half/half | — |
+| Stereonet, Sphere | View | yes, on input *Measured data*: observations | yes, on input *Inversion result*: observations, predicted striations, kept/rejected | **two inputs**: blue, purple (one connected) | — |
 | Rose diagram | View | yes | yes | half/half | — |
 | *Data histogram* (16.5) | View | yes | yes | half/half | — |
 | Misfit histogram | View | **no** | yes | purple | — |
@@ -943,7 +962,7 @@ nothing.
   inversion result. Measured data have no stress solution yet: connect an Inversion first."
 - Today the refusal is silent: the link just does not attach.
 
-### 16.5 Histogram [OPEN: user decision]
+### 16.5 Histogram [DECIDED: A, Data histogram]
 
 Today *Histogram* is a general histogram of **one column of the data** (dip, strike, rake…). It does
 not show misfits; *Misfit histogram* does. Making it purple-only would not make it scientific: it
@@ -960,3 +979,12 @@ Either way, raw data can no longer reach a block whose name suggests misfits.
 
 Every block against every type, checking the table in 16.3; every refusal message; port drawing taken
 from the table (no colour defined in a component).
+
+### 16.7 Older files and groups
+
+Stereonet and Sphere are version 2. On loading, a connection to their former single input goes to
+the input matching what it carries. A group whose input fed one of them directly gets one input per
+kind (*… · measured data*, *… · inversion result*), so every outside connection keeps its meaning;
+the groups of the library are upgraded the same way.
+
+*Status (16 Nov):* implemented (`dataTypes.ts`, `upgradeInputs.ts`; tests in `dataTypes.test.ts`).

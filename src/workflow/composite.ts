@@ -2,6 +2,7 @@
 // Composite blocks (§11.3): a group of blocks saved and reused as one block. At run time a
 // composite is expanded into its inner blocks, so cache, provenance and states work unchanged.
 
+import { acceptedByAll, portAccepting, portAccepts } from './dataTypes';
 import { hashValue } from './hash';
 import { BlockRegistry, findPort } from './registry';
 import { resolveOutputType, topologicalOrder } from './validate';
@@ -38,7 +39,7 @@ export function compositeBlockDefinition(def: CompositeDefinition): BlockDefinit
         description: def.description ?? `Group of ${def.nodes.length} blocks`,
         category: 'My blocks',
         role: 'computation',
-        inputs: def.inputs.map(i => ({ id: i.id, label: i.label, type: i.type, optional: i.optional })),
+        inputs: def.inputs.map(i => ({ id: i.id, label: i.label, type: i.type, optional: i.optional, exact: i.exact })),
         outputs: def.outputs.map(o => ({ id: o.id, label: o.label, type: o.type })),
         params: [{
             key: 'inner', label: 'Inner blocks', kind: 'object', scope: 'scientific',
@@ -461,19 +462,30 @@ export function groupAsComposite(
         }
         inputs.find(i => i.id === id)!.targets.push({ node: e.target, port: e.targetPort });
     });
+    // An input feeding several inner inputs accepts what they all accept (§16)
+    inputs.forEach(input => {
+        const ports = input.targets.map(t => findPort(registry.get(workflow.nodes.find(n => n.id === t.node)!.type)!.inputs, t.port)!);
+        if (ports.some(p => p.type === 'any')) { const p = ports.find(q => q.type !== 'any'); if (p) { input.type = p.type; input.exact = p.exact; } return; }
+        const accepting = portAccepting(acceptedByAll(ports));
+        if (accepting) { input.type = accepting.type; input.exact = accepting.exact; }
+    });
 
     // Inner input ports fed by nothing (typically the first block of the group) become inputs too,
     // with their own type: Dataset for an Inversion or a Filter, InversionResult for a Misfit filter
     const order = topologicalOrder(workflow) ?? workflow.nodes.map(n => n.id);
     order.filter(id => inside.has(id)).forEach(id => {
         const def = registry.get(workflow.nodes.find(n => n.id === id)!.type)!;
+        const fed = (portId: string) => workflow.edges.some(e => e.target === id && e.targetPort === portId);
         def.inputs.forEach(port => {
-            if (workflow.edges.some(e => e.target === id && e.targetPort === port.id)) return;
+            if (fed(port.id)) return;
+            // An alternative input left free because another one is connected (§16.3)
+            if (def.oneOfInputs?.includes(port.id) && def.oneOfInputs.some(fed)) return;
             inputs.push({
                 id: `in${inputs.length + 1}`,
                 label: portLabel(id, port.id, 'in'),
                 type: port.type,
-                optional: port.optional,
+                optional: port.optional || def.oneOfInputs?.includes(port.id),
+                exact: port.exact,
                 targets: [{ node: id, port: port.id }],
             });
         });
@@ -585,8 +597,7 @@ export function loopOptions(workflow: Workflow, registry: BlockRegistry, selecte
     if (!carried) {
         throw new CompositeError('A loop needs an input to pass a value from one iteration to the next: its first block must have an input');
     }
-    const fits = (type: string) => carried.type === 'any' || type === 'any'
-        || (type !== 'any' && isSubtypeOf(type as PayloadType, carried.type as PayloadType));
+    const fits = (type: string) => portAccepts(carried, type as PayloadType | 'any');
     const carriedOutputs = definition.outputs.filter(o => fits(o.type));
     if (carriedOutputs.length === 0) {
         throw new CompositeError(`No output of the selection can be passed back to “${carried.label}” (${carried.type})`);

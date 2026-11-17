@@ -2,6 +2,7 @@
 // Runs a workflow: blocks in dependency order, with per-block states, cache, provenance and
 // tagged items (§4.5, §4.6, §4.7, §4.10).
 
+import { describeAccepted, nameOf, portAccepts } from './dataTypes';
 import { hashValue } from './hash';
 import { BlockRegistry, paramsWithDefaults } from './registry';
 import {
@@ -397,6 +398,10 @@ async function runFlat(
         let unavailable: string | undefined;
         let skipped = false;
         const upstreamStatuses = new Set<string>();
+        // Alternative inputs (§16.3): one of them must be connected
+        if (def.oneOfInputs && !def.oneOfInputs.some(p => workflow.edges.some(e => e.target === id && e.targetPort === p))) {
+            unavailable ??= `Connect ${def.inputs.filter(p => def.oneOfInputs!.includes(p.id)).map(p => `“${p.label}”`).join(' or ')}`;
+        }
         for (const port of def.inputs) {
             const edges = workflow.edges.filter(e => e.target === id && e.targetPort === port.id);
             if (edges.length === 0) {
@@ -415,10 +420,10 @@ async function runFlat(
                     upstreamStatuses.add(source?.status ?? 'idle');
                     const sourceNode = byId.get(edge.source)!;
                     unavailable ??= describeUnavailable(sourceNode, registry.get(sourceNode.type), source);
-                } else if (payload.type === 'Report' || (port.type !== 'any' && !isSubtypeOf(payload.type, port.type))) {
-                    unavailable ??= `Input "${port.label}" received ${payload.type}, expects ${port.type}`;
+                } else if (!portAccepts(port, payload.type)) {
+                    unavailable ??= `Input "${port.label}" received ${nameOf(payload.type).toLowerCase()}, but takes ${describeAccepted(port)}`;
                 } else {
-                    values.push(payload);
+                    values.push(payload as DataPayload);
                 }
             }
             result.inputs[port.id] = values;

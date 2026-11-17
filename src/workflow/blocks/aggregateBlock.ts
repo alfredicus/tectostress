@@ -15,7 +15,12 @@ export const AggregateBlock: BlockDefinition = {
     description: 'Merge several datasets into one',
     category: 'Processing',
     role: 'computation',
-    inputs: [{ id: 'in', label: 'Datasets', type: 'Dataset', multiple: true }],
+    inputs: [{
+        id: 'in', label: 'Data', type: 'Dataset', multiple: true, meaning: {
+            Dataset: 'Merged',
+            InversionResult: 'Only its measured data are merged; its solution and predictions are discarded',
+        },
+    }],
     outputs: [{ id: 'out', label: 'Dataset', type: 'Dataset' }],
     params: [
         {

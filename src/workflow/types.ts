@@ -148,6 +148,13 @@ export interface PortDefinition {
     optional?: boolean;
     /** Output ports only: the output has the type of the payload received on this input port */
     sameAs?: string;
+    /**
+     * Input ports only: accepts `type` alone, not what contains it (a measured-data input that
+     * refuses inversion results). Drawn in one colour (§16.2).
+     */
+    exact?: boolean;
+    /** Input ports only: what the block does with each kind of data it accepts (tooltips, panel) */
+    meaning?: Partial<Record<PayloadType, string>>;
 }
 
 /**
@@ -292,6 +299,16 @@ export interface BlockDefinition {
      * never makes downstream blocks stale.
      */
     passThrough?: boolean;
+    /**
+     * Inputs of which exactly one must be connected, e.g. a Stereonet fed either measured data or an
+     * inversion result (§16.3). They are optional ports.
+     */
+    oneOfInputs?: string[];
+    /**
+     * Inputs of an older version of the block, replaced by one input per kind of data: on loading,
+     * a connection to `in` goes to `byType[type of what it carries]`, or to `otherwise`.
+     */
+    legacyInputs?: Record<string, { byType: Partial<Record<PayloadType, string>>; otherwise: string }>;
     /** Visualization descriptor id rendered by a view block */
     visualization?: string;
     /** Normalize scientific parameters before hashing and execution (e.g. fill method defaults) */
@@ -334,6 +351,8 @@ export interface CompositePort {
     type: PayloadType | 'any';
     /** Inputs only: the inner port it feeds is optional */
     optional?: boolean;
+    /** Inputs only: accepts `type` alone (see PortDefinition.exact) */
+    exact?: boolean;
 }
 
 /** A reusable group of blocks, used as a single block (§11.3) */

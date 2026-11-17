@@ -105,7 +105,7 @@ describe('grouping groups', () => {
                 node('histo', 'view.misfit-histogram'), node('mohr', 'view.mohr'),
                 node('sphere', 'view.sphere'), node('stereo', 'view.stereonet'),
             ],
-            ['histo', 'mohr', 'sphere', 'stereo'].map(v => edge('i', 'out', v)).concat([edge('d', 'out', 'i')]));
+            ['histo', 'mohr', 'sphere', 'stereo'].map(v => edge('i', 'out', v, ['sphere', 'stereo'].includes(v) ? 'result' : 'in')).concat([edge('d', 'out', 'i')]));
         const a = groupAsComposite(wf0, base, ['histo', 'mohr'], 'Histo + Mohr', makeId);
         const b = groupAsComposite(a.workflow, registryFor(a.workflow, base), ['sphere', 'stereo'], 'Sphere + Stereo', makeId);
         const both = groupAsComposite(b.workflow, registryFor(b.workflow, base), [a.nodeId, b.nodeId], 'All views', makeId);
@@ -117,7 +117,7 @@ describe('grouping groups', () => {
         const r = await runWorkflow(both.workflow, base, env(files));
         const inversion = r.nodes.i.outputs.out;
         ['histo', 'mohr'].forEach(v => expect(r.nodes[`${both.nodeId}/${a.nodeId}/${v}`].inputs.in[0]).toBe(inversion));
-        ['sphere', 'stereo'].forEach(v => expect(r.nodes[`${both.nodeId}/${b.nodeId}/${v}`].inputs.in[0]).toBe(inversion));
+        ['sphere', 'stereo'].forEach(v => expect(r.nodes[`${both.nodeId}/${b.nodeId}/${v}`].inputs.result[0]).toBe(inversion));
         expect(r.nodes[`${both.nodeId}/${a.nodeId}`].status).toBe('done');
         expect(r.nodes[both.nodeId].status).toBe('done');
     });

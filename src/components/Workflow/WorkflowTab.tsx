@@ -18,18 +18,28 @@ import {
     WORKFLOW_SCHEMA_VERSION, BlockDefinition, NodeResult, paramsWithDefaults, ReportPayload,
     registryFor, groupAsComposite, ungroupComposite, isCompositeType, outerId, CompositeDefinition, InnerParams,
     innerPresentation, BlockRegistry, makeLoop, loopOptions, LOOP_COLLECTED, compositeWithDependencies, PerIteration,
+    upgradeLibrary, colorOf, nameOf as typeName, describeAccepted, DATA_TYPES, FlowType, inputColors, portBackground, PayloadType,
 } from '../../workflow';
+import { Panel, OnConnectStart, FinalConnectionState } from '@xyflow/react';
 import { hashValue } from '../../workflow/hash';
-import BlockNode, { BlockFlowNode, PortFlowNode, PortNode, STATUS_STYLE } from './BlockNode';
+import BlockNode, { BLOCK_FAMILIES, BlockFlowNode, familyOfCategory, PortFlowNode, PortNode, STATUS_STYLE } from './BlockNode';
 import ParamEditor from './ParamEditor';
 import { PayloadSummary, ViewRenderer } from './WorkflowViews';
 import { buildReportHtml } from './reportHtml';
+import { GuardedValue, KeyValueStore, pushRecent, readRecent, RecentWorkflow, StoredRevision } from '../../workflow/browserStore';
 
 const STORAGE_KEY = 'tectostress-workflow';
 const LIBRARY_KEY = 'tectostress-workflow-library';
+const RECENT_KEY = 'tectostress-workflow-recent';
+
+/** Browser storage, looked up at each call (it may be blocked, or replaced by a sandbox) */
+const browserStorage: KeyValueStore = {
+    getItem: k => localStorage.getItem(k),
+    setItem: (k, v) => localStorage.setItem(k, v),
+    removeItem: k => localStorage.removeItem(k),
+};
 const DRAG_TYPE = 'application/tectostress-block';
 const CATEGORY_ORDER = ['Sources', 'Processing', 'Control', 'My blocks', 'Report', 'Views'];
-const EDGE_COLOR: Record<string, string> = { Dataset: '#0ea5e9', InversionResult: '#6366f1' };
 
 const nodeTypes = { block: BlockNode, port: PortNode };
 
@@ -37,13 +47,16 @@ const uid = () => Math.random().toString(36).slice(2, 8);
 
 const emptyWorkflow = (): Workflow => ({ schemaVersion: WORKFLOW_SCHEMA_VERSION, name: 'New workflow', nodes: [], edges: [] });
 
-function loadStoredWorkflow(registry: ReturnType<typeof createDefaultRegistry>): Workflow {
+function loadStoredWorkflow(store: GuardedValue, registry: ReturnType<typeof createDefaultRegistry>): Workflow {
     try {
-        const json = localStorage.getItem(STORAGE_KEY);
+        const json = store.read();
         if (json) return parseWorkflow(json, registry).workflow;
     } catch { /* unreadable or blocked storage: start empty */ }
     return emptyWorkflow();
 }
+
+/** Problem keeping the workflow in this browser (§15) */
+type StorageProblem = { kind: 'conflict'; other: StoredRevision } | { kind: 'failed'; error: string };
 
 /**
  * A new group in the library, with the groups it contains (§13.2), so it can be reused even after
@@ -63,7 +76,9 @@ function loadLibrary(): CompositeDefinition[] {
     try {
         const json = localStorage.getItem(LIBRARY_KEY);
         const list = json ? JSON.parse(json) : [];
-        return Array.isArray(list) ? list.filter(c => c && typeof c.type === 'string' && isCompositeType(c.type)) : [];
+        const groups = Array.isArray(list) ? list.filter(c => c && typeof c.type === 'string' && isCompositeType(c.type)) : [];
+        // Groups saved before Stereonet and Sphere had one input per kind of data (§16.3)
+        return upgradeLibrary(groups, createDefaultRegistry());
     } catch {
         return [];
     }
@@ -273,7 +288,8 @@ function ProvenanceDetails({ provenance }: { provenance: Provenance }) {
 function ViewNodeResult({ node, def, result, registry }: {
     node: WorkflowNode; def: BlockDefinition; result: NodeResult; registry: BlockRegistry;
 }) {
-    const inputs = result.inputs.in ?? [];
+    // Every input (Stereonet and Sphere have one per kind of data, §16.3)
+    const inputs = def.inputs.flatMap(p => result.inputs[p.id] ?? []);
     const views: string[] = node.type === 'view.dashboard'
         ? paramsWithDefaults(def, node, 'presentation').views
         : [node.type];
@@ -298,6 +314,61 @@ function ViewNodeResult({ node, def, result, registry }: {
 }
 
 /** Preview of a generated report, with download and print (PDF) */
+/** Legend of the kinds of data (§16.2): the only meaning of blue and purple */
+function TypeLegend() {
+    const dot = (colors: string[]) => (
+        <span className="inline-block w-2.5 h-2.5 rounded-full border border-white shadow-sm" style={{ background: portBackground(colors) }} />
+    );
+    return (
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 max-w-[420px] rounded border bg-white/90 px-2 py-1 text-[10px] text-gray-600 shadow-sm"
+            title="Dots and links: the kind of data (an input shows every kind it accepts). Words: the family of a block.">
+            <span className="flex items-center gap-1">{dot([DATA_TYPES.Dataset.color])} {DATA_TYPES.Dataset.name}</span>
+            <span className="flex items-center gap-1">{dot([DATA_TYPES.InversionResult.color])} {DATA_TYPES.InversionResult.name}</span>
+            <span className="flex items-center gap-1">{dot([DATA_TYPES.Dataset.color, DATA_TYPES.InversionResult.color])} Input taking either</span>
+            <span className="flex items-center gap-1">{dot([DATA_TYPES.any.color])} {DATA_TYPES.any.name}</span>
+            <span className="w-px h-3 bg-gray-300" />
+            {Object.values(BLOCK_FAMILIES).map(f => (
+                <span key={f.name} className="font-semibold uppercase tracking-wide" style={{ color: f.color }}
+                    title={`Blocks: ${f.meaning}`}>{f.name}</span>
+            ))}
+        </div>
+    );
+}
+
+/** What each input of a block accepts, what it receives, and what the block does with it (§16.3) */
+function InputsInfo({ node, def, workflow, registry }: {
+    node: WorkflowNode; def: BlockDefinition; workflow: Workflow; registry: BlockRegistry;
+}) {
+    return (
+        <div>
+            <div className="text-xs font-medium text-gray-700 mb-1">{def.inputs.length > 1 ? 'Inputs' : 'Input'}</div>
+            {def.oneOfInputs && <div className="text-[11px] text-gray-500 mb-1">Connect one of them</div>}
+            <div className="space-y-1.5">
+                {def.inputs.map(p => {
+                    const links = workflow.edges.filter(e => e.target === node.id && e.targetPort === p.id);
+                    const received = Array.from(new Set(links.map(e => resolveOutputType(workflow, registry, e.source, e.sourcePort))));
+                    return (
+                        <div key={p.id} className="text-xs">
+                            <div className="flex items-center gap-1.5">
+                                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: portBackground(inputColors(p)) }} />
+                                <span className="font-medium text-gray-700">{p.label}</span>
+                                <span className="text-gray-400">accepts {describeAccepted(p)}</span>
+                            </div>
+                            {received.length === 0 && <div className="ml-4 text-gray-400">Not connected</div>}
+                            {received.map(t => (
+                                <div key={t} className="ml-4 text-gray-600">
+                                    Receives {typeName(t).toLowerCase()}
+                                    {p.meaning?.[t as PayloadType] ? `: ${p.meaning[t as PayloadType]}` : ''}
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function ReportPanel({ payload, labelOf }: { payload: ReportPayload; labelOf: (blockId: string) => string }) {
     const [html, setHtml] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -359,7 +430,13 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         stressLibVersion: stressPackage.version,
     }), [files]);
 
-    const [workflow, setWorkflow] = useState<Workflow>(() => loadStoredWorkflow(baseRegistry));
+    // The workflow kept in this browser, never written over a newer version from another page (§15)
+    const [store] = useState(() => new GuardedValue(browserStorage, STORAGE_KEY));
+    const [workflow, setWorkflow] = useState<Workflow>(() => loadStoredWorkflow(store, baseRegistry));
+    const latestRef = useRef(workflow);
+    latestRef.current = workflow;
+    const [storageProblem, setStorageProblem] = useState<StorageProblem | null>(null);
+    const [recent, setRecent] = useState<RecentWorkflow[]>(() => readRecent(browserStorage, RECENT_KEY));
     // Block types available: the built-in ones, the groups of this workflow and of the library
     const registry = useMemo(() => registryFor(workflow, baseRegistry, library),
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -414,12 +491,57 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     const results = report?.nodes ?? {};
 
     // ---- Persistence of the graph (not of results, §4.8) ---------------------------------
+    // Written 0.3 s after the last change, and at once when the page is hidden, closed or reloaded
+    // (§15.2). Never over a version written by another page since: the user chooses.
+    const writeWorkflow = useCallback((wf: Workflow, force = false) => {
+        const outcome = store.write(serializeWorkflow(wf), force);
+        if (outcome.status === 'conflict') setStorageProblem({ kind: 'conflict', other: outcome.other });
+        else if (outcome.status === 'failed') setStorageProblem({ kind: 'failed', error: outcome.error });
+        else setStorageProblem(p => (p?.kind === 'failed' || force ? null : p));
+    }, [store]);
+
+    const unwrittenRef = useRef(false);
     useEffect(() => {
-        const t = setTimeout(() => {
-            try { localStorage.setItem(STORAGE_KEY, serializeWorkflow(workflow)); } catch { /* storage unavailable */ }
-        }, 300);
+        unwrittenRef.current = true;
+        const t = setTimeout(() => { unwrittenRef.current = false; writeWorkflow(workflow); }, 300);
         return () => clearTimeout(t);
-    }, [workflow]);
+    }, [workflow, writeWorkflow]);
+
+    useEffect(() => {
+        const flush = () => {
+            if (!unwrittenRef.current) return;
+            unwrittenRef.current = false;
+            writeWorkflow(latestRef.current);
+        };
+        const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+        window.addEventListener('pagehide', flush);
+        window.addEventListener('beforeunload', flush);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            flush();
+            window.removeEventListener('pagehide', flush);
+            window.removeEventListener('beforeunload', flush);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [writeWorkflow]);
+
+    // Another page wrote the workflow or the library
+    useEffect(() => {
+        const onStorage = (e: StorageEvent) => {
+            if (!e.key) return;
+            if (e.key.endsWith(store.revisionKey)) {
+                const other = store.changedElsewhere();
+                if (other) setStorageProblem({ kind: 'conflict', other });
+            } else if (e.key.endsWith(LIBRARY_KEY)) {
+                // Groups saved elsewhere are added; ours are kept
+                setLibrary(ours => [...ours, ...loadLibrary().filter(c => !ours.some(o => o.type === c.type))]);
+            } else if (e.key.endsWith(RECENT_KEY)) {
+                setRecent(readRecent(browserStorage, RECENT_KEY));
+            }
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, [store]);
 
     useEffect(() => {
         try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); } catch { /* storage unavailable */ }
@@ -485,6 +607,14 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     }, [registry, files, workflow.nodes, workflow.composites, library]);
 
     const replaceWorkflow = useCallback((next: Workflow) => {
+        // The workflow replaced is kept in Recent workflows (§15.2.4)
+        const current = latestRef.current;
+        if (current.nodes.length) {
+            setRecent(pushRecent(browserStorage, RECENT_KEY, {
+                name: current.name, keptAt: new Date().toISOString(), blocks: current.nodes.length,
+                json: serializeWorkflow(current),
+            }));
+        }
         setWorkflow(next);
         setReport(null);
         lastRunRef.current = undefined;
@@ -666,7 +796,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         }));
         const edges: Edge[] = [];
         const edgeStyle = (type: string, dim = false) => ({
-            stroke: EDGE_COLOR[type] ?? '#94a3b8', strokeWidth: 2, ...(dim ? { strokeDasharray: '4 4', opacity: 0.4 } : {}),
+            stroke: colorOf(type as FlowType), strokeWidth: 2, ...(dim ? { strokeDasharray: '4 4', opacity: 0.4 } : {}),
         });
         const innerWorkflow: Workflow = { ...workflow, nodes: inner, edges: def.edges };
         const typeOf = (node: string, port: string) => {
@@ -683,7 +813,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
             nodes.push({
                 id: `__in:${input.id}`, type: 'port', position: { x: minX - 320, y: column(k, def.inputs.length) },
                 draggable: false, selectable: false,
-                data: { side: 'in', label: input.label, type: input.type, optional: input.optional, note },
+                data: { side: 'in', label: input.label, type: input.type, exact: input.exact, optional: input.optional, note },
             });
             if (input.replaces && !isConnected) return;
             input.targets.forEach((t, j) => edges.push({
@@ -723,13 +853,35 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     }, [opened, openLevels, openPath, workflow, registry, results, innerSelectedId, inputFed]);
 
     // ---- React Flow wiring ---------------------------------------------------------------
-    const rfNodes: BlockFlowNode[] = useMemo(() => workflow.nodes.map(n => ({
-        id: n.id,
-        type: 'block',
-        position: n.position,
-        selected: selectedIds.includes(n.id),
-        data: { node: n, def: registry.get(n.type), result: results[n.id] },
-    })), [workflow.nodes, results, selectedIds, registry]);
+    // A link being dragged from an output: which inputs would take it (§16.4)
+    const [dragging, setDragging] = useState<{ node: string; port: string } | null>(null);
+    const rfNodes: BlockFlowNode[] = useMemo(() => workflow.nodes.map(n => {
+        const def = registry.get(n.type);
+        const outputTypes = Object.fromEntries((def?.outputs ?? []).map(o => [o.id, resolveOutputType(workflow, registry, n.id, o.id)]));
+        const connectable = dragging && def && n.id !== dragging.node
+            ? Object.fromEntries(def.inputs.map(p => [p.id,
+                canConnect(workflow, registry, { source: dragging.node, sourcePort: dragging.port, target: n.id, targetPort: p.id }).ok]))
+            : undefined;
+        return {
+            id: n.id,
+            type: 'block' as const,
+            position: n.position,
+            selected: selectedIds.includes(n.id),
+            data: { node: n, def, result: results[n.id], outputTypes, connectable },
+        };
+    }), [workflow, results, selectedIds, registry, dragging]);
+
+    const onConnectStart: OnConnectStart = useCallback((_e, params) => {
+        if (params.nodeId && params.handleId && params.handleType === 'source') setDragging({ node: params.nodeId, port: params.handleId });
+    }, []);
+    // Dropped on an input that refuses it: say why, instead of nothing happening
+    const onConnectEnd = useCallback((_e: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+        setDragging(null);
+        const from = state.fromHandle, to = state.toHandle;
+        if (!from || !to || state.isValid || from.type !== 'source' || to.type !== 'target' || !from.id || !to.id) return;
+        const check = canConnect(workflow, registry, { source: from.nodeId, sourcePort: from.id, target: to.nodeId, targetPort: to.id });
+        if (!check.ok && check.reason) setMessage({ kind: 'error', text: check.reason });
+    }, [workflow, registry]);
 
     const rfEdges: Edge[] = useMemo(() => workflow.edges.map(e => {
         const type = resolveOutputType(workflow, registry, e.source, e.sourcePort);
@@ -742,7 +894,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
             targetHandle: e.targetPort,
             selected: e.id === selectedEdgeId,
             animated: running,
-            style: { stroke: EDGE_COLOR[type] ?? '#94a3b8', strokeWidth: e.id === selectedEdgeId ? 3 : 2 },
+            style: { stroke: colorOf(type), strokeWidth: e.id === selectedEdgeId ? 3 : 2 },
         };
     }), [workflow, results, selectedEdgeId, registry]);
 
@@ -878,6 +1030,29 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
             askReplace(wf, `“${wf.name}”`);
             const problems = loaded.filter(i => i.severity === 'error');
             if (problems.length) setMessage({ kind: 'error', text: `Loaded with problems: ${problems.map(i => i.message).join('; ')}` });
+        } catch (e) {
+            setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
+        }
+    };
+
+    const fromRecent = (index: number) => {
+        const entry = recent[index];
+        if (!entry) return;
+        try {
+            const { workflow: wf } = parseWorkflow(entry.json, registry);
+            askReplace(wf, `“${wf.name}” from Recent workflows`);
+        } catch (e) {
+            setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
+        }
+    };
+
+    /** Conflict with another page: open its version (ours goes to Recent), or keep ours */
+    const openOtherVersion = () => {
+        try {
+            const json = store.read();
+            const wf = json ? parseWorkflow(json, registry).workflow : emptyWorkflow();
+            replaceWorkflow(wf);
+            setStorageProblem(null);
         } catch (e) {
             setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
         }
@@ -1098,7 +1273,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         {def.inputs.length === 0 && <div className="text-xs text-gray-400">None</div>}
                         {def.inputs.map(i => (
                             <div key={i.id} className="text-xs text-gray-600">
-                                {i.label} <span className="text-gray-400">({i.type}{i.optional ? ', optional' : ''})</span>
+                                {i.label} <span className="text-gray-400">(accepts {describeAccepted(i)}{i.optional ? ', optional' : ''})</span>
                                 {!isConnected(i.id) && <span className="text-gray-400"> · not connected</span>}
                             </div>
                         ))}
@@ -1106,7 +1281,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     <div>
                         <div className="text-xs font-medium text-gray-700 mb-1">Outputs</div>
                         {(groupDef?.outputs ?? def.outputs).map(o => (
-                            <div key={o.id} className="text-xs text-gray-600">{o.label} <span className="text-gray-400">({o.type})</span></div>
+                            <div key={o.id} className="text-xs text-gray-600">{o.label} <span className="text-gray-400">({typeName(o.type).toLowerCase()})</span></div>
                         ))}
                     </div>
                     {def.loop && groupDef && (() => {
@@ -1183,6 +1358,20 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     <option value="">Predefined workflows…</option>
                     {PREDEFINED_WORKFLOWS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
+                {recent.length > 0 && (
+                    <select
+                        className="border rounded px-2 py-1.5 text-sm bg-white w-44" value="" disabled={running}
+                        onChange={e => { fromRecent(Number(e.target.value)); e.target.value = ''; }}
+                        title="Workflows replaced in this browser, most recent first"
+                    >
+                        <option value="">Recent workflows…</option>
+                        {recent.map((r, i) => (
+                            <option key={i} value={i}>
+                                {r.name} · {r.blocks} block{r.blocks > 1 ? 's' : ''} · replaced {new Date(r.keptAt).toLocaleString()}
+                            </option>
+                        ))}
+                    </select>
+                )}
                 <button className={button} onClick={() => fileInputRef.current?.click()} disabled={running}>
                     <FolderOpen className="w-4 h-4" /> Load
                 </button>
@@ -1212,9 +1401,35 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
 
             {pendingReplace && (
                 <div className="flex items-center gap-3 p-2 rounded bg-amber-50 border border-amber-200 text-sm">
-                    <span>Replace the current workflow with {pendingReplace.label}? Unsaved changes will be lost.</span>
+                    <span>
+                        Replace the current workflow with {pendingReplace.label}?
+                        The current one will be kept in Recent workflows.
+                    </span>
                     <button className={button} onClick={() => replaceWorkflow(pendingReplace.workflow)}>Replace</button>
                     <button className={button} onClick={() => setPendingReplace(null)}>Cancel</button>
+                </div>
+            )}
+            {storageProblem?.kind === 'conflict' && (
+                <div className="flex flex-wrap items-center gap-3 p-2 rounded bg-red-50 border border-red-200 text-sm text-red-900">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="flex-1">
+                        This workflow was changed in another TectoStress tab or window
+                        ({new Date(storageProblem.other.savedAt).toLocaleTimeString()}). Nothing has been overwritten:
+                        choose the version to keep.
+                    </span>
+                    <button className={button} onClick={openOtherVersion}
+                        title="Show the other version here; this one is kept in Recent workflows">Open the other version</button>
+                    <button className={button} onClick={() => writeWorkflow(latestRef.current, true)}
+                        title="Keep the workflow shown here; the other version is replaced">Keep this one</button>
+                </div>
+            )}
+            {storageProblem?.kind === 'failed' && (
+                <div className="flex items-center gap-2 p-2 rounded bg-red-50 border border-red-200 text-sm text-red-900">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="flex-1">
+                        The workflow could not be kept in this browser ({storageProblem.error}).
+                        Use Save to keep a copy in a file.
+                    </span>
                 </div>
             )}
             {message && (
@@ -1244,7 +1459,8 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     )}
                     {!opened && palette.map(([category, blocks]) => (
                         <div key={category}>
-                            <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{category}</div>
+                            <div className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                                style={{ color: BLOCK_FAMILIES[familyOfCategory(category)].color }}>{category}</div>
                             {category === 'Control' && (
                                 <div
                                     onClick={() => setMessage({
@@ -1339,6 +1555,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         >
                             <Background gap={16} color="#c7d2fe" />
                             <Controls showInteractive={false} />
+                            <Panel position="bottom-right"><TypeLegend /></Panel>
                         </ReactFlow>
                     ) : (
                     <ReactFlow
@@ -1352,6 +1569,8 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         onNodeClick={onNodeClick}
                         onNodeDoubleClick={onNodeDoubleClick}
                         isValidConnection={isValidConnection}
+                        onConnectStart={onConnectStart}
+                        onConnectEnd={onConnectEnd}
                         onPaneClick={() => { selectOnly(null); setSelectedEdgeId(null); }}
                         zoomOnDoubleClick={false}
                         fitView
@@ -1360,6 +1579,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     >
                         <Background gap={16} />
                         <Controls showInteractive={false} />
+                        <Panel position="bottom-right"><TypeLegend /></Panel>
                     </ReactFlow>
                     )}
                     {!opened && workflow.nodes.length === 0 && (
@@ -1442,6 +1662,15 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                 <div className="font-semibold text-base">{selectedDef?.title ?? selected.type}</div>
                                 {selectedDef?.description && <div className="text-xs text-gray-500">{selectedDef.description}</div>}
                             </div>
+
+                            {issues.filter(i => i.nodeId === selected.id).map((i, k) => (
+                                <div key={k} className={`flex items-start gap-1 text-xs ${i.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}>
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />{i.message}
+                                </div>
+                            ))}
+                            {selectedDef && !isCompositeType(selected.type) && selectedDef.inputs.length > 0 && (
+                                <InputsInfo node={selected} def={selectedDef} workflow={workflow} registry={registry} />
+                            )}
 
                             {selectedResult && (
                                 <div className="space-y-1">

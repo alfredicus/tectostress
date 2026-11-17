@@ -12,7 +12,7 @@ import InversionMohrComponent from '../Mohr/InversionMohrComponent';
 import ParameterSpaceLandscapeComponent from '../ParameterSpace/ParameterSpaceLandscapeComponent';
 import MCMCStatsComponent from '../MCMCStats/MCMCStatsComponent';
 import {
-    BlockRegistry, DataPayload, InversionResultPayload, Payload, isSubtypeOf, PayloadType,
+    BlockRegistry, DataPayload, InversionResultPayload, Payload, portAccepts, DATA_TYPES,
     POPULATION_STYLE, ShowPopulation, classification, inversionData, populationOf, selectPopulation,
 } from '../../workflow';
 import { countRows } from '../../workflow/blocks/datasetUtils';
@@ -156,9 +156,14 @@ export function ViewRenderer({ viewType, payload: received, registry, show = 'bo
     viewType: string; payload: DataPayload; registry: BlockRegistry; show?: ShowPopulation;
 }) {
     const def = registry.get(viewType);
-    const expected = def?.inputs[0]?.type;
-    if (!def || (expected && expected !== 'any' && !isSubtypeOf(received.type, expected as PayloadType))) {
-        return null;
+    if (!def) return null;
+    // A view needing a stress solution, given measured data (e.g. in a Dashboard): say so (§16.3)
+    if (!def.inputs.some(p => portAccepts(p, received.type))) {
+        return (
+            <p className="text-sm text-gray-500 italic">
+                Needs an inversion result: {DATA_TYPES.Dataset.plural} have no stress solution yet.
+            </p>
+        );
     }
     const view = renderView(viewType, received, show);
     return view && (

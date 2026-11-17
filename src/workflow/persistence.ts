@@ -2,6 +2,7 @@
 // Workflow files: JSON with a schema version, migrated when loaded (§4.8).
 // Only the graph and its parameters are saved, never results.
 
+import { upgradeInputs } from './upgradeInputs';
 import { BlockRegistry } from './registry';
 import { validateWorkflow, ValidationIssue } from './validate';
 import { isCompositeType, registryFor, usedComposites } from './composite';
@@ -136,5 +137,7 @@ export function parseWorkflow(json: string, registry: BlockRegistry): { workflow
         edges,
         ...(raw.composites?.length ? { composites: raw.composites as CompositeDefinition[] } : {}),
     };
-    return { workflow, issues: validateWorkflow(workflow, registryFor(workflow, registry)) };
+    // Connections to inputs replaced by one input per kind of data (§16.3)
+    const upgraded = upgradeInputs(workflow, registry);
+    return { workflow: upgraded, issues: validateWorkflow(upgraded, registryFor(upgraded, registry)) };
 }

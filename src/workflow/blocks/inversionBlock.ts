@@ -17,7 +17,12 @@ export const InversionBlock: BlockDefinition = {
     description: 'Stress inversion of a dataset',
     category: 'Processing',
     role: 'computation',
-    inputs: [{ id: 'in', label: 'Dataset', type: 'Dataset' }],
+    inputs: [{
+        id: 'in', label: 'Data', type: 'Dataset', meaning: {
+            Dataset: 'The measured data are inverted',
+            InversionResult: 'Its measured data are inverted again; its solution and predictions are discarded',
+        },
+    }],
     outputs: [{ id: 'out', label: 'Inversion result', type: 'InversionResult' }],
     params: [
         {
@@ -45,6 +50,9 @@ export const InversionBlock: BlockDefinition = {
         const input = ctx.inputs.in[0];
         const { method, misfitCriterion, methodParams } = ctx.params;
         if (ctx.signal?.aborted) throw new Error('Cancelled');
+        if (input.type === 'InversionResult') {
+            ctx.log('info', 'The input is an inversion result: its measured data are inverted again; its solution and predictions are discarded');
+        }
 
         // A dataset that went through an earlier inversion is inverted from its measurements only
         const files = stripInversionFields(input.files);

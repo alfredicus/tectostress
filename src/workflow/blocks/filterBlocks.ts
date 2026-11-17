@@ -49,7 +49,12 @@ export const FilterBlock: BlockDefinition = {
     description: 'Keep the rows of some data types, and/or matching a column condition',
     category: 'Processing',
     role: 'computation',
-    inputs: [{ id: 'in', label: 'Dataset', type: 'Dataset' }],
+    inputs: [{
+        id: 'in', label: 'Data', type: 'Dataset', meaning: {
+            Dataset: 'Filtered; the output is measured data',
+            InversionResult: 'Filtered; the output is an inversion result',
+        },
+    }],
     // Filtering an inversion result keeps it an inversion result (fewer rows, same solution)
     outputs: [{ id: 'out', label: 'Filtered', type: 'Dataset', sameAs: 'in' }],
     bypass: { from: 'in', to: 'out' },
