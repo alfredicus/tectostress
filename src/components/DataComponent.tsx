@@ -23,6 +23,7 @@ import { matelles } from './data/matelles';
 import { synthetic_1 } from './data/synthetic-1';
 import { synthetic_2 } from './data/synthetic-2';
 import { synthetic_faults } from './data/synthetic-faults';
+import { synthetic_phases } from './data/synthetic-phases';
 
 interface DataComponentProps {
     files: DataFile[];
@@ -298,6 +299,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
         synthetic_1,
         synthetic_2,
         synthetic_faults,
+        synthetic_phases,
         matelles
     };
 
