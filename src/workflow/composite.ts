@@ -309,7 +309,7 @@ function replacements(def: CompositeDefinition, edges: WorkflowEdge[], composite
 }
 
 // Most significant state first: what the composite shows when its inner blocks differ
-const STATUS_PRIORITY: NodeStatus[] = ['error', 'running', 'blocked', 'stale', 'idle', 'done', 'skipped', 'inactive'];
+const STATUS_PRIORITY: NodeStatus[] = ['error', 'running', 'waiting', 'blocked', 'stale', 'idle', 'done', 'skipped', 'inactive'];
 
 /** Result of a composite node, from the results of its inner blocks */
 export function foldComposite(

@@ -376,6 +376,15 @@ async function runFlat(
         });
     };
 
+    // Every block of this run is shown waiting until its turn: otherwise it keeps the status of
+    // the last plan ("Out of date") while the blocks before it compute, and so does its group
+    if (!dryRun && onNodeUpdate) {
+        order.filter(id => !subset || subset.has(id)).forEach(id => {
+            const before = previous?.nodes[id];
+            onNodeUpdate(id, { inputs: {}, outputs: {}, logs: [], ...before, status: 'waiting', progress: undefined, progressMessage: undefined });
+        });
+    }
+
     for (const id of order) {
         if (subset && !subset.has(id)) continue;
         if (signal?.aborted) { cancelled = true; break; }

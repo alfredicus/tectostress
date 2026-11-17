@@ -27,6 +27,7 @@ export const STATUS_STYLE: Record<NodeStatus, { label: string; className: string
     idle: { label: 'Not run', className: 'bg-gray-100 text-gray-600' },
     stale: { label: 'Out of date', className: 'bg-amber-100 text-amber-800' },
     running: { label: 'Running', className: 'bg-blue-100 text-blue-700 animate-pulse' },
+    waiting: { label: 'Waiting', className: 'bg-blue-50 text-blue-600' },
     done: { label: 'Done', className: 'bg-green-100 text-green-800' },
     error: { label: 'Failed', className: 'bg-red-100 text-red-700' },
     blocked: { label: 'Blocked', className: 'bg-orange-100 text-orange-800' },

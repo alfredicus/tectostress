@@ -211,6 +211,39 @@ describe('running nested groups', () => {
         expect(r.nodes['tag-outliers']).toBeUndefined();
     });
 
+    test('while a run is under way, blocks not computed yet and their groups show "waiting"', async () => {
+        // The user case: an Inversion feeding a group of groups of views. While the Inversion
+        // computes, the views wait; they must not look "Out of date" (nor their groups)
+        const files = synthetic2Files();
+        const wf0 = workflow(
+            [dataNode('d', files), node('i', 'inversion', FAST_INVERSION), node('histo', 'view.misfit-histogram'), node('mohr', 'view.mohr'), node('stereo', 'view.stereonet')],
+            [edge('d', 'out', 'i'), edge('i', 'out', 'histo'), edge('i', 'out', 'mohr'), edge('i', 'out', 'stereo', 'result')]);
+        const inner = groupAsComposite(wf0, base, ['histo', 'mohr'], 'Inner', makeId);
+        const outer = groupAsComposite(inner.workflow, registryFor(inner.workflow, base), [inner.nodeId, 'stereo'], 'Outer', makeId);
+        const cache = new WorkflowCache();
+        const plan = await planWorkflow(outer.workflow, base, env(files), cache);
+        expect(plan.nodes[outer.nodeId].status).toBe('idle');
+
+        const seen: Record<string, string[]> = {};
+        let whileInversionRuns: Record<string, string> | undefined;
+        const latest: Record<string, string> = {};
+        await runWorkflow(outer.workflow, base, env(files), {
+            cache, targetNodeId: outer.nodeId,
+            onNodeUpdate: (id, r) => {
+                (seen[id] ??= []).push(r.status);
+                latest[id] = r.status;
+                if (id === 'i' && r.status === 'running') whileInversionRuns = { ...latest };
+            },
+        });
+        const histo = `${outer.nodeId}/${inner.nodeId}/histo`;
+        expect(seen[histo][0]).toBe('waiting');
+        expect(whileInversionRuns![histo]).toBe('waiting');
+        expect(whileInversionRuns![`${outer.nodeId}/${inner.nodeId}`]).toBe('waiting');
+        expect(whileInversionRuns![outer.nodeId]).toBe('waiting');
+        expect(latest[outer.nodeId]).toBe('done');
+        expect(latest[histo]).toBe('done');
+    });
+
     test('an inner group switched off stops its branch inside the outer group', async () => {
         const files = synthetic2Files();
         const n = nested(files);

@@ -410,6 +410,7 @@ export type NodeStatus =
     | 'idle'      // never run
     | 'stale'     // its result no longer matches its parameters or inputs
     | 'running'
+    | 'waiting'   // in the run under way, not computed yet (its turn has not come)
     | 'done'
     | 'error'
     | 'blocked'   // cannot run: an input is missing, errored, inactive or stale
