@@ -39,6 +39,17 @@ const CAMEL_CASE_ALIASES: Record<string, string> = {
     'bedding plane dip direction': 'beddingPlaneDipDirection',
 }
 
+const ALIAS_OF = new Map(Object.entries(CAMEL_CASE_ALIASES).map(([spaced, camel]) => [camel, spaced]));
+
+/**
+ * True for a camelCase copy added by `addCamelCaseAliases` (its spaced column is in the row):
+ * needed by the library, but a duplicate for the reader, so tables leave it out.
+ */
+export function isAliasColumn(row: Record<string, any>, key: string): boolean {
+    const spaced = ALIAS_OF.get(key);
+    return spaced !== undefined && spaced in row;
+}
+
 function addCamelCaseAliases(row: Record<string, any>): void {
     for (const [spaced, camel] of Object.entries(CAMEL_CASE_ALIASES)) {
         if (row[spaced] !== undefined && row[camel] === undefined) {

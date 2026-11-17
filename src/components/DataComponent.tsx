@@ -8,7 +8,7 @@ import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DataFile } from './DataFile';
-import { processCSV, ProcessCSVReturnType } from '../io/CSVParsing';
+import { isAliasColumn, processCSV, ProcessCSVReturnType } from '../io/CSVParsing';
 import {
     useVisualizationManager,
     AddVisualizationDialog,
@@ -671,7 +671,7 @@ const DataComponent: React.FC<DataComponentProps> = ({
                                                             backgroundColor: isDark ? '#1f2937' : '#ffffff'
                                                         }}
                                                     >
-                                                        {Object.entries(row).map(([name, value]) => (
+                                                        {Object.entries(row).filter(([name]) => !isAliasColumn(row, name)).map(([name, value]) => (
                                                             <TableCell
                                                                 key={name}
                                                                 style={{
