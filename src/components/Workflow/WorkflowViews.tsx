@@ -186,7 +186,9 @@ function renderView(viewType: string, received: DataPayload, show: ShowPopulatio
         case 'view.stereonet':
             return <Sized key={key}><StereonetComponent files={payload.files} width={560} height={560} autoEnable={true} {...groupProps} /></Sized>;
         case 'view.sphere':
-            return <Sized key={key}><SphereComponent files={payload.files} width={560} height={560} autoEnable={true} {...groupProps} /></Sized>;
+            // The principal values are in the results file (the files carry only the directions):
+            // without it the sphere cannot place the data in the principal frame (no slip lines)
+            return <Sized key={key}><SphereComponent files={isInversion(payload) ? [...payload.files, payload.resultsFile] : payload.files} width={560} height={560} autoEnable={true} {...groupProps} /></Sized>;
         case 'view.rose':
             return <Sized key={key} height={520}><RoseDiagramComponent files={payload.files} width={500} height={480} /></Sized>;
         case 'view.histogram':

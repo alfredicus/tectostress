@@ -154,7 +154,7 @@ export function createSphereSettings(overrides: Partial<SphereSettings> = {}): S
         typeColors: {},
         showPoles: true,
         poleSize: 0.025,
-        showDataNumbers: false,
+        showDataNumbers: true,
 
         plotDataBothSides: true,
         foldToPositiveSigma2: false,
