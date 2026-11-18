@@ -988,3 +988,102 @@ kind (*… · measured data*, *… · inversion result*), so every outside conne
 the groups of the library are upgraded the same way.
 
 *Status (16 Nov):* implemented (`dataTypes.ts`, `upgradeInputs.ts`; tests in `dataTypes.test.ts`).
+
+---
+
+## 17. Detecting several tectonic phases [PROPOSAL, for discussion]
+
+*Question (18 Nov):* select x % of the n data at random, invert, repeat m times (100, 1000, 10 000…):
+does the distribution of the results reveal several tectonic phases? Which other methods?
+
+### 17.1 What decides whether it works
+
+An inversion of a subset gives the tensor that best fits *that subset*. A subset mixing phases gives
+a compromise tensor that belongs to no real phase; a phase is seen only through subsets that are
+(almost) **pure**. For a phase making up a fraction p of the data and subsets of s data, a subset is
+pure with probability pˢ, and m subsets contain at least one pure subset with probability
+1 − (1 − pˢ)ᵐ. Number of subsets for 99 %: **m = ln 0.01 / ln(1 − pˢ)**.
+
+| Three phases, p = ⅓ | s = 4 | s = 5 | s = 10 | s = 20 |
+|---|---|---|---|---|
+| pˢ | 1.2 % | 0.4 % | 2·10⁻⁵ | ≈ 0 |
+| m for 99 % | ≈ 380 | ≈ 1 200 | ≈ 270 000 | — |
+
+Consequences:
+1. Subsets must be **small** (4 to 6 data: 4 is the minimum, the reduced tensor having 4 unknowns),
+   not a percentage of n. With 30–50 % of the data every inversion converges to the same compromise.
+2. m of 10³–10⁴ is the right order.
+3. What reveals the phases is **the set of solutions** (where the tensors fall), not the histogram of
+   the m misfits (pure subsets fit better, but it does not say which phases).
+
+### 17.2 Methods
+
+**A. Multiple inversion (solution cloud).** Published as the Multiple Inverse Method (Yamaji, 2000,
+J. Struct. Geol.). Invert m subsets of s data; show all solutions:
+- stereonet of the σ1 and σ3 axes of every solution, density contoured, with a histogram of R:
+  each phase is a cluster, mixed subsets a diffuse background;
+- clusters in tensor space (distance: angle between normalised deviatoric tensors), each cluster
+  centre being a candidate phase.
+
+**B. Consensus landscape.** For every tensor of a grid (orientation × R, as the misfit landscape),
+count **the data fitting it within a threshold** (e.g. 15°). The mean-misfit landscape has one
+minimum (the compromise); the count has **one peak per phase**. No random sampling, one evaluation
+of each datum per grid tensor: cheap. (A Hough-transform formulation was published by Yamaji, Otsubo
+and Sato, 2006, J. Struct. Geol.) TectoStress already computes a landscape: mostly a different
+quantity to show.
+
+**C. Sequential consensus (RANSAC).** Invert minimal subsets; keep the solution fitted by the most
+data within the threshold; these data are phase 1; remove them and repeat. A robust version of the
+predefined "Separate tectonic phases", which starts from an inversion of everything (the compromise)
+and works only when one phase dominates.
+
+**D. Mixture model (later).** K phases; alternately assign each datum to its most likely phase and
+re-invert each phase (EM); compare K = 1, 2, 3… with an information criterion (BIC) to estimate
+**how many** phases — the hardest question, which A–C answer only visually.
+
+**For every method: a phase for each datum.** For each datum, the solutions (or peaks) it fits
+within the threshold. Two data of the same phase fit the same solutions: grouping data by the
+solutions they share gives each datum a phase and a probability (unassigned when it fits none).
+
+### 17.3 Points to watch
+- **Data types constrain different things.** A tension fracture fixes only the σ3 axis, a stylolite
+  only σ1. A subset made of fractures only has no unique solution: subsets need enough striated
+  faults (rule to define: e.g. at least 4 faults, or weight by the number of constraints).
+- **One fault fits a whole family of tensors.** The threshold must be strict, or counts blur.
+- **Misfit definitions** (normalised cost θ/π, angles in degrees, weighting of data types under
+  ANGLE and DOT, weights: still to be settled with F. Maerten) come first: the threshold is an angle
+  per datum, never a converted mean cost.
+- **Cost.** 10⁴ Monte Carlo inversions are too slow in the browser. For minimal subsets: a direct
+  solver, or a pre-computed matrix *misfit (datum × grid tensor)* — computed once, it serves A, B and
+  C (a subset's best tensor is then the minimum of a sum of a few rows).
+
+### 17.4 In TectoStress
+- **Now, small m:** ForLoop over Resample (count = 4–6, seed varying with the iteration, §12.5) →
+  Inversion, collecting each iteration's result. Good for trying the idea; too heavy for m = 10⁴
+  (every iteration carries a full result and its provenance).
+- **Proposed blocks:**
+  - *Multiple inversion* (A, C): data in; parameters s, m, seed, threshold, method; outputs the
+    *solution cloud* and the data with a phase and its probability per datum;
+  - *Consensus landscape* view (B): count of fitted data over the parameter space, with its peaks;
+  - *Solution cloud* view: σ1/σ3 density stereonets, R histogram, clusters, and the Phase comparison
+    view of §14.6 for the clusters retained.
+- The phases found go on as ordinary data (one Filter per phase, or the Kept/Rejected pattern), so
+  each can be inverted alone and compared in the phase workbench (§14.6).
+
+### 17.5 Benchmark
+The Data-tab examples "Synthetic tectonic phases" (`src/components/data/synthetic/`) are built for it: C-a + E-a + S-a give
+60 data of 3 known phases ("Deformation phase" column), C-b + E-b + S-b the same with misfits up to
+18°. Also unequal mixtures (e.g. 30 + 20 + 10 data, by Resample) and 2-phase pairs. For each method:
+- angle between recovered and true σ1, σ3 axes; error on R;
+- proportion of data assigned to their true phase (and adjusted Rand index);
+- whether the number of phases is found;
+- running time in the browser.
+Kept as automated tests, so any change of method or of misfit definition is measured.
+
+### 17.6 Open questions
+1. Subset size s and the rule for fractures and stylolites in subsets.
+2. Threshold for "fits": fixed angle, or derived from the noise (e.g. the exact sets' 0.5°, the
+   noisy ones' half-Gaussian σ = 8°).
+3. Tensor distance for clustering, and which clustering (density-based, so the number of clusters
+   need not be given).
+4. Order: B first (cheap, reuses the landscape), then A, then C; D later.

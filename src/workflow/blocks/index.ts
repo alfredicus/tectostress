@@ -5,6 +5,7 @@ import { BlockRegistry } from '../registry';
 import { DataBlock } from './dataBlock';
 import { FilterBlock, MisfitFilterBlock } from './filterBlocks';
 import { InversionBlock } from './inversionBlock';
+import { ResampleBlock } from './resampleBlock';
 import { AddTagsBlock } from './tagBlock';
 import { AggregateBlock } from './aggregateBlock';
 import { ReportBlock } from './reportBlock';
@@ -16,6 +17,7 @@ export function createDefaultRegistry(): BlockRegistry {
         .register(DataBlock)
         .register(FilterBlock)
         .register(MisfitFilterBlock)
+        .register(ResampleBlock)
         .register(InversionBlock)
         .register(AggregateBlock)
         .register(AddTagsBlock)
@@ -28,6 +30,6 @@ export function createDefaultRegistry(): BlockRegistry {
 }
 
 export {
-    DataBlock, FilterBlock, MisfitFilterBlock, InversionBlock, AggregateBlock, AddTagsBlock, ReportBlock,
+    DataBlock, FilterBlock, MisfitFilterBlock, ResampleBlock, InversionBlock, AggregateBlock, AddTagsBlock, ReportBlock,
     ConditionalBlock, ExitLoopBlock, DashboardBlock, VIEW_BLOCKS,
 };

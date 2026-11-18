@@ -4,6 +4,7 @@
     "description": "Stress analysis application",
     "main": "index.js",
     "scripts": {
+        "dev": "webpack serve --mode development",
         "start": "webpack serve --mode development",
         "build": "webpack --mode production && cp -r ./public/help ./dist",
         "test": "jest",

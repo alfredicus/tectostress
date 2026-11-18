@@ -288,8 +288,9 @@ const MainInterfaceContent = () => {
     // ============================================================================
     return (
         <div className={containerClasses}>
-            <div className="container mx-auto px-4">
-                <div className="max-w-[98%] w-full mx-auto">
+            {/* The whole width of the screen: wide views (workflow, sphere, stereonets) need it */}
+            <div className="w-full px-4 lg:px-6">
+                <div className="w-full">
                     {/* Enhanced Header with Theme Controls */}
                     <div className={headerClasses}>
                         <div className="flex justify-between items-start mb-4">

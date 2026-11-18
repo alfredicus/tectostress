@@ -165,12 +165,12 @@ const BlockNode: React.FC<NodeProps<BlockFlowNode>> = ({ data, selected }) => {
             {def && showInLabels && labelColumn(def.inputs, 'in')}
 
             <div className="flex-1 min-w-0">
-            <div className="px-3 pt-2 pb-1">
+            <div className="px-3 pt-2 pb-1" title={def?.description ? `${title}\n${def.description}` : title}>
                 <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide"
                     style={{ color: BLOCK_FAMILIES[category.family].color }}>
                     <category.Icon className="w-3 h-3" /> {category.word}
                 </div>
-                <div className="font-semibold text-gray-800 truncate" title={title}>{title}</div>
+                <div className="font-semibold text-gray-800 truncate">{title}</div>
                 {node.label && def && <div className="text-[10px] text-gray-500">{def.title}</div>}
                 {!def && <div className="text-[10px] text-red-600">Unknown block type “{node.type}”</div>}
                 {note && <div className="text-[10px] text-indigo-700 max-w-[180px]">{note}</div>}

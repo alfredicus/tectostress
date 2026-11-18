@@ -118,6 +118,10 @@ export class Histogram {
         this.update()
     }
 
+    /**
+     * Sets the height of the histogram.
+     * @param h The new height.
+     */
     set height(h: number) {
         this.params.height = h
         this.svg_.attr('height', h)

@@ -7,7 +7,7 @@ import {
     Connection, Edge, EdgeChange, NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlertTriangle, Boxes, ChevronRight, Download, LogIn, Eraser, FilePlus, Repeat, FolderOpen, Play, Printer, Save, SkipForward, Square, Tag, Trash2, Ungroup, X } from 'lucide-react';
+import { AlertTriangle, Boxes, ChevronDown, ChevronRight, Download, LogIn, Eraser, FilePlus, Maximize2, FileX, Repeat, FolderOpen, Play, Printer, Save, SkipForward, Square, Tag, Trash2, Ungroup, X } from 'lucide-react';
 import appPackage from '../../../package.json';
 import stressPackage from '@alfredo-taboada/stress/package.json';
 import { DataFile } from '../DataFile';
@@ -26,11 +26,19 @@ import BlockNode, { BLOCK_FAMILIES, BlockFlowNode, familyOfCategory, PortFlowNod
 import ParamEditor from './ParamEditor';
 import { PayloadSummary, ViewRenderer } from './WorkflowViews';
 import { buildReportHtml } from './reportHtml';
+import {
+    describeGroup, forgetUnusedGroup, groupTooltip, libraryGroupsContaining, newGroupProblem, paletteGroups, removeFromLibrary,
+} from '../../workflow/library';
 import { GuardedValue, KeyValueStore, pushRecent, readRecent, RecentWorkflow, StoredRevision } from '../../workflow/browserStore';
 
 const STORAGE_KEY = 'tectostress-workflow';
 const LIBRARY_KEY = 'tectostress-workflow-library';
 const RECENT_KEY = 'tectostress-workflow-recent';
+const COLLAPSED_KEY = 'tectostress-palette-collapsed';
+const EDITOR_HEIGHT_KEY = 'tectostress-workflow-editor-height';
+/** Editor height by default: the screen, not less than 540 px */
+const DEFAULT_EDITOR_HEIGHT = 'max(540px, calc(100vh - 230px))';
+const MIN_EDITOR_HEIGHT = 240;
 
 /** Browser storage, looked up at each call (it may be blocked, or replaced by a sandbox) */
 const browserStorage: KeyValueStore = {
@@ -442,6 +450,54 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [workflow.composites, library, baseRegistry]);
     const [groupName, setGroupName] = useState('');
+    const [groupDescription, setGroupDescription] = useState('');
+    /** Removing a library group contained in others: they go too, once the user confirms */
+    const [pendingRemoval, setPendingRemoval] = useState<{ type: string; containing: string[] } | null>(null);
+    /** Height of the editor chosen by dragging its lower edge (null: the default), kept in this browser */
+    const [editorHeight, setEditorHeight] = useState<number | null>(() => {
+        try { const h = Number(localStorage.getItem(EDITOR_HEIGHT_KEY)); return h >= MIN_EDITOR_HEIGHT ? h : null; } catch { return null; }
+    });
+    const editorRef = useRef<HTMLDivElement>(null);
+    const keepEditorHeight = (h: number | null) => {
+        setEditorHeight(h);
+        try { if (h === null) localStorage.removeItem(EDITOR_HEIGHT_KEY); else localStorage.setItem(EDITOR_HEIGHT_KEY, String(Math.round(h))); } catch { /* storage unavailable */ }
+    };
+    const clampHeight = (h: number) => Math.max(MIN_EDITOR_HEIGHT, Math.min(h, window.innerHeight * 3));
+    const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!editorRef.current) return;
+        e.preventDefault();
+        const handle = e.currentTarget;
+        handle.setPointerCapture(e.pointerId);
+        const startY = e.clientY;
+        const startHeight = editorRef.current.getBoundingClientRect().height;
+        let last = startHeight;
+        const move = (ev: PointerEvent) => { last = clampHeight(startHeight + ev.clientY - startY); setEditorHeight(last); };
+        const up = () => {
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', up);
+            handle.removeEventListener('pointercancel', up);
+            keepEditorHeight(last);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', up);
+        handle.addEventListener('pointercancel', up);
+    };
+    const resizeByKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        const step = e.shiftKey ? 100 : 20;
+        const current = editorRef.current?.getBoundingClientRect().height ?? 540;
+        if (e.key === 'ArrowUp') { e.preventDefault(); keepEditorHeight(clampHeight(current - step)); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); keepEditorHeight(clampHeight(current + step)); }
+    };
+
+    /** Palette categories folded by the user (kept in this browser) */
+    const [collapsed, setCollapsed] = useState<string[]>(() => {
+        try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]'); } catch { return []; }
+    });
+    const toggleCategory = (category: string) => setCollapsed(c => {
+        const next = c.includes(category) ? c.filter(x => x !== category) : [...c, category];
+        try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+        return next;
+    });
     const [report, setReport] = useState<WorkflowRunReport | null>(null);
     const [running, setRunning] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -691,16 +747,18 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     const loopSelection = () => {
         if (!loopChoice || !('options' in loopChoice) || !loopChoice.options) return;
         const { carriedOutputs, collectable } = loopChoice.options;
+        if (newGroupProblem(groupName, groupDescription, registry)) return;
         try {
-            const r = makeLoop(workflow, registry, selectedIds, groupName || 'Loop', uid, {
+            const r = describeGroup(makeLoop(workflow, registry, selectedIds, groupName, uid, {
                 carriedOutput: loopDraft.carriedOutput ?? carriedOutputs[0].id,
                 collect: loopDraft.collect ?? collectable[0]?.id ?? 'none',
                 maxIterations: loopDraft.maxIterations,
-            });
+            }), groupName, groupDescription);
             setWorkflow(r.workflow);
             setLibrary(lib => addToLibrary(lib, r.definition, r.workflow.composites ?? []));
             selectOnly(r.nodeId);
             setGroupName('');
+            setGroupDescription('');
             setLoopDraft({ maxIterations: 10 });
         } catch (e) {
             setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
@@ -708,12 +766,14 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     };
 
     const groupSelection = () => {
+        if (newGroupProblem(groupName, groupDescription, registry)) return;
         try {
-            const r = groupAsComposite(workflow, registry, selectedIds, groupName || 'My block', uid);
+            const r = describeGroup(groupAsComposite(workflow, registry, selectedIds, groupName, uid), groupName, groupDescription);
             setWorkflow(r.workflow);
             setLibrary(lib => addToLibrary(lib, r.definition, r.workflow.composites ?? []));
             selectOnly(r.nodeId);
             setGroupName('');
+            setGroupDescription('');
         } catch (e) {
             setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
         }
@@ -1106,6 +1166,10 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         updateNode(openPath[0], n => withInnerParams(n, openPath.slice(1), innerNode.id, scope, { ...current, [key]: value }, composites));
     };
 
+    /** Groups of the palette (My blocks): in the library, in the workflow, on the canvas */
+    const myGroups = useMemo(() => new Map(paletteGroups(workflow, library).map(g => [g.def.type, g])),
+        [workflow, library]);
+
     const palette = useMemo(() => {
         const groups = new Map<string, BlockDefinition[]>();
         registry.list().forEach(b => groups.set(b.category, [...(groups.get(b.category) ?? []), b]));
@@ -1365,6 +1429,16 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                 <button className={button} onClick={() => askReplace(emptyWorkflow(), 'an empty workflow')} disabled={running}>
                     <FilePlus className="w-4 h-4" /> New
                 </button>
+                <button className={button} disabled={running || workflow.nodes.length === 0}
+                    onClick={() => askReplace({ ...workflow, nodes: [], edges: [], composites: undefined }, 'an empty canvas (same name; groups stay in My blocks)')}
+                    title="Remove every block and link, keeping the name (the current workflow goes to Recent workflows)">
+                    <FileX className="w-4 h-4" /> Clear
+                </button>
+                <button className={button} disabled={canvasNodeCount === 0}
+                    onClick={() => fitView({ padding: 0.2, duration: 300 })}
+                    title="Zoom to show the whole workflow (or the whole opened group)">
+                    <Maximize2 className="w-4 h-4" /> Fit
+                </button>
                 <select
                     className="border rounded px-2 py-1.5 text-sm bg-white" value="" disabled={running}
                     onChange={e => { fromTemplate(e.target.value); e.target.value = ''; }}
@@ -1461,7 +1535,8 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
             )}
 
             {/* Palette | canvas | inspector */}
-            <div className="flex border rounded-lg overflow-hidden bg-white" style={{ height: 540 }}>
+            <div ref={editorRef} className="flex border rounded-lg overflow-hidden bg-white"
+                style={{ height: editorHeight ?? DEFAULT_EDITOR_HEIGHT }}>
                 <div className="w-48 border-r overflow-y-auto p-2 space-y-3 bg-gray-50">
                     {opened && (
                         <div className="text-xs text-gray-600 space-y-2">
@@ -1473,8 +1548,15 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     )}
                     {!opened && palette.map(([category, blocks]) => (
                         <div key={category}>
-                            <div className="text-[11px] font-semibold uppercase tracking-wide mb-1"
-                                style={{ color: BLOCK_FAMILIES[familyOfCategory(category)].color }}>{category}</div>
+                            <button type="button" onClick={() => toggleCategory(category)}
+                                className="w-full flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide mb-1 hover:opacity-80"
+                                style={{ color: BLOCK_FAMILIES[familyOfCategory(category)].color }}
+                                title={collapsed.includes(category) ? 'Show these blocks' : 'Hide these blocks'}>
+                                {collapsed.includes(category) ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                {category}
+                                {collapsed.includes(category) && <span className="font-normal normal-case text-gray-400">({blocks.length + (category === 'Control' ? 1 : 0)})</span>}
+                            </button>
+                            {!collapsed.includes(category) && <>
                             {category === 'Control' && (
                                 <div
                                     onClick={() => setMessage({
@@ -1489,32 +1571,56 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                     <Repeat className="w-3.5 h-3.5 text-gray-500" /> ForLoop
                                 </div>
                             )}
-                            {blocks.map(b => (
+                            {blocks.map(b => {
+                                const group = myGroups.get(b.type);
+                                const removal = pendingRemoval?.type === b.type ? pendingRemoval : null;
+                                return (
+                                <div key={b.type}>
                                 <div
-                                    key={b.type}
                                     draggable
                                     onDragStart={e => { e.dataTransfer.setData(DRAG_TYPE, b.type); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => addBlock(b.type)}
-                                    title={b.description}
-                                    className="group flex items-center px-2 py-1.5 mb-1 rounded bg-white border text-sm cursor-grab hover:border-blue-400"
+                                    title={group
+                                        ? `${groupTooltip(group.def, registry)}${!group.inLibrary ? '\n(Only in this workflow' + (group.usedInWorkflow ? ', on the canvas: delete it there to remove it)' : ')') : ''}`
+                                        : b.description}
+                                    className="group flex items-center gap-1 px-2 py-1.5 mb-1 rounded bg-white border text-sm cursor-grab hover:border-blue-400"
                                 >
                                     <span className="flex-1 truncate">{b.title}</span>
-                                    {library.some(c => c.type === b.type) && (
+                                    {group && !group.inLibrary && <span className="text-[10px] text-gray-400">workflow</span>}
+                                    {group && (group.inLibrary || !group.usedInWorkflow) && (
                                         <button
-                                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600"
-                                            title="Remove from my blocks (workflows using it keep their copy)"
+                                            className="opacity-30 group-hover:opacity-100 text-gray-500 hover:text-red-600"
+                                            title={group.inLibrary
+                                                ? `Remove from My blocks${group.usedInWorkflow ? ' (this workflow keeps its copy)' : ''}`
+                                                : 'Remove from this workflow (no longer on the canvas)'}
                                             onClick={e => {
                                                 e.stopPropagation();
-                                                const user = library.find(c => c.type !== b.type && compositeWithDependencies(c.type, library).some(d => d.type === b.type));
-                                                if (user) setMessage({ kind: 'error', text: `“${b.title}” is used inside “${user.title}” in My blocks: remove that one first` });
-                                                else setLibrary(lib => lib.filter(c => c.type !== b.type));
+                                                if (!group.inLibrary) { setWorkflow(wf => forgetUnusedGroup(wf, b.type)); return; }
+                                                const containing = libraryGroupsContaining(b.type, library).map(c => c.title);
+                                                if (containing.length) setPendingRemoval({ type: b.type, containing });
+                                                else setLibrary(lib => removeFromLibrary(b.type, lib));
                                             }}
                                         >
                                             <X className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                 </div>
-                            ))}
+                                {removal && (
+                                    <div className="mb-2 p-2 rounded border border-amber-300 bg-amber-50 text-xs space-y-1.5">
+                                        <p>“{b.title}” is inside {removal.containing.map(t => `“${t}”`).join(', ')} in My blocks: {removal.containing.length > 1 ? 'they are' : 'it is'} removed too.</p>
+                                        <div className="flex gap-2">
+                                            <button className="px-2 py-0.5 rounded bg-red-600 text-white"
+                                                onClick={() => { setLibrary(lib => removeFromLibrary(b.type, lib)); setPendingRemoval(null); }}>
+                                                Remove {removal.containing.length + 1}
+                                            </button>
+                                            <button className="px-2 py-0.5 rounded border bg-white" onClick={() => setPendingRemoval(null)}>Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+                                </div>
+                                );
+                            })}
+                            </>}
                         </div>
                     ))}
                     {!opened && <p className="text-[11px] text-gray-500">Drag a block onto the canvas, or click it. Cmd/Ctrl-click or Shift-drag on the canvas selects several blocks. Double-click a group to look inside.</p>}
@@ -1613,11 +1719,21 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         <div className="space-y-3">
                             <div className="font-semibold text-base">{selectedIds.length} blocks selected</div>
                             <label className="block">
-                                <span className="text-xs text-gray-600">Name of the new block</span>
-                                <input className="w-full border rounded px-2 py-1 text-sm" value={groupName} placeholder="My block"
+                                <span className="text-xs text-gray-600">Name of the new block (unique)</span>
+                                <input className="w-full border rounded px-2 py-1 text-sm" value={groupName} placeholder="e.g. Clean and invert"
                                     onChange={e => setGroupName(e.target.value)} />
                             </label>
-                            <button className={button} onClick={groupSelection} disabled={running}>
+                            <label className="block">
+                                <span className="text-xs text-gray-600">Description (shown when the mouse is over it)</span>
+                                <textarea className="w-full border rounded px-2 py-1 text-sm" rows={2} value={groupDescription}
+                                    placeholder="What it does, on which data"
+                                    onChange={e => setGroupDescription(e.target.value)} />
+                            </label>
+                            {newGroupProblem(groupName, groupDescription, registry) && (
+                                <p className="text-xs text-amber-700">{newGroupProblem(groupName, groupDescription, registry)}</p>
+                            )}
+                            <button className={button} onClick={groupSelection}
+                                disabled={running || !!newGroupProblem(groupName, groupDescription, registry)}>
                                 <Boxes className="w-4 h-4" /> Group as block
                             </button>
                             <p className="text-xs text-gray-500">
@@ -1654,7 +1770,9 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                                                     value={loopDraft.maxIterations}
                                                     onChange={e => setLoopDraft(d => ({ ...d, maxIterations: Math.max(1, Number(e.target.value) || 1) }))} />
                                             </label>
-                                            <button className={button} onClick={loopSelection} disabled={running}>
+                                            <button className={button} onClick={loopSelection}
+                                                disabled={running || !!newGroupProblem(groupName, groupDescription, registry)}
+                                                title="Uses the name and description above">
                                                 <Repeat className="w-4 h-4" /> Make a loop
                                             </button>
                                             <p className="text-xs text-gray-500">Put an ExitLoop among the blocks to stop before the maximum.</p>
@@ -1851,6 +1969,14 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                     )}
                     </>)}
                 </div>
+            </div>
+
+            {/* Lower edge of the editor: drag to share the screen with the results */}
+            <div role="separator" aria-orientation="horizontal" aria-label="Resize the editor" tabIndex={0}
+                onPointerDown={startResize} onDoubleClick={() => keepEditorHeight(null)} onKeyDown={resizeByKey}
+                title="Drag to resize the editor and the results (double-click: default height; arrow keys also work)"
+                className="group -my-1.5 h-4 flex items-center justify-center cursor-row-resize touch-none select-none focus:outline-none">
+                <div className="w-16 h-1.5 rounded-full bg-gray-300 group-hover:bg-blue-400 group-focus:bg-blue-500" />
             </div>
 
             {/* Results */}

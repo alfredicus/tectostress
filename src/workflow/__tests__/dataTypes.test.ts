@@ -19,6 +19,7 @@ const R: PayloadType = 'InversionResult';
 /** The table of §16.3: block → input → kinds accepted */
 const TABLE: Record<string, Record<string, PayloadType[]>> = {
     'filter': { in: [M, R] },
+    'resample': { in: [M, R] },
     'aggregate': { in: [M, R] },
     'inversion': { in: [M, R] },
     'misfit-filter': { in: [R] },
