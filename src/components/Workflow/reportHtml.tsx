@@ -167,7 +167,7 @@ export async function buildReportHtml(doc: ReportDocument, labelOf: (blockId: st
     for (const [tag, items] of Array.from(byTag.entries())) {
         const html: string[] = [];
         for (const item of items) html.push(await itemHtml(item, doc, labelOf));
-        sections.push(`<h2>${esc(tag)}</h2>${html.join('\n')}`);
+        sections.push(`${tag ? `<h2>${esc(tag)}</h2>` : ''}${html.join('\n')}`);
     }
 
     return `<!doctype html>

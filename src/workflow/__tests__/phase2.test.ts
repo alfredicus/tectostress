@@ -1,6 +1,8 @@
 import { createDefaultRegistry } from '../blocks';
 import { runWorkflow, planWorkflow, WorkflowCache } from '../executor';
 import { instantiateTemplate, PREDEFINED_WORKFLOWS } from '../templates';
+import { canConnect } from '../validate';
+import { parseWorkflow } from '../persistence';
 import { DatasetPayload, ReportPayload, Workflow } from '../types';
 import { countRows, fileRef } from '../blocks/datasetUtils';
 import { dataNode, edge, env, FAST_INVERSION, node, seedRandom, synthetic2Files, workflow } from './fixtures';
@@ -64,7 +66,7 @@ describe('aggregate', () => {
 });
 
 describe('generate report', () => {
-    /** The predefined workflow, a misfit threshold that rejects some data, and a report block */
+    /** The predefined workflow, a misfit threshold that rejects some data, and a report of Inversion 2 */
     function withReport(params: Record<string, any> = {}): { wf: Workflow; files: ReturnType<typeof synthetic2Files> } {
         const files = synthetic2Files();
         const wf = instantiateTemplate(PREDEFINED_WORKFLOWS[0]);
@@ -73,14 +75,12 @@ describe('generate report', () => {
             if (n.type === 'inversion') Object.assign(n.scientificParams, FAST_INVERSION);
             if (n.type === 'misfit-filter') n.scientificParams.threshold = 3;
         });
-        // Also keep the final inversion for the report
-        wf.nodes.push(node('tag-final', 'add-tags', { tag: 'final', note: 'Re-inverted data' }));
-        wf.edges.push(edge('inversion-2', 'out', 'tag-final'));
-        wf.nodes.push(node('report', 'report', params));
+        wf.nodes.push({ ...node('report', 'report', params), typeVersion: 2 });
+        wf.edges.push(edge('inversion-2', 'out', 'report'));
         return { wf, files };
     }
 
-    test('runs last and collects every tagged item with its lineage', async () => {
+    test('reports the inversion result connected to it, with its lineage', async () => {
         const { wf, files } = withReport({ title: 'Test report' });
         const r = await runWorkflow(wf, registry, env(files));
         expect(r.nodes['report'].status).toBe('done');
@@ -88,41 +88,39 @@ describe('generate report', () => {
 
         expect(doc.title).toBe('Test report');
         expect(doc.workflowName).toBe(wf.name);
-        expect(doc.items.map(i => i.tag).sort()).toEqual(['final', 'outlier']);
         expect(doc.warnings).toEqual([]);
-
-        const final = doc.items.find(i => i.tag === 'final')!;
-        expect(final.note).toBe('Re-inverted data');
-        expect(final.lineage.map(p => p.blockType)).toEqual(['data', 'inversion', 'misfit-filter', 'inversion']);
-        expect(final.lineage[0].sourceFiles).toEqual(files.map(fileRef));
-        expect(final.lineage[final.lineage.length - 1].id).toBe(final.payload.provenance.id);
+        expect(doc.items).toHaveLength(1);
+        const item = doc.items[0];
+        expect(item.payload).toBe(r.nodes['inversion-2'].outputs.out);
+        expect(item.nodeId).toBe('inversion-2');
+        expect(item.lineage.map(p => p.blockType)).toEqual(['data', 'inversion', 'misfit-filter', 'inversion']);
+        expect(item.lineage[0].sourceFiles).toEqual(files.map(fileRef));
     });
 
-    test('keeps only the requested tags and warns about missing ones', async () => {
-        const { wf, files } = withReport({ tags: 'outlier, nothing' });
-        const doc = ((await runWorkflow(wf, registry, env(files))).nodes['report'].outputs.report as ReportPayload).document;
-        expect(doc.items.map(i => i.tag)).toEqual(['outlier']);
-        expect(doc.warnings).toEqual(['No item tagged “nothing”']);
-    });
-
-    test('flags items that could not be refreshed', async () => {
+    test('needs an inversion result: measured data are refused, unconnected it is blocked', async () => {
         const { wf, files } = withReport();
-        const cache = new WorkflowCache();
-        const first = await runWorkflow(wf, registry, env(files), { cache });
-        // The data are gone: every branch fails, the report keeps the last items, flagged
-        const second = await runWorkflow(wf, registry, env([]), { cache, previous: first });
-        const doc = (second.nodes['report'].outputs.report as ReportPayload).document;
-        expect(doc.items).toHaveLength(2);
-        doc.items.forEach(i => expect(i.outdated).toBe(true));
-        expect(doc.warnings[0]).toMatch(/2 item\(s\) come from an earlier run/);
+        expect(canConnect(wf, registry, { source: 'data', sourcePort: 'out', target: 'report', targetPort: 'in' }).ok).toBe(false);
+        wf.edges = wf.edges.filter(e => e.target !== 'report');
+        const r = await runWorkflow(wf, registry, env(files));
+        expect(r.nodes['report'].status).toBe('blocked');
     });
 
-    test('"run to here" on a report runs the whole workflow; a plan never generates it', async () => {
+    test('a saved v1 report (tags) loses its tag filter and keeps its title', () => {
+        const json = JSON.stringify({ schemaVersion: 1, name: 'old', nodes: [
+            { id: 'r', type: 'report', typeVersion: 1, scientificParams: { title: 'Phases', tags: 'phase' }, presentationParams: {} },
+        ], edges: [] });
+        const { workflow: wf } = parseWorkflow(json, registry);
+        expect(wf.nodes[0].typeVersion).toBe(2);
+        expect(wf.nodes[0].scientificParams).toEqual({ title: 'Phases' });
+    });
+
+    test('"run to here" on a report runs what it depends on, nothing else; a plan never generates it', async () => {
         const { wf, files } = withReport();
         const cache = new WorkflowCache();
         const r = await runWorkflow(wf, registry, env(files), { cache, targetNodeId: 'report' });
         expect(r.nodes['inversion-2'].status).toBe('done');
-        expect((r.nodes['report'].outputs.report as ReportPayload).document.items).toHaveLength(2);
+        expect(r.nodes['report'].status).toBe('done');
+        expect(r.nodes['tag-outliers']).toBeUndefined();
 
         const plan = await planWorkflow(wf, registry, env(files), cache, r);
         expect(plan.nodes['report'].status).toBe('stale');

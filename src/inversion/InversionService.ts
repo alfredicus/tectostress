@@ -25,6 +25,11 @@ export interface InversionRequest {
     /** Method parameters, as edited in the UI (sliders give numbers) */
     params: Record<string, number>;
     misfitCriterion: MisfitCriterion;
+    /**
+     * Share of the data (best fitted, %) whose misfits make the minimised misfit; 100 or absent:
+     * all, the plain mean. Needs a stress library with SearchMethod.setMisfitKeepPercent.
+     */
+    misfitKeepPercent?: number;
 }
 
 export interface InversionCallbacks {
@@ -145,6 +150,17 @@ export async function runInversion(
         .map(([key, value]) => `${key}: ${value}`)
         .join('\n');
     log('info', 'Using parameters:', paramDetails);
+
+    const keepPercent = request.misfitKeepPercent ?? 100;
+    if (keepPercent < 100) {
+        const setter = (searchMethod as any).setMisfitKeepPercent;
+        if (typeof setter !== 'function') {
+            // Never invert all the data while saying otherwise
+            throw new Error(`Fitting only the best ${keepPercent} % of the data needs a newer stress library (SearchMethod.setMisfitKeepPercent). Use 100 %, or update the library.`);
+        }
+        setter.call(searchMethod, keepPercent);
+        log('info', `Misfit minimised over the best ${keepPercent} % of the data (the others are ignored by the search)`);
+    }
 
     if (callbacks.onSearchProgress) {
         searchMethod.addObserver(new SimulationObserver(callbacks.onSearchProgress));
@@ -282,6 +298,7 @@ export async function runInversion(
         ...sol,
         elapsedMs,
         misfitCriterion,
+        ...(keepPercent < 100 ? { misfitKeepPercent: keepPercent } : {}),
         mcmcStats,
         rotationMatrixW: sol.rotationMatrixW as number[][],
         analysis: {
@@ -432,6 +449,8 @@ export function buildResultsFile(
             { parameter: 'stress_ratio', value: solution.stressRatio, unit: '' },
             { parameter: 'fit_percentage', value: (1 - solution.misfit) * 100, unit: '%' },
             { parameter: 'misfit_degrees', value: solution.misfit * 180 / Math.PI, unit: 'degrees' },
+            ...(solution.misfitKeepPercent !== undefined
+                ? [{ parameter: 'misfit_over_best_percent', value: solution.misfitKeepPercent, unit: '%' }] : []),
             ...(solution.analysis ? [
                 { parameter: 'sigma1', value: solution.analysis.principalStresses.sigma1.value, unit: '' },
                 { parameter: 'sigma2', value: solution.analysis.principalStresses.sigma2.value, unit: '' },

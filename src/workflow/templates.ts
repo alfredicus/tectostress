@@ -85,7 +85,6 @@ function phaseSeparation(): Workflow {
         nodes: [
             ...workflow.nodes,
             { ...n('all-phases', 'view.stereonet', 480, 100, 'All phases'), typeVersion: 2 },
-            n('report', 'report', 480, 220, undefined, { title: 'Tectonic phases', tags: 'phase' }),
         ],
         edges: [
             ...workflow.edges,

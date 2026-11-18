@@ -90,7 +90,7 @@ Every block has exactly one role. **[DECIDED]**
 | **Source** | Brings data into the graph | none → `Dataset` | Data |
 | **Computation** | Produces a new scientific value | payloads → payloads | Filter, Inversion, Add Tags, Aggregate, Script |
 | **View** | Displays its input. Never changes it and never triggers a computation. | payloads → **none** | Stereonet, Histogram, Mohr, Sphere, Rose, Summary, Dashboard |
-| **Report** | Exports or documents results | tagged items → `Report` | Generate report |
+| **Report** | Exports or documents results | `InversionResult` → `Report` | Generate report |
 
 Views are **leaves**: they have no outputs. Grouping or restyling views therefore can never cause
 an inversion to re-run. **[DECIDED]**
@@ -188,10 +188,11 @@ A **tag** marks a value (a data set or a result) to **keep in memory for a poten
   **tagged items**: `{ tag, note, value, provenance }`. **[PROPOSAL]**
 - Tagged items are listed in a **Tagged items** panel of the Workflow tab. Each entry shows its tag,
   type, size and provenance. **[PROPOSAL]**
-- **Generate report** does not need a wire from every branch. It collects the tagged items, either
-  all of them or those with the selected tags, and renders each one according to its type: **[PROPOSAL]**
-  - `Dataset`: a table and summary statistics.
-  - `InversionResult`: a summary plus default figures (stereonet, misfit histogram).
+- **Generate report** *(v2, 18 Nov, DECIDED)*: one required input, **exactly one inversion result**;
+  the report covers that result only: summary (solution, misfit), stereonet, misfit histogram, data
+  table, provenance. It no longer gathers tagged items (v1); Add Tags keeps values for the Tagged
+  items panel. A saved v1 report loses its tag filter and must be connected. "Run to here" on a
+  report runs what it depends on, like any block; a report may go into a group.
 - A tagged item reflects its **last successful run**. If its branch becomes stale, blocked or
   errored, the item is marked as such and the report warns about it instead of silently using it.
   **[PROPOSAL]**
@@ -215,7 +216,7 @@ A **tag** marks a value (a data set or a result) to **keep in memory for a poten
 | **Summary** | View | `InversionResult` → none | none | Fields shown | Hidden | 1 |
 | **Dashboard** | View | several inputs → none | none | Which views, layout | Hidden | 1 |
 | **Aggregate** | Computation | N × `Dataset` → `Dataset` | Merge mode (concatenate; drop rows with the same `_origin`) | none | Stops | 2 |
-| **Generate report** | Report | tagged items → `Report` | Tags to include | Format (PDF, HTML, …), sections, title | Not generated | 2 |
+| **Generate report** | Report | `InversionResult` → `Report` (exactly one) | — | Format (PDF, HTML, …), sections, title | Not generated | 2 |
 | **Composite** | Its ports | Its ports | Exposed inner parameters | none | Stops | 2 |
 | **Data from Google Drive** | Source | none → `Dataset` | Drive file | none | Stops | 2 |
 | **Script (filter)** | Computation | `Dataset` → `Dataset` | A user function `row => boolean` (keep / drop), sandboxed | none | Bypass | 3 |

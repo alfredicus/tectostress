@@ -189,12 +189,10 @@ async function runFlat(
     const { cache, previous, dryRun = false, signal, onNodeUpdate } = options;
     const startedAt = new Date().toISOString();
     const byId = new Map(workflow.nodes.map(n => [n.id, n]));
-    const isReport = (id: string) => registry.get(byId.get(id)!.type)?.role === 'report';
-    // Report blocks gather the tagged items of the whole run: they come last, and running "to"
-    // a report block runs everything
-    const sorted = topologicalOrder(workflow)!;
-    const order = [...sorted.filter(id => !isReport(id)), ...sorted.filter(isReport)];
-    const subset = targetNodeIds && !targetNodeIds.some(isReport)
+    // A report covers the inversion result connected to it (v2): it runs after what it depends
+    // on, like any block, and running "to" it runs only that
+    const order = topologicalOrder(workflow)!;
+    const subset = targetNodeIds
         ? new Set(targetNodeIds.flatMap(id => Array.from(upstreamOf(workflow, id))))
         : null;
 
@@ -391,7 +389,6 @@ async function runFlat(
 
         const node = byId.get(id)!;
         const def = registry.get(node.type)!;
-        if (def.role === 'report') carryOverTags();
         const result: NodeResult = { status: 'idle', inputs: {}, outputs: {}, logs: [] };
         results[id] = result;
 

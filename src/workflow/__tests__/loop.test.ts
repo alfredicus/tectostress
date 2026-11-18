@@ -5,7 +5,7 @@ import { instantiateTemplate, PREDEFINED_WORKFLOWS } from '../templates';
 import { loopOptions, makeLoop, registryFor, LOOP_COLLECTED } from '../composite';
 import { parseWorkflow, serializeWorkflow } from '../persistence';
 import { validateWorkflow } from '../validate';
-import { BlockDefinition, DatasetPayload, InversionResultPayload, ReportPayload, Workflow } from '../types';
+import { BlockDefinition, DatasetPayload, InversionResultPayload, Workflow } from '../types';
 import { countRows, fileRef } from '../blocks/datasetUtils';
 import { dataNode, edge, env, FAST_INVERSION, faultFiles, node, rotatedFiles, seedRandom, workflow } from './fixtures';
 
@@ -112,15 +112,8 @@ describe('ForLoop', () => {
         rows.forEach(row => expect(row.iteration).toBeGreaterThanOrEqual(1));
         expect(new Set(rows.map(r => r._origin.fileId + r._origin.rowIndex)).size).toBe(rows.length);
 
-        // One tagged phase per iteration, and the report has them all with their lineage
+        // One tagged phase per iteration
         expect(r.tagged.map(t => t.iteration)).toEqual(its.map(it => it.iteration));
-        const doc = (r.nodes['report'].outputs.report as ReportPayload).document;
-        expect(doc.items.map(i => i.iteration)).toEqual(its.map(it => it.iteration));
-        const second = doc.items[1];
-        expect(second.lineage[0].blockType).toBe('data');
-        // Phase 2 comes from iteration 1's rejected data: two inversions and a misfit filter before it
-        expect(second.lineage.map(p => p.blockType)).toEqual(
-            ['data', 'inversion', 'misfit-filter', 'inversion', 'misfit-filter', 'inversion']);
     });
 
     test('cached iterations are reused; changing the maximum makes the loop stale', async () => {

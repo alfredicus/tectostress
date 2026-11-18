@@ -38,6 +38,8 @@ export interface StressSolution {
     stressRatio: number;
     misfit: number;
     misfitCriterion?: 'ANGLE' | 'DOT';
+    /** Share of the data (best fitted, %) the minimised misfit covers; absent: all of them */
+    misfitKeepPercent?: number;
     stressTensorSolution: number[][];
     rotationMatrixW?: number[][];   // W_rot (3×3) — source of truth for Euler angles
     elapsedMs?: number;

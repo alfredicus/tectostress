@@ -33,6 +33,11 @@ export const InversionBlock: BlockDefinition = {
             key: 'misfitCriterion', label: 'Misfit criterion', kind: 'select', scope: 'scientific', default: 'ANGLE',
             options: [{ value: 'ANGLE', label: 'Angle' }, { value: 'DOT', label: 'Dot product' }]
         },
+        {
+            key: 'misfitKeepPercent', label: 'Data fitted (best %)', kind: 'number', scope: 'scientific', default: 100,
+            min: 1, max: 100, step: 1, unit: '%', perIteration: true,
+            help: 'The misfit minimised is the mean over this share of the data, the best fitted ones (100: all). Below 100 the solution may ignore the rest, e.g. another tectonic phase',
+        },
         { key: 'methodParams', label: 'Method parameters', kind: 'methodParams', scope: 'scientific', default: {}, dependsOn: 'method' },
     ],
 
@@ -43,12 +48,17 @@ export const InversionBlock: BlockDefinition = {
         const stored = params.methodParams ?? {};
         const methodParams = Object.fromEntries(
             Object.entries(defaults).map(([k, v]) => [k, stored[k] !== undefined ? Number(stored[k]) : v]));
-        return { ...params, methodParams };
+        // 100 % is the plain mean, as before this parameter existed: left out, so results computed
+        // before keep their cache key
+        const { misfitKeepPercent, ...rest } = params;
+        const keep = Number(misfitKeepPercent);
+        return { ...rest, methodParams, ...(keep > 0 && keep < 100 ? { misfitKeepPercent: keep } : {}) };
     },
 
     async execute(ctx) {
         const input = ctx.inputs.in[0];
         const { method, misfitCriterion, methodParams } = ctx.params;
+        const misfitKeepPercent = Number(ctx.params.misfitKeepPercent ?? 100);
         if (ctx.signal?.aborted) throw new Error('Cancelled');
         if (input.type === 'InversionResult') {
             ctx.log('info', 'The input is an inversion result: its measured data are inverted again; its solution and predictions are discarded');
@@ -58,7 +68,7 @@ export const InversionBlock: BlockDefinition = {
         const files = stripInversionFields(input.files);
 
         const run = await runInversion(
-            { files, method, params: methodParams, misfitCriterion: misfitCriterion as MisfitCriterion },
+            { files, method, params: methodParams, misfitCriterion: misfitCriterion as MisfitCriterion, misfitKeepPercent },
             {
                 onStep: (message, progress) => ctx.progress(progress / 100, message),
                 onLog: (level, message, details) => ctx.log(level, message, details),

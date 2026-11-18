@@ -21,55 +21,42 @@ export function lineageOf(start: Provenance, lookup: (id: string) => Provenance 
     return out;
 }
 
-const parseTags = (text: string) => text.split(',').map(t => t.trim()).filter(Boolean);
-
 export const ReportBlock: BlockDefinition = {
     type: 'report',
-    version: 1,
+    // v2: the report of the inversion result connected to it (v1 gathered the tagged items of the run)
+    version: 2,
     title: 'Generate report',
-    description: 'Report of the tagged items: HTML, or PDF by printing',
+    description: 'Report of an inversion result (solution, misfits, stereonet, data, provenance): HTML, or PDF by printing',
     category: 'Report',
     role: 'report',
-    inputs: [],
+    inputs: [{
+        id: 'in', label: 'Inversion result', type: 'InversionResult',
+        meaning: { InversionResult: 'Reported: solution, misfits, stereonet, data and how they were obtained' },
+    }],
     outputs: [],
     params: [
         { key: 'title', label: 'Title', kind: 'string', scope: 'scientific', default: 'Stress inversion report' },
         { key: 'author', label: 'Author', kind: 'string', scope: 'scientific', default: '' },
-        { key: 'tags', label: 'Tags', kind: 'string', scope: 'scientific', default: '', help: 'Comma-separated; empty includes every tag' },
         { key: 'includeTables', label: 'Include data tables', kind: 'boolean', scope: 'scientific', default: true },
         { key: 'includeProvenance', label: 'Include provenance', kind: 'boolean', scope: 'scientific', default: true },
     ],
+    // v1 → v2: the tag filter has no meaning any more
+    migrate({ scientific, presentation }) {
+        const { tags, ...rest } = scientific;
+        return { scientific: rest, presentation };
+    },
 
     async execute(ctx) {
-        const wanted = parseTags(String(ctx.params.tags ?? ''));
-        const selected = ctx.tagged.filter(t => wanted.length === 0 || wanted.includes(t.tag));
-        const labelOf = (id: string) => {
-            const node = ctx.workflow.nodes.find(n => n.id === id);
-            return node?.label || node?.type || id;
+        const input = ctx.inputs.in[0];
+        const source = ctx.workflow.nodes.find(n => n.id === input.provenance.blockId);
+        const item: ReportItem = {
+            tag: '',
+            nodeId: input.provenance.blockId,
+            nodeLabel: source?.label || source?.type || input.provenance.blockId,
+            outdated: false,
+            payload: input,
+            lineage: lineageOf(input.provenance, ctx.provenance),
         };
-
-        const items: ReportItem[] = selected.map(t => ({
-            tag: t.tag,
-            note: t.note,
-            nodeId: t.nodeId,
-            nodeLabel: labelOf(t.nodeId),
-            iteration: t.iteration,
-            ...(t.iterationParams ? { iterationParams: t.iterationParams } : {}),
-            outdated: t.outdated,
-            payload: t.payload,
-            lineage: lineageOf(t.payload.provenance, ctx.provenance),
-        }));
-
-        const warnings: string[] = [];
-        const outdated = items.filter(i => i.outdated);
-        if (outdated.length) {
-            warnings.push(`${outdated.length} item(s) come from an earlier run and may not match the current workflow: ` +
-                outdated.map(i => `“${i.tag}” (${i.nodeLabel})`).join(', '));
-        }
-        const missing = wanted.filter(tag => !ctx.tagged.some(t => t.tag === tag));
-        if (missing.length) warnings.push(`No item tagged ${missing.map(t => `“${t}”`).join(', ')}`);
-        if (items.length === 0) warnings.push('Nothing to report: add Add Tags blocks to the workflow');
-
         const document: ReportDocument = {
             title: String(ctx.params.title || 'Stress inversion report'),
             author: String(ctx.params.author ?? '').trim() || undefined,
@@ -77,16 +64,16 @@ export const ReportBlock: BlockDefinition = {
             workflowName: ctx.workflow.name,
             appVersion: ctx.env.appVersion,
             stressLibVersion: ctx.env.stressLibVersion,
-            tags: wanted,
+            tags: [],
             includeTables: ctx.params.includeTables !== false,
             includeProvenance: ctx.params.includeProvenance !== false,
-            items,
-            warnings,
+            items: [item],
+            warnings: [],
         };
-        ctx.log('info', `${items.length} item(s) in the report`);
+        ctx.log('info', `Report of “${item.nodeLabel}”`);
         return {
             outputs: { report: { type: 'Report', document } },
-            provenanceInputs: items.map(i => i.payload.provenance.id),
+            provenanceInputs: [input.provenance.id],
         };
     },
 };

@@ -427,10 +427,6 @@ export function groupAsComposite(
         if (isCompositeType(n.type) && !workflow.composites?.some(c => c.type === n.type)) {
             throw new CompositeError(`The definition of the group “${def.title}” is missing from this workflow`);
         }
-        // Views are fine (the group shows them); a report gathers the tags of the whole run
-        if (def.role === 'report') {
-            throw new CompositeError(`${def.title} blocks cannot go into a group: a report covers the whole workflow`);
-        }
     }
 
     const inside = new Set(selectedIds);

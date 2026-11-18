@@ -3,11 +3,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ReactFlow, ReactFlowProvider, Background, Controls, useReactFlow, useNodesInitialized,
+    ReactFlow, ReactFlowProvider, Background, Controls, ControlButton, useReactFlow, useNodesInitialized,
     Connection, Edge, EdgeChange, NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlertTriangle, Boxes, ChevronDown, ChevronRight, Download, LogIn, Eraser, FilePlus, Maximize2, FileX, Repeat, FolderOpen, Play, Printer, Save, SkipForward, Square, Tag, Trash2, Ungroup, X } from 'lucide-react';
+import { AlertTriangle, Boxes, ChevronDown, ChevronRight, Download, LogIn, Eraser, FilePlus, Magnet, Maximize2, FileX, Repeat, FolderOpen, Play, Printer, Save, SkipForward, Square, Tag, Trash2, Ungroup, X } from 'lucide-react';
 import appPackage from '../../../package.json';
 import stressPackage from '@alfredo-taboada/stress/package.json';
 import { DataFile } from '../DataFile';
@@ -39,6 +39,10 @@ const EDITOR_HEIGHT_KEY = 'tectostress-workflow-editor-height';
 /** Editor height by default: the screen, not less than 540 px */
 const DEFAULT_EDITOR_HEIGHT = 'max(540px, calc(100vh - 230px))';
 const MIN_EDITOR_HEIGHT = 240;
+/** Spacing of the canvas grid: blocks snap to it (the dots of the background) */
+const GRID = 16;
+const SNAP_KEY = 'tectostress-workflow-snap';
+const snapped = (p: { x: number; y: number }) => ({ x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID });
 
 /** Browser storage, looked up at each call (it may be blocked, or replaced by a sandbox) */
 const browserStorage: KeyValueStore = {
@@ -489,6 +493,15 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         if (e.key === 'ArrowDown') { e.preventDefault(); keepEditorHeight(clampHeight(current + step)); }
     };
 
+    /** Blocks snap to the grid when moved or added (on by default, kept in this browser) */
+    const [snap, setSnap] = useState<boolean>(() => {
+        try { return localStorage.getItem(SNAP_KEY) !== 'off'; } catch { return true; }
+    });
+    const toggleSnap = () => setSnap(on => {
+        try { localStorage.setItem(SNAP_KEY, on ? 'off' : 'on'); } catch { /* storage unavailable */ }
+        return !on;
+    });
+
     /** Palette categories folded by the user (kept in this browser) */
     const [collapsed, setCollapsed] = useState<string[]>(() => {
         try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]'); } catch { return []; }
@@ -640,10 +653,11 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
     const addBlock = useCallback((type: string, position?: { x: number; y: number }) => {
         const def = registry.get(type);
         if (!def) return;
-        const pos = position ?? {
+        const proposed = position ?? {
             x: workflow.nodes.length ? Math.max(...workflow.nodes.map(n => n.position.x)) + 220 : 40,
             y: 80,
         };
+        const pos = snap ? snapped(proposed) : proposed;
         const id = `${type.replace(/\W+/g, '-')}-${uid()}`;
         const node = createNode(def, id, pos);
         // A new Data block starts with every file of the Data tab
@@ -660,7 +674,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
         }));
         selectOnly(id);
         setSelectedEdgeId(null);
-    }, [registry, files, workflow.nodes, workflow.composites, library]);
+    }, [registry, files, workflow.nodes, workflow.composites, library, snap]);
 
     const replaceWorkflow = useCallback((next: Workflow) => {
         // The workflow replaced is kept in Recent workflows (§15.2.4)
@@ -1673,7 +1687,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                             fitView
                             minZoom={0.3}
                         >
-                            <Background gap={16} color="#c7d2fe" />
+                            <Background gap={GRID} color="#c7d2fe" />
                             <Controls showInteractive={false} />
                             <Panel position="bottom-right"><TypeLegend /></Panel>
                         </ReactFlow>
@@ -1696,9 +1710,17 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
                         fitView
                         minZoom={0.3}
                         deleteKeyCode={['Backspace', 'Delete']}
+                        snapToGrid={snap}
+                        snapGrid={[GRID, GRID]}
                     >
-                        <Background gap={16} />
-                        <Controls showInteractive={false} />
+                        <Background gap={GRID} />
+                        <Controls showInteractive={false}>
+                            <ControlButton onClick={toggleSnap}
+                                title={snap ? 'Snapping to the grid: on (click to move blocks freely)' : 'Snapping to the grid: off (click to align blocks on the grid)'}
+                                aria-pressed={snap}>
+                                <Magnet style={{ color: snap ? '#2563eb' : '#9ca3af' }} />
+                            </ControlButton>
+                        </Controls>
                         <Panel position="bottom-right"><TypeLegend /></Panel>
                     </ReactFlow>
                     )}
@@ -2005,7 +2027,7 @@ const WorkflowEditor: React.FC<Props> = ({ files }) => {
 
                     {bottomTab === 'tagged' && (
                         tagged.length === 0
-                            ? <p className="text-sm text-gray-500">Nothing tagged yet. Add Tags blocks keep values for the report.</p>
+                            ? <p className="text-sm text-gray-500">Nothing tagged yet. Add Tags blocks keep values here, to compare them.</p>
                             : (
                                 <div className="space-y-2">
                                     {tagged.map((item, i) => {

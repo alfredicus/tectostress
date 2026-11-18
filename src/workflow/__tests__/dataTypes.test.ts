@@ -20,6 +20,7 @@ const R: PayloadType = 'InversionResult';
 const TABLE: Record<string, Record<string, PayloadType[]>> = {
     'filter': { in: [M, R] },
     'resample': { in: [M, R] },
+    'report': { in: [R] },
     'aggregate': { in: [M, R] },
     'inversion': { in: [M, R] },
     'misfit-filter': { in: [R] },
